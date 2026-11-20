@@ -757,3 +757,111 @@ table.pal-righe-piano .x { border: 0; background: none; color: var(--testo-3); c
 .pal-grafico .et { font-size: 11px; fill: var(--testo-3); }
 .pal-report-grafico { margin-bottom: 4px; }
 @media (max-width: 600px) { .spesa-r { grid-template-columns: 22px minmax(0, 1fr) auto; } .spesa-r small { display: none; } }
+
+/* ==========================================================================
+   Agenda compatta (richiesta del 20/11/2026): ore da 32 px invece di 48,
+   intestazioni dei giorni su una riga, titolo senza sottotitolo, testi più piccoli.
+   ========================================================================== */
+.agenda-page .agenda-heading { margin-bottom: 12px; }
+.agenda-page .agenda-heading .page-eyebrow, .agenda-page .agenda-heading .subtext { display: none; }
+.agenda-page .agenda-heading h1 { font-size: 30px; }
+.agenda-page .agenda-heading .btn { min-height: 36px; }
+body .calendar-panel { --calendar-hour: 32px; --calendar-axis: 42px; }
+body .calendar-panel-bar { padding-top: 6px; padding-bottom: 6px; min-height: 0; }
+/* Ore senza impegni ridotte a una fascia sottile: le altezze vere le dà agenda.js. */
+body .calendar-scroll { height: auto; max-height: none; min-height: 0; overflow-y: hidden; }
+body .calendar-timed-grid { height: var(--altezza-giorno, calc(24 * var(--calendar-hour))); }
+body .calendar-day-column { background: none; }
+.riga-ora, .riga-mezz, .ora-vuota { position: absolute; left: 0; right: 0; pointer-events: none; }
+.riga-ora { border-top: 1px solid var(--line); }
+.riga-mezz { border-top: 1px dashed color-mix(in srgb, var(--line) 50%, transparent); }
+.ora-vuota { background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--line) 55%, transparent) 4px 5px); border-top: 1px solid var(--line); }
+body .calendar-day-header { height: 34px; flex-direction: row; gap: 6px; padding: 4px; }
+body .calendar-day-header time { width: 22px; height: 22px; font-size: 14px; }
+body .calendar-day-header small { font-size: 9.5px; }
+body .calendar-day-header button { top: 5px; }
+body .calendar-untimed-row { min-height: 0; top: 35px !important; }
+body .calendar-untimed-cell { padding-top: 3px; padding-bottom: 3px; }
+body .calendar-day-column.vecchio-sfondo { background: repeating-linear-gradient(to bottom, transparent 0, transparent 15px, color-mix(in srgb, var(--line) 35%, transparent) 15px, color-mix(in srgb, var(--line) 35%, transparent) 16px, transparent 16px, transparent 31px, var(--line) 31px, var(--line) 32px); }
+body .calendar-time-axis span { font-size: 10px; }
+body .calendar-event { padding: 1px 6px 1px 7px; gap: 0; line-height: 1.15; }
+body .calendar-event.is-short .calendar-event-time { display: none; }
+body .calendar-event .calendar-drag-handle { top: 1px; }
+body .calendar-help { display: none; }
+body .calendar-panel-bar { padding-top: 4px; padding-bottom: 4px; }
+body .calendar-event strong { font-size: 11px; }
+body .calendar-event .calendar-event-time, body .calendar-event .calendar-event-category, body .calendar-event .calendar-event-actual { font-size: 10px; }
+body .calendar-untimed-event { font-size: 10.5px; padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+body .calendar-untimed-row .calendar-corner { font-size: 8.5px; padding: 2px; }
+@media (max-width: 600px) {
+  .agenda-page .agenda-heading h1 { font-size: 26px; }
+  .agenda-page .agenda-heading { flex-wrap: wrap; gap: 8px; }
+  body .calendar-day-header small { display: none; }
+  body .calendar-day-header button { opacity: 1; top: 5px; right: 2px; }
+}
+
+/* Agenda, vista Compatta: sette colonne con i soli impegni del giorno, in ordine di orario. */
+.vista-agenda { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: #ffffff1a; margin-left: auto; }
+.vista-agenda button { border: 0; border-radius: 999px; padding: 4px 12px; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.vista-agenda button[aria-pressed="true"] { background: var(--azzurro); color: var(--navy); }
+.calendar-panel-bar .vista-agenda + .calendar-tools { margin-left: 8px; }
+.compatta-griglia { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 10px; }
+.compatta-giorno { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 0 2px 6px; border-radius: 14px; }
+.compatta-giorno.is-today { background: color-mix(in srgb, var(--azzurro) 14%, transparent); }
+.compatta-giorno header { display: flex; align-items: center; gap: 6px; padding: 4px 4px 6px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.compatta-giorno header span { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--testo-3); }
+.compatta-giorno header time { font-weight: 700; font-size: 15px; }
+.compatta-giorno.is-today header time { background: var(--navy); color: #fff; border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; font-size: 13px; }
+.compatta-giorno header small { font-size: 10px; color: var(--testo-3); margin-left: auto; }
+.compatta-giorno header button { border: 0; background: none; color: var(--testo-3); cursor: pointer; font-size: 15px; padding: 0 2px; }
+.compatta-giorno header button:hover { color: var(--corallo); }
+.compatta-voce { display: block; width: 100%; text-align: left; border: 0; border-left: 3px solid var(--category-color); border-radius: 8px; padding: 4px 7px; background: color-mix(in srgb, var(--category-color) 16%, var(--pannello)); color: var(--testo); font: inherit; cursor: pointer; line-height: 1.2; min-width: 0; }
+.compatta-voce:hover { outline: 2px solid color-mix(in srgb, var(--category-color) 60%, transparent); }
+.compatta-voce time { display: block; font-size: 10.5px; color: var(--testo-2); font-variant-numeric: tabular-nums; }
+.compatta-voce b { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compatta-voce.is-tragitto { background: transparent; border-left-style: dotted; padding: 1px 7px; }
+.compatta-voce.is-tragitto time, .compatta-voce.is-tragitto b { display: inline; font-size: 10.5px; color: var(--testo-3); font-weight: 500; }
+.compatta-voce.is-tragitto b::before { content: " · "; }
+.compatta-voce.is-done b { text-decoration: line-through; color: var(--testo-3); }
+.compatta-voce.is-conflict { box-shadow: inset 0 0 0 1px #C2410C; }
+.compatta-voce.senza-ora { background: var(--pannello-2); }
+.compatta-voce.is-off { border-left-color: #15803D; }
+.compatta-libero { font-size: 11.5px; color: var(--testo-3); padding: 4px; margin: 0; }
+@media (max-width: 800px) {
+  .compatta-griglia { grid-template-columns: 1fr; gap: 8px; }
+  .compatta-giorno { padding: 6px; background: var(--pannello-2); }
+  .compatta-giorno.is-today { background: color-mix(in srgb, var(--azzurro) 20%, var(--pannello)); }
+  .compatta-voce b { white-space: normal; }
+}
+.compatta-voce.is-tragitto { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Agenda, vista a fasce (mattina, pomeriggio, notte): sostituisce la lista compatta. */
+.fasce-scroll { overflow-x: auto; padding: 8px 10px 10px; }
+.fasce-griglia { display: grid; grid-template-columns: 78px repeat(7, minmax(110px, 1fr)); gap: 4px; min-width: 860px; }
+.fasce-angolo { }
+.fasce-giorno { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 10px; }
+.fasce-giorno span { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--testo-3); }
+.fasce-giorno time { font-weight: 700; font-size: 15px; }
+.fasce-giorno.is-today { background: var(--navy); } .fasce-giorno.is-today span, .fasce-giorno.is-today time, .fasce-giorno.is-today button { color: #fff; }
+html[data-theme="dark"] .fasce-giorno.is-today { background: var(--azzurro); } html[data-theme="dark"] .fasce-giorno.is-today * { color: #06131F !important; }
+.fasce-giorno button { margin-left: auto; border: 0; background: none; color: var(--testo-3); cursor: pointer; font-size: 15px; }
+.fasce-etichetta { display: flex; flex-direction: column; justify-content: center; padding: 4px 6px; border-radius: 10px; background: var(--pannello-2); }
+.fasce-etichetta b { font-size: 12px; } .fasce-etichetta small { font-size: 10px; color: var(--testo-3); }
+.fasce-etichetta.piccola { font-size: 10px; color: var(--testo-3); }
+.fasce-cella { display: flex; flex-direction: column; gap: 3px; min-height: 46px; min-width: 0; padding: 4px; border-radius: 10px; background: var(--pannello-2); }
+.fasce-cella.senza-ora { min-height: 0; background: transparent; padding: 0 4px; }
+.fasce-cella.is-today { background: color-mix(in srgb, var(--azzurro) 16%, var(--pannello-2)); }
+.fasce-cella.senza-ora.is-today { background: transparent; }
+.fasce-voce { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; text-align: left; border: 0; border-left: 3px solid var(--category-color); border-radius: 7px; padding: 3px 6px; background: var(--pannello); color: var(--testo); font: inherit; cursor: pointer; }
+.fasce-voce:hover { outline: 2px solid color-mix(in srgb, var(--category-color) 55%, transparent); }
+.fasce-voce b { font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fasce-voce time { margin-left: auto; font-size: 10px; color: var(--testo-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* il lavoro è una barra sottile del colore della categoria */
+.fasce-voce.is-lavoro { background: var(--category-color); color: var(--category-ink); border-left: 0; padding: 2px 7px; }
+.fasce-voce.is-lavoro time { color: inherit; opacity: .75; }
+.fasce-voce.is-done b { text-decoration: line-through; color: var(--testo-3); }
+.fasce-voce.is-conflict { box-shadow: inset 0 0 0 1px #C2410C; }
+.fasce-voce.is-off { border-left-color: #15803D; background: #DDF3EE; color: #15803D; }
+html[data-theme="dark"] .fasce-voce.is-off { background: #10301F; color: #86EFAC; }
+@media (max-width: 600px) { .fasce-griglia { grid-template-columns: 62px repeat(7, minmax(104px, 1fr)); } }
+.fasce-voce:not(.is-lavoro):not(.is-off) { flex-direction: column; align-items: flex-start; gap: 0; } .fasce-voce:not(.is-lavoro) time { margin-left: 0; } .fasce-voce b { max-width: 100%; }

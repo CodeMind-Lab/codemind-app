@@ -1,7 +1,31 @@
 import { wallTime, toInstant } from './agenda.js?v=65';
 import { shiftDate } from './dates.js?v=65';
 
-export const calendarHourHeight = 48;
+export const calendarHourHeight = 32;
+// Agenda compatta: le ore che hanno impegni nella settimana sono alte calendarHourHeight,
+// quelle vuote si stringono a una fascia sottile. La scala converte minuti ↔ pixel.
+export const oraVuotaAltezza = 6;
+export function scalaOre(visibili) {
+  const h = Array.from({ length: 24 }, (_, i) => visibili.has(i) ? calendarHourHeight : oraVuotaAltezza), inizio = [0];
+  for (let i = 0; i < 24; i++) inizio.push(inizio[i] + h[i]);
+  return { h, inizio, totale: inizio[24], visibili };
+}
+export function oreConImpegni(segmenti) {
+  const ore = new Set();
+  for (const x of segmenti) for (let o = Math.floor(x.startMinute / 60); o < Math.max(Math.ceil(x.endMinute / 60), Math.floor(x.startMinute / 60) + 1); o++) if (o < 24) ore.add(o);
+  if (!ore.size) for (let o = 8; o < 20; o++) ore.add(o);
+  return ore;
+}
+export const yDaMinuto = (s, minuto) => { const m = Math.max(0, Math.min(1440, minuto)), i = Math.min(23, Math.floor(m / 60)); return s.inizio[i] + (m - i * 60) / 60 * s.h[i]; };
+export function minutoDaY(s, y) {
+  const v = Math.max(0, Math.min(s.totale, y)); let i = 0;
+  while (i < 23 && v >= s.inizio[i + 1]) i++;
+  return Math.min(1440, i * 60 + (v - s.inizio[i]) / s.h[i] * 60);
+}
+// La scala della settimana mostrata adesso (la imposta agenda.js a ogni disegno).
+let scalaAttuale = scalaOre(new Set(Array.from({ length: 24 }, (_, i) => i)));
+export const impostaScala = s => { scalaAttuale = s; };
+export const scala = () => scalaAttuale;
 export const minuteLabel = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 const clockMinute = wall => Number(wall.slice(11, 13)) * 60 + Number(wall.slice(14, 16));
 export const calendarStep = 15;

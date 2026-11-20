@@ -1,4 +1,4 @@
-import { calendarHourHeight, calendarSelection, movedCalendarEntry, shiftedCalendarDay, snapMinute, calendarWall } from '../utils/agendaCalendar.js?v=65';
+import { calendarHourHeight, scala, yDaMinuto, minutoDaY, calendarSelection, movedCalendarEntry, shiftedCalendarDay, snapMinute, calendarWall } from '../utils/agendaCalendar.js?v=65';
 import { wallTime, toInstant } from '../utils/agenda.js?v=65';
 import { shiftDate } from '../utils/dates.js?v=65';
 
@@ -25,7 +25,7 @@ export function bindCalendarInteractions({ scroll, timezone, getEntry, onSelect,
     if (!column) return null;
     const top = bodyTop(), b = column.getBoundingClientRect();
     if (dayOnly && y < top) return { column, date:column.dataset.calendarDay, untimed:true };
-    const minute = Math.min(1440, Math.max(0, (Math.max(top + 1,y) - b.top) / calendarHourHeight * 60));
+    const minute = minutoDaY(scala(), Math.max(top + 1,y) - b.top);
     return { column, date:column.dataset.calendarDay, minute };
   };
   const clearPreview = () => {
@@ -41,7 +41,7 @@ export function bindCalendarInteractions({ scroll, timezone, getEntry, onSelect,
     const element = document.createElement('div'); element.className = 'calendar-ghost';
     element.style.setProperty('--category-color',color || 'var(--brand-cyan)');
     if (untimed) { element.classList.add('is-untimed'); column = scroll.querySelector(`.calendar-untimed-cell[data-date="${column.dataset.calendarDay}"]`); }
-    else { element.style.top = from / 60 * calendarHourHeight + 'px'; element.style.height = Math.max(24,(to-from) / 60 * calendarHourHeight - 2) + 'px'; }
+    else { const t = yDaMinuto(scala(), from); element.style.top = t + 'px'; element.style.height = Math.max(16, yDaMinuto(scala(), to) - t - 2) + 'px'; }
     const text = document.createElement('span'); text.textContent = label; element.append(text); column.append(element);
   };
   const positionLabel = () => {
@@ -58,7 +58,7 @@ export function bindCalendarInteractions({ scroll, timezone, getEntry, onSelect,
       let label, signature;
       if (gesture.type === 'select') {
         // A time-range selection remains on the day where the gesture started.
-        const minute = Math.min(1440,Math.max(0,(Math.max(bodyTop()+1,gesture.y) - gesture.column.getBoundingClientRect().top) / calendarHourHeight * 60));
+        const minute = minutoDaY(scala(), Math.max(bodyTop()+1,gesture.y) - gesture.column.getBoundingClientRect().top);
         gesture.candidate = calendarSelection(gesture.date,gesture.anchor,minute,true);
         label = `${gesture.candidate.start.slice(11)}–${gesture.candidate.endMinute === 1440 ? '24:00' : gesture.candidate.end.slice(11)}`;
         signature = label;
