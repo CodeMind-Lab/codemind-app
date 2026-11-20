@@ -650,3 +650,92 @@ body .btn.pieno, #modal .btn.pieno { width: 100%; justify-content: center; backg
   .pal-agg { min-width: 0; }
   .pal-risultati { max-height: 40vh; }
 }
+
+/* Palestra, tappa 2: Allenamenti, Schede, allenamento in corso
+   (anteprime/08-allenamenti.html, 09-schede.html, 07-palestra-iphone.html schermata 3) */
+.palestra .gr { font-size: 12px; color: var(--testo-3); }
+.pal-filtro-scheda { width: auto !important; flex: 0 0 auto; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--pannello-2); color: var(--testo); font: inherit; font-size: 13px; }
+.palestra .card-testa .pal-filtro-scheda { margin-left: auto; max-width: 60%; }
+.palestra .grafico-sim i { background: var(--corallo); }
+.gruppo-r { display: grid; grid-template-columns: 110px 1fr 40px; gap: 8px; align-items: center; font-size: 13px; color: var(--testo-2); padding: 4px 0; }
+.gruppo-r .barra { margin: 0; } .gruppo-r span { text-align: right; color: var(--testo); }
+.layout-schede { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 12px; align-items: start; }
+.sch-elenco { display: grid; gap: 8px; }
+.sch { display: block; width: 100%; text-align: left; border: 0; border-radius: 18px; padding: 14px; background: var(--pannello); color: var(--testo); font: inherit; cursor: pointer; }
+.sch b { display: block; font-size: 15px; } .sch small { display: block; color: var(--testo-3); font-size: 12.5px; } .sch .pill { margin-top: 6px; }
+.sch.on { background: var(--navy); color: #fff; } .sch.on small { color: #9FB0C7; }
+html[data-theme="dark"] .sch.on { background: #13294A; }
+.nuova { border: 1.5px dashed var(--riga-forte); background: transparent; border-radius: 18px; padding: 12px; color: var(--testo-2); font: inherit; font-size: 13.5px; cursor: pointer; }
+.link-gruppo { margin-left: auto; display: flex; gap: 4px; align-items: center; color: var(--teal); font-size: 13px; }
+.link-gruppo .link { margin: 0 !important; }
+.giorni-sch { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 20px 12px; }
+.giorni-sch .chip { cursor: pointer; } .giorni-sch .chip.on { background: var(--corallo); color: #fff; }
+.giorni-sch .chip.add { background: transparent; border: 1.5px dashed var(--riga-forte); }
+table.pal-editor td { padding: 6px 6px; vertical-align: middle; }
+table.pal-editor .cella { width: 100%; min-width: 52px; border: 0; border-radius: 9px; background: var(--pannello-2); color: var(--testo); font: inherit; font-size: 13.5px; padding: 6px 8px; }
+table.pal-editor td.n .cella { width: 54px; min-width: 0; text-align: center; padding: 6px 4px; }
+table.pal-editor td:nth-child(2) .cella { min-width: 130px; font-weight: 600; background: transparent; padding-left: 0; }
+table.pal-editor td:nth-child(2) .gr { display: block; }
+table.pal-editor td:nth-child(7) .cella { min-width: 80px; }
+table.pal-editor td { white-space: normal; }
+.ordine button { padding: 2px 2px; }
+.ordine { white-space: nowrap; width: 54px; }
+.ordine button, table.pal-editor .x { border: 0; background: none; color: var(--testo-3); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+.ordine button:hover, table.pal-editor .x:hover { color: var(--testo); }
+.agg-es { display: flex; gap: 8px; padding: 4px 20px 18px; flex-wrap: wrap; }
+.agg-es input { flex: 1 1 220px; border: 0; border-radius: 999px; padding: 10px 16px; background: var(--pannello-2); color: var(--testo); font: inherit; }
+body .btn.pal-inizia-btn { background: var(--corallo); border-color: var(--corallo); color: #fff; text-decoration: none; }
+.sett7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 0 20px 18px; }
+.sett7 label { display: grid; gap: 6px; border-radius: 14px; background: var(--pannello-2); padding: 10px 8px; font-size: 12.5px; min-width: 0; }
+.sett7 label.a { background: #FFE3DD; } html[data-theme="dark"] .sett7 label.a { background: #3A1C18; }
+.sett7 b { font-size: 12px; color: var(--testo-2); }
+.sett7 select { width: 100%; border: 0; background: transparent; color: var(--testo); font: inherit; font-weight: 600; font-size: 12.5px; padding: 0; }
+.sett7 em { font-style: normal; font-size: 11px; color: var(--testo-3); }
+/* allenamento in corso */
+.sessione { max-width: 720px; margin: 0 auto; padding-bottom: 120px; }
+.sess-t { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+.sess-t h1 { font-size: 26px; line-height: 1.1; } .sess-t .icona-tonda { display: grid; place-items: center; text-decoration: none; flex: none; }
+.crono { margin-left: auto; font-weight: 700; font-size: 20px; background: var(--navy); color: var(--azzurro); border-radius: 14px; padding: 6px 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.avanz { display: flex; gap: 4px; margin-bottom: 12px; } .avanz i { flex: 1; height: 6px; border-radius: 6px; background: var(--riga); } .avanz i.f { background: var(--corallo); }
+.eser { display: block; background: var(--pannello); border-radius: 22px; padding: 14px 16px; margin-bottom: 8px; border: 0; width: 100%; text-align: left; color: var(--testo); font: inherit; }
+.eser.corrente { box-shadow: 0 0 0 2px var(--corallo); }
+.eser.fatto { display: flex; align-items: center; gap: 10px; background: #DDF3EE; color: #15803D; cursor: pointer; font-size: 13px; }
+.eser.fatto b { display: block; color: var(--navy); font-size: 15px; } .eser.fatto > span:last-child { margin-left: auto; font-weight: 600; }
+html[data-theme="dark"] .eser.fatto { background: #10301F; color: #86EFAC; } html[data-theme="dark"] .eser.fatto b { color: #E9F0F8; }
+.eser-t { display: flex; align-items: baseline; gap: 8px; } .eser-t b { font-size: 16.5px; } .eser-t small { margin-left: auto; color: var(--testo-3); font-size: 12px; }
+.eser > p { font-size: 12.5px; color: var(--testo-2); margin: 2px 0 8px; }
+.serie { display: grid; grid-template-columns: 26px minmax(0, 1fr) 76px 64px 42px; gap: 6px; align-items: center; padding: 4px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.serie.h { font-size: 11px; color: var(--testo-3); padding: 0; } .serie.h span:nth-child(3), .serie.h span:nth-child(4) { text-align: center; }
+.serie .n { font-weight: 700; color: var(--testo-2); } .serie .prev { color: var(--testo-3); font-size: 12.5px; }
+.serie .in, .cardio-campi .in { width: 100%; border: 0; border-radius: 11px; background: var(--pannello-2); color: var(--testo); text-align: center; padding: 8px 0; font: inherit; font-weight: 700; font-size: 16px; }
+.serie .ok { width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--pannello-2); color: var(--testo-3); font-weight: 700; font-size: 16px; cursor: pointer; }
+.serie.fatta .in { background: #DDF3EE; color: #15803D; } .serie.fatta .ok { background: #15803D; color: #fff; }
+html[data-theme="dark"] .serie.fatta .in { background: #10301F; color: #86EFAC; }
+.serie.ora .in { box-shadow: 0 0 0 2px var(--corallo); background: var(--pannello); }
+.eser-azioni { display: flex; gap: 14px; margin-top: 6px; font-size: 13px; } .eser-azioni .spazio { margin-left: auto; color: var(--testo-3) !important; }
+.cardio-campi { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; } .cardio-campi label { font-size: 12px; color: var(--testo-3); display: grid; gap: 4px; }
+.sessione .agg-es { padding: 6px 0 12px; }
+.fine-btn { display: block; width: 100%; border: 0; border-radius: 999px; padding: 13px; background: var(--pannello); color: #B5412B; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
+.sess-fine { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; } .sess-fine .field { margin: 0; flex: 1 1 160px; }
+.recupero { position: fixed; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 24px)); bottom: 24px; z-index: 50; background: var(--navy); color: #fff; border-radius: 22px; padding: 12px 16px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 14px 30px #0b1a2e55; }
+.recupero small { display: block; color: #9FB0C7; font-size: 11.5px; }
+.recupero .tempo2 { font-weight: 700; font-size: 26px; color: var(--azzurro); font-variant-numeric: tabular-nums; }
+.recupero.finito .tempo2 { color: #FFB9A8; }
+.recupero .b { margin-left: auto; display: flex; gap: 6px; }
+.recupero button { border: 0; border-radius: 999px; padding: 8px 12px; font: inherit; font-weight: 600; font-size: 13px; background: #ffffff1f; color: #fff; cursor: pointer; } .recupero button.s { background: var(--corallo); }
+.recupero .fila { position: absolute; left: 16px; right: 16px; bottom: 7px; height: 3px; border-radius: 3px; background: #ffffff1f; overflow: hidden; } .recupero .fila i { display: block; height: 100%; background: var(--azzurro); }
+@media (max-width: 900px) { .layout-schede { grid-template-columns: 1fr; } .sch-elenco { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } }
+@media (max-width: 600px) {
+  .sett7 { grid-template-columns: 1fr 1fr; padding: 0 14px 14px; }
+  .giorni-sch, .agg-es { padding-left: 14px; padding-right: 14px; }
+  .recupero { bottom: 92px; }
+  .sessione { padding-bottom: 170px; }
+  .crono { font-size: 18px; }
+  .palestra[data-scheda="sessione"] .sess-t h1 { font-size: 22px; }
+}
+/* editor schede: colonne fisse, così la tabella sta nella scheda */
+table.pal-editor { table-layout: fixed; min-width: 640px; }
+table.pal-editor th:nth-child(1) { width: 52px; } table.pal-editor th:nth-child(3), table.pal-editor th:nth-child(4), table.pal-editor th:nth-child(5), table.pal-editor th:nth-child(6) { width: 66px; }
+table.pal-editor th:nth-child(7) { width: 20%; } table.pal-editor th:nth-child(8) { width: 36px; }
+table.pal-editor td:nth-child(2) .cella, table.pal-editor td:nth-child(7) .cella { min-width: 0; }
+table.pal-editor td.n .cella { width: 100%; }

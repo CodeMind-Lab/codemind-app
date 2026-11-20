@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v73";
+const CACHE = "codemind-shell-v74";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -57,6 +57,7 @@ const ASSETS = [
  "./js/modules/notes.js",
  "./js/modules/oggi.js",
  "./js/modules/palestra.js",
+ "./js/modules/palestraAllena.js",
  "./js/modules/projects.js",
  "./js/modules/quickAdd.js",
  "./js/modules/search.js",

@@ -102,7 +102,7 @@ export function render() {
       archive: () => schedeSviluppo("archive") + projects(true),
       tasks: () => schedeSviluppo("tasks") + tasksPage(),
       today: agendaPage,
-      sport: () => palestraPage(id),
+      sport: () => palestraPage(id, sub),
       "daily-todos": () => schedeNote("daily-todos") + notebookPage("daily-todos"),
       notes: () => schedeNote("notes") + notesPage(),
       settings: settingsPage,

@@ -7,7 +7,7 @@
 // in attesa, e si riprova quando torna la rete.
 import { state } from './store.js?v=65';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
-import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido } from '../utils/palestra.js?v=73';
+import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=73';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
 export const statoSalvataggio = { stato: 'salvato', messaggio: '' };
@@ -202,4 +202,160 @@ export async function caricaBackup(testo) {
   try { dati = JSON.parse(testo); } catch { throw Error('Il file non è un JSON valido.'); }
   if (dati?.app !== 'forma' || !Array.isArray(dati.items)) throw Error('Il file non è un backup di Forma.');
   return saveForma({ version: 1, items: dati.items, settings: { recDefault: 90, ...(dati.settings || {}) }, graves: {} }, null, crypto.randomUUID());
+}
+
+// ------------------------------------------------------------ allenamenti (t:'w')
+const testoBreve = (v, max, cosa) => { const t = String(v ?? '').trim().slice(0, max); if (!t) throw Error(`Scrivi ${cosa}.`); return t; };
+const valoreLibero = v => { const t = String(v ?? '').trim().replace(',', '.'); if (t === '') return ''; const n = Number(t); if (!Number.isFinite(n) || n < 0 || n > 10000) throw Error('Controlla il numero.'); return n; };
+const recDi = a => Number(a.settings?.recDefault) || 90;
+function sessioneIn(a, id) { const w = a.items.find(x => x.id === id && x.t === 'w'); if (!w) throw Error('Allenamento non trovato.'); return w; }
+const serieVuote = (n, rip, peso) => Array.from({ length: Math.max(1, Math.min(20, Number(n) || 3)) }, () => ({ r: ripNumero(rip), w: peso ?? '', ok: false }));
+function esercizioSessione(e, rec) {
+  const cardio = isCardio(e);
+  return { n: e.n, gruppo: e.gruppo || gruppoDi(e.n), rip: e.rip ?? '', peso: e.peso ?? '', rec: e.rec || rec, cardio, note: e.note || '',
+    ...(cardio ? { min: e.min || ripNumero(e.rip) || '', km: '', sets: [] } : { sets: serieVuote(e.serie, e.rip, e.peso) }) };
+}
+// Parte da un giorno di una scheda; senza scheda è un allenamento libero.
+export function avviaAllenamento(d, sid, gn) {
+  data(d);
+  return modifica((a, ora) => {
+    const s = sid ? a.items.find(x => x.id === sid && x.t === 's') : null;
+    const g = s ? (s.giorni || []).find(x => x.n === gn) : null;
+    if (sid && !g) throw Error('Giorno della scheda non trovato.');
+    const w = { id: idNuovo(), t: 'w', d, sid: s?.id || '', sn: s?.n || '', gn: g?.n || 'Allenamento libero', eser: (g?.eser || []).map(e => esercizioSessione(e, recDi(a))), fine: false, inizio: ora, updatedAt: ora };
+    a.items.push(w);
+    return w;
+  });
+}
+export function aggiornaSerie(wid, ei, si, campi) {
+  return modifica((a, ora) => {
+    const w = sessioneIn(a, wid), s = w.eser?.[ei]?.sets?.[si];
+    if (!s) throw Error('Serie non trovata.');
+    if ('r' in campi) s.r = valoreLibero(campi.r);
+    if ('w' in campi) s.w = valoreLibero(campi.w);
+    if ('ok' in campi) s.ok = !!campi.ok;
+    w.updatedAt = ora;
+    return s;
+  });
+}
+export function aggiungiSerie(wid, ei) {
+  return modifica((a, ora) => {
+    const w = sessioneIn(a, wid), e = w.eser?.[ei];
+    if (!e) throw Error('Esercizio non trovato.');
+    const ult = e.sets?.[e.sets.length - 1];
+    e.sets = [...(e.sets || []), { r: ult?.r ?? ripNumero(e.rip), w: ult?.w ?? e.peso ?? '', ok: false }];
+    w.updatedAt = ora;
+  });
+}
+export function togliSerie(wid, ei, si) {
+  return modifica((a, ora) => { const w = sessioneIn(a, wid), e = w.eser?.[ei]; if (!e?.sets?.[si]) throw Error('Serie non trovata.'); e.sets.splice(si, 1); w.updatedAt = ora; });
+}
+export function aggiornaCardio(wid, ei, campi) {
+  return modifica((a, ora) => { const w = sessioneIn(a, wid), e = w.eser?.[ei]; if (!e) throw Error('Esercizio non trovato.'); if ('min' in campi) e.min = valoreLibero(campi.min); if ('km' in campi) e.km = valoreLibero(campi.km); w.updatedAt = ora; });
+}
+export function aggiungiEsercizioSessione(wid, nome) {
+  const n = testoBreve(nome, 120, "il nome dell'esercizio");
+  return modifica((a, ora) => { const w = sessioneIn(a, wid); w.eser = [...(w.eser || []), esercizioSessione({ n, serie: 3, rip: 10 }, recDi(a))]; w.updatedAt = ora; });
+}
+export function togliEsercizioSessione(wid, ei) {
+  return modifica((a, ora) => { const w = sessioneIn(a, wid); w.eser.splice(ei, 1); w.updatedAt = ora; });
+}
+// La durata la dà l'orologio; sopra le 5 ore è una sessione dimenticata aperta, non una durata.
+export function terminaSessione(wid) {
+  return modifica((a, ora) => {
+    const w = sessioneIn(a, wid);
+    w.fine = true;
+    if (w.inizio && !w.dur) { const m = Math.round((ora - Number(w.inizio)) / 60000); if (m > 0 && m <= 300) w.dur = m; }
+    w.updatedAt = ora;
+    return w;
+  });
+}
+export const riapriSessione = wid => modifica((a, ora) => { const w = sessioneIn(a, wid); w.fine = false; w.updatedAt = ora; });
+export function impostaDurata(wid, minuti) {
+  const m = Math.round(numero(minuti, 0, 300, 'i minuti'));
+  return modifica((a, ora) => { const w = sessioneIn(a, wid); w.dur = m; w.updatedAt = ora; });
+}
+export const eliminaSessione = wid => modifica((a, ora) => togli(a, wid, ora));
+
+// ------------------------------------------------------------ schede (t:'s')
+function schedaIn(a, sid) { const s = a.items.find(x => x.id === sid && x.t === 's'); if (!s) throw Error('Scheda non trovata.'); s.giorni = s.giorni || []; return s; }
+function giornoScheda(s, gi) { const g = s.giorni[gi]; if (!g) throw Error('Giorno non trovato.'); g.eser = g.eser || []; return g; }
+export function creaScheda(nome) {
+  const n = testoBreve(nome, 80, 'il nome della scheda');
+  return modifica((a, ora) => { const s = { id: idNuovo(), t: 's', n, giorni: [{ n: 'Giorno 1', eser: [] }], updatedAt: ora }; a.items.push(s); return s; });
+}
+export function rinominaScheda(sid, nome) {
+  const n = testoBreve(nome, 80, 'il nome della scheda');
+  return modifica((a, ora) => { const s = schedaIn(a, sid); s.n = n; s.updatedAt = ora; for (const w of a.items.filter(x => x.t === 'w' && x.sid === sid && !x.fine)) { w.sn = n; w.updatedAt = ora; } });
+}
+export function duplicaScheda(sid) {
+  return modifica((a, ora) => { const s = schedaIn(a, sid), c = { ...structuredClone(s), id: idNuovo(), n: (s.n + ' (copia)').slice(0, 80), updatedAt: ora }; a.items.push(c); return c; });
+}
+// Il piano della settimana che puntava alla scheda torna a "riposo"; le sessioni fatte restano.
+export function eliminaScheda(sid) {
+  return modifica((a, ora) => { togli(a, sid, ora); for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid)) { p.sid = ''; p.gn = ''; p.updatedAt = ora; } });
+}
+export function aggiungiGiorno(sid, nome) {
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), n = String(nome || '').trim().slice(0, 60) || `Giorno ${s.giorni.length + 1}`;
+    if (s.giorni.some(g => g.n === n)) throw Error('Questa scheda ha già un giorno con questo nome.');
+    s.giorni.push({ n, eser: [] }); s.updatedAt = ora; return s.giorni.length - 1;
+  });
+}
+export function rinominaGiorno(sid, gi, nome) {
+  const n = testoBreve(nome, 60, 'il nome del giorno');
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), g = giornoScheda(s, gi), vecchio = g.n;
+    if (s.giorni.some((x, i) => i !== gi && x.n === n)) throw Error('Questa scheda ha già un giorno con questo nome.');
+    g.n = n; s.updatedAt = ora;
+    for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid && x.gn === vecchio)) { p.gn = n; p.updatedAt = ora; }
+  });
+}
+export function eliminaGiorno(sid, gi) {
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), g = giornoScheda(s, gi);
+    s.giorni.splice(gi, 1); s.updatedAt = ora;
+    for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid && x.gn === g.n)) { p.sid = ''; p.gn = ''; p.updatedAt = ora; }
+  });
+}
+export function aggiungiEsercizio(sid, gi, nome) {
+  const n = testoBreve(nome, 120, "il nome dell'esercizio");
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), g = giornoScheda(s, gi), gruppo = gruppoDi(n);
+    g.eser.push(isCardio({ n, gruppo }) ? { n, gruppo, cardio: true, min: 30, km: '' } : { n, gruppo, serie: 3, rip: 10, peso: '', rec: recDi(a) });
+    s.updatedAt = ora;
+  });
+}
+export function aggiornaEsercizio(sid, gi, ei, campi) {
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), e = giornoScheda(s, gi).eser[ei];
+    if (!e) throw Error('Esercizio non trovato.');
+    if ('n' in campi) { e.n = testoBreve(campi.n, 120, "il nome dell'esercizio"); e.gruppo = gruppoDi(e.n); }
+    if ('serie' in campi) e.serie = Math.round(numero(campi.serie, 1, 20, 'le serie'));
+    if ('rip' in campi) e.rip = String(campi.rip ?? '').trim().slice(0, 20);
+    if ('peso' in campi) e.peso = valoreLibero(campi.peso);
+    if ('rec' in campi) e.rec = String(campi.rec).trim() === '' ? '' : Math.round(numero(campi.rec, 0, 900, 'il recupero (secondi)'));
+    if ('min' in campi) e.min = valoreLibero(campi.min);
+    if ('note' in campi) e.note = String(campi.note ?? '').trim().slice(0, 200);
+    s.updatedAt = ora;
+  });
+}
+export function spostaEsercizio(sid, gi, ei, verso) {
+  return modifica((a, ora) => {
+    const s = schedaIn(a, sid), l = giornoScheda(s, gi).eser, j = ei + verso;
+    if (j < 0 || j >= l.length) return;
+    [l[ei], l[j]] = [l[j], l[ei]]; s.updatedAt = ora;
+  });
+}
+export const togliEsercizio = (sid, gi, ei) => modifica((a, ora) => { const s = schedaIn(a, sid); giornoScheda(s, gi).eser.splice(ei, 1); s.updatedAt = ora; });
+
+// ------------------------------------------------------------ settimana di allenamento (t:'pa')
+export function impostaGiornoSettimana(gs, sid, gn) {
+  if (!GIORNI_SETT.includes(gs)) throw Error('Giorno della settimana non valido.');
+  return modifica((a, ora) => {
+    if (sid) { const s = schedaIn(a, sid); if (!s.giorni.some(g => g.n === gn)) throw Error('Giorno della scheda non trovato.'); }
+    let p = a.items.find(x => x.t === 'pa' && x.gs === gs);
+    if (!p) { p = { id: 'allena-' + gs, t: 'pa', gs }; a.items.push(p); delete a.graves[p.id]; }
+    p.sid = sid || ''; p.gn = sid ? gn : ''; p.updatedAt = ora;
+  });
 }

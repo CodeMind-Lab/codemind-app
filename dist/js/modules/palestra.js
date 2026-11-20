@@ -8,6 +8,7 @@ import * as P from '../services/palestraService.js?v=73';
 import { riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, ricette, porzioniDi, righePiano, allenamentoDelGiorno, ultimaSessione, sessioniDel, pesoAttuale, settimana, lunediDi, slotOra, macro, somma, prodottoDaOFF, di, PASTI, CATEGORIE } from '../utils/palestra.js?v=73';
 import { Scanner } from '../utils/scanner.js?v=73';
 import { formaClassica, bindFormaWorkspace } from './formaWorkspace.js?v=65';
+import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=73';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
@@ -16,7 +17,7 @@ import { openModal, closeModal, toast, confirmDelete } from '../utils/dom.js?v=6
 
 const SCHEDE = [['oggi', 'Oggi'], ['cibo', 'Diario pasti'], ['allena', 'Allenamenti'], ['schede', 'Schede'], ['piano', 'Piano settimanale'], ['misure', 'Misure'], ['report', 'Report'], ['obiettivi', 'Obiettivi e alimenti']];
 // Schede non ancora rifatte → scheda della Forma classica che le contiene.
-const CLASSICHE = { allena: 'allena', schede: 'allena', piano: 'cibo', misure: 'report', report: 'report' };
+const CLASSICHE = { piano: 'cibo', misure: 'report', report: 'report' };
 const PILL = { apertura: 'p-a', chiusura: 'p-c', notte: 'p-n', off: 'p-off', custom: 'p-x' };
 const OFF_API = 'https://world.openfoodfacts.org/api/v2/product/';
 const ICONA_SCAN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>';
@@ -127,7 +128,7 @@ function cartaAllenamento(a, d, x) {
   const ult = ultimaSessione(a, all.scheda.id, all.giorno.n, d), fatto = fatte.some(w => w.sid === all.scheda.id && w.gn === all.giorno.n);
   const esercizi = (all.giorno.eser || []).map(e => `<div class="es"><span class="nome">${esc(e.n)}</span><span>${e.cardio ? (e.min ? esc(e.min) + ' min' : 'cardio') : `${esc(e.serie || 3)} × ${esc(e.rip || '')}`}</span><em>${e.peso ? esc(e.peso) + ' kg' : ''}</em></div>`).join('');
   return `<section class="card"><div class="card-testa"><h2>Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</h2><a class="link" href="#/sport/piano">Cambia →</a></div><div class="contenuto">
-    <div class="all-t ${fatto ? 'fatto' : ''}"><div><b>${esc(all.giorno.n)}</b><small>${esc(all.scheda.n || 'Scheda')}${ult ? ` · ultima volta ${esc(giornoBreve(ult.d))}${ult.dur ? ', ' + fmt(ult.dur) + ' min' : ''}` : ''}</small></div>${fatto ? '<span class="pill p-off">fatto ✓</span>' : '<a class="btn" href="#/sport/allena">Inizia</a>'}</div>
+    <div class="all-t ${fatto ? 'fatto' : ''}"><div><b>${esc(all.giorno.n)}</b><small>${esc(all.scheda.n || 'Scheda')}${ult ? ` · ultima volta ${esc(giornoBreve(ult.d))}${ult.dur ? ', ' + fmt(ult.dur) + ' min' : ''}` : ''}</small></div>${fatto ? '<span class="pill p-off">fatto ✓</span>' : bottoneInizia(a, d, all.scheda.id, all.giorno.n)}</div>
     ${esercizi}</div></section>`;
 }
 function cartaSettimana(a, d) {
@@ -152,7 +153,7 @@ function blocchiTelefono(a, d, x) {
       <div class="tile t-azzurro"><div class="etq">Acqua</div><div class="grosso">${fmt(rg.acqua / 1000, 2)} <small>/ ${fmt(t.acqua / 1000, 1)} l</small></div><div class="piccoli"><button data-pal-acqua="250">+250</button><button data-pal-acqua="500">+500</button><button data-pal-acqua="-250" aria-label="Togli 250 ml">−</button></div></div>
       <div class="tile t-lilla"><div class="etq">Passi</div><div class="grosso">${fmt(rg.passi)} <small>/ ${fmt(t.passi)}</small></div><div class="piccoli"><button data-pal-passi>Scrivi</button></div></div>
     </div>
-    <div class="tile t-navy all-tel"><div><div class="etq">Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</div>${allenamento}</div>${all && !fatte.length ? '<a class="btn" href="#/sport/allena">Inizia</a>' : ''}</div>
+    <div class="tile t-navy all-tel"><div><div class="etq">Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</div>${allenamento}</div>${all && !fatte.length ? bottoneInizia(a, d, all.scheda.id, all.giorno.n) : ''}</div>
   </div>`;
 }
 
@@ -205,11 +206,12 @@ function vistaClassica(k) {
   return `<div class="avviso">Questa scheda è ancora quella della vecchia Forma: la sto rifacendo nello stile dell'app. I dati sono gli stessi.</div>${formaClassica(CLASSICHE[k])}`;
 }
 
-export function palestraPage(id) {
-  const scheda = SCHEDE.some(([k]) => k === id) ? id : 'oggi';
+export function palestraPage(id, sub) {
   const a = P.archivio(), d = dSel();
+  if (a && id === 'sessione') return `<div class="lavoro palestra" data-scheda="sessione"><div id="pal-stato">${statoHtml()}</div>${vistaSessione(a, sub)}</div>`;
+  const scheda = SCHEDE.some(([k]) => k === id) ? id : 'oggi';
   if (!a) return `<div class="lavoro palestra">${testa(null, d)}${vuoto()}</div>`;
-  const viste = { oggi: () => vistaOggi(a, d), cibo: () => vistaCibo(a, d), obiettivi: () => vistaObiettivi(a) };
+  const viste = { oggi: () => vistaOggi(a, d), cibo: () => vistaCibo(a, d), allena: () => vistaAllena(a, d), schede: () => vistaSchede(a, d), obiettivi: () => vistaObiettivi(a) };
   const corpo = viste[scheda] ? viste[scheda]() : vistaClassica(scheda);
   return `<div class="lavoro palestra" data-scheda="${scheda}">${testa(a, d)}<div class="pal-sotto-testa">${schede(scheda)}<span class="pal-salvataggio" id="pal-salvataggio" role="status">${testoStato()}</span></div><div id="pal-stato">${statoHtml()}</div>${corpo}</div>`;
 }
@@ -432,6 +434,8 @@ export function bindPalestra(render) {
   if (filtro) filtro.oninput = () => { const t = filtro.value.trim().toLowerCase(); pagina.querySelectorAll('[data-pal-alimento]').forEach(r => { r.hidden = !!t && !r.dataset.cerca.includes(t); }); };
   const obiettivi = pagina.querySelector('#pal-obiettivi');
   if (obiettivi) obiettivi.onsubmit = e => { e.preventDefault(); try { P.salvaObiettivi(Object.fromEntries(new FormData(obiettivi))); toast('Obiettivi salvati'); render(); } catch (err) { obiettivi.querySelector('.form-error').textContent = err.message; } };
+  su('[data-pal-inizia]', b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(d, sid, gn.join('|')); } catch (e) { toast(e.message); } });
+  bindAllena(pagina, render, d);
   if (pagina.querySelector('#forma-editor')) {
     // Prima di aprire la Forma classica salvo le modifiche fatte qui, così la vede aggiornata.
     if (P.inAttesa()) P.salva().catch(() => {});

@@ -79,5 +79,6 @@ accedere di nuovo.
 
 La sezione Palestra e alimentazione è scritta dentro l'app (`js/modules/palestra.js`):
 Oggi, Diario pasti, Obiettivi e alimenti, aggiunta con ricerca (tabelle CREA e alimenti
-tuoi) e codice a barre (Open Food Facts). Allenamenti, schede, piano, misure e report
+tuoi) e codice a barre (Open Food Facts); Allenamenti, Schede e allenamento in corso con
+recupero (`js/modules/palestraAllena.js`). Piano settimanale, misure e report
 aprono ancora la Forma classica finché non vengono rifatti; i dati sono gli stessi.

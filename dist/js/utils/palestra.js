@@ -1,11 +1,11 @@
 // Calcoli della sezione Palestra e alimentazione. Leggono l'archivio di Forma
 // ({items, settings, graves}) senza modificarlo. Funzioni pure, provate in
 // tests/palestra.mjs.
-import { ALIMENTI, PASTI, PORZIONI, CATEGORIE } from './formaDati.js?v=73';
+import { ALIMENTI, PASTI, PORZIONI, CATEGORIE, ESERCIZI, GRUPPI_CARDIO } from './formaDati.js?v=73';
 import { shiftPreset } from './workShifts.js?v=65';
 import { shiftDate } from './dates.js?v=65';
 
-export { PASTI, CATEGORIE };
+export { PASTI, CATEGORIE, ESERCIZI };
 
 // Numeri di partenza, gli stessi di Forma: valgono finché non scrivi i tuoi obiettivi.
 export const TARGET_DEFAULT = Object.freeze({ kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65, acqua: 2500, passi: 8000, olio: 25 });
@@ -162,3 +162,61 @@ export function prodottoDaOFF(risposta, codice) {
   };
 }
 export const codiceValido = s => /^\d{8}$|^\d{12,14}$/.test(String(s || '').trim());
+
+// ------------------------------------------------------------ allenamenti
+// Gruppi dell'elenco di Forma (Spinta, Tirata, Gambe, Core, Cardio); "Altro" se il nome non c'è.
+const GRUPPO_DI = new Map(Object.entries(ESERCIZI).flatMap(([g, l]) => l.map(e => [e.toLowerCase(), g])));
+export const gruppoDi = nome => GRUPPO_DI.get(String(nome || '').toLowerCase()) || 'Altro';
+const RX_CARDIO = /corsa|cammin|tapis|treadmill|cyclette|\bbike\b|ellittic|vogator|nuoto|salto con la corda|cardio/i;
+export const isCardio = e => !!e.cardio || GRUPPI_CARDIO.includes(e.gruppo || gruppoDi(e.n)) || RX_CARDIO.test(e.n || '');
+export const nomeGruppo = g => String(g || 'Altro').replace(/\s*\(.*\)$/, '');
+// "8–10" → 8: il numero da proporre nella sessione è il minimo dell'intervallo.
+export const ripNumero = rip => { const m = /(\d+)/.exec(String(rip ?? '')); return m ? +m[1] : ''; };
+export const recSecondi = (v, def = 90) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : def; };
+export const fmtRec = sec => { const m = Math.floor(sec / 60), s = Math.round(sec % 60); return m ? `${m}′${s ? String(s).padStart(2, '0') : ''}` : `${s}″`; };
+
+export function statSessione(w) {
+  let serie = 0, volume = 0, ripetizioni = 0, min = 0, km = 0, max = 0;
+  for (const e of w.eser || []) {
+    for (const s of e.sets || []) { if (!s.ok) continue; serie++; ripetizioni += num(s.r); volume += num(s.r) * num(s.w); max = Math.max(max, num(s.w)); }
+    min += num(e.min); km += num(e.km);
+  }
+  return { serie, volume, ripetizioni, min, km, max, esercizi: (w.eser || []).length, dur: num(w.dur) };
+}
+export const sessioni = (a, da, al, sid) => di(a, 'w').filter(w => (!da || w.d >= da) && (!al || w.d <= al) && (!sid || (sid === 'libero' ? !w.sid : w.sid === sid)))
+  .sort((x, y) => (y.d.localeCompare(x.d)) || (num(y.inizio) - num(x.inizio)));
+// Il carico massimo di un esercizio in ogni sessione chiusa, dalla più vecchia.
+export function progressi(a, nome, limite = 8) {
+  const k = String(nome || '').toLowerCase(), out = [];
+  for (const w of sessioni(a).filter(w => w.fine).reverse()) {
+    const e = (w.eser || []).find(x => String(x.n).toLowerCase() === k);
+    if (!e) continue;
+    const ok = (e.sets || []).filter(s => s.ok && num(s.w) > 0);
+    if (!ok.length) continue;
+    const top = ok.reduce((b, s) => num(s.w) > num(b.w) || (num(s.w) === num(b.w) && num(s.r) > num(b.r)) ? s : b);
+    out.push({ d: w.d, kg: num(top.w), rip: num(top.r) });
+  }
+  return out.slice(-limite);
+}
+export function eserciziFatti(a) {
+  const conta = new Map();
+  for (const w of di(a, 'w')) for (const e of w.eser || []) if (!isCardio(e) && (e.sets || []).some(s => s.ok && num(s.w) > 0)) conta.set(e.n, (conta.get(e.n) || 0) + 1);
+  return [...conta].sort((x, y) => y[1] - x[1]).map(([n]) => n);
+}
+export function seriePerGruppo(a, da, al) {
+  const g = new Map();
+  for (const w of sessioni(a, da, al)) for (const e of w.eser || []) {
+    const n = (e.sets || []).filter(s => s.ok).length;
+    if (n) { const k = nomeGruppo(e.gruppo || gruppoDi(e.n)); g.set(k, (g.get(k) || 0) + n); }
+  }
+  return [...g].sort((x, y) => y[1] - x[1]);
+}
+// Nomi per il completamento: elenco di Forma, più quelli già usati nelle tue schede e sessioni.
+export function nomiEsercizi(a) {
+  const nomi = new Set(Object.values(ESERCIZI).flat());
+  for (const s of di(a, 's')) for (const g of s.giorni || []) for (const e of g.eser || []) if (e.n) nomi.add(e.n);
+  for (const w of di(a, 'w')) for (const e of w.eser || []) if (e.n) nomi.add(e.n);
+  return [...nomi].sort((x, y) => x.localeCompare(y, 'it'));
+}
+export const schedeDi = a => di(a, 's').sort((x, y) => String(x.n).localeCompare(String(y.n), 'it'));
+export const pianoAllenamento = a => GIORNI_SETT.map(gs => { const p = di(a, 'pa').find(x => x.gs === gs); return { gs, sid: p?.sid || '', gn: p?.gn || '' }; });
