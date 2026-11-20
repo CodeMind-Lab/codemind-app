@@ -11,7 +11,7 @@ dall'accesso (Row Level Security) e visibili solo al proprio account.
 |---|---|
 | `dist/` | L'app pubblicata così com'è: `index.html`, `css/`, `js/`, `forma/`, `assets/` |
 | `dist/css/bento.css` | L'aspetto attuale ("Bento", Chakra Petch): si carica per ultimo |
-| `dist/forma/` | Palestra e alimentazione (Forma), aperta dentro l'app |
+| `dist/forma/` | La Forma classica: si apre ancora dentro Palestra per le schede non ancora rifatte |
 | `supabase/migrations/` | Le modifiche al database, numerate e da eseguire in ordine |
 | `tests/` | Test automatici (`npm test`): servizi dell'app e database su PostgreSQL locale |
 | `strumenti/` | Server locale senza cache e preparazione della pubblicazione |
@@ -73,6 +73,11 @@ accedere di nuovo.
 
 ## Portare i dati da Forma (app separata)
 
-1. Nella vecchia Forma: **Impostazioni → Esporta backup** (file JSON).
-2. Qui: **Palestra e alimentazione → Preferenze → Ripristina backup** e scegli il file.
+1. Nella vecchia Forma: **Impostazioni → Esporta tutto (file JSON)**.
+2. Qui: **Palestra e alimentazione → Carica il backup (.json)** e scegli il file.
    I dati finiscono nell'archivio unico dell'app, sincronizzato tra i dispositivi.
+
+La sezione Palestra e alimentazione è scritta dentro l'app (`js/modules/palestra.js`):
+Oggi, Diario pasti, Obiettivi e alimenti, aggiunta con ricerca (tabelle CREA e alimenti
+tuoi) e codice a barre (Open Food Facts). Allenamenti, schede, piano, misure e report
+aprono ancora la Forma classica finché non vengono rifatti; i dati sono gli stessi.

@@ -1,6 +1,6 @@
 import { clearForma } from './services/formaService.js?v=65';
 import { startAppUpdates } from "./services/appUpdate.js?v=68";
-import { sportPage, bindSport } from './modules/sport.js?v=65';
+import { palestraPage, bindPalestra } from './modules/palestra.js?v=73';
 import { clearSport } from './services/sportService.js?v=65';
 import { universityData } from "./utils/university.js?v=65";
 import { openChecklistImport } from "./modules/checklistImport.js?v=65";
@@ -102,7 +102,7 @@ export function render() {
       archive: () => schedeSviluppo("archive") + projects(true),
       tasks: () => schedeSviluppo("tasks") + tasksPage(),
       today: agendaPage,
-      sport: () => sportPage(id),
+      sport: () => palestraPage(id),
       "daily-todos": () => schedeNote("daily-todos") + notebookPage("daily-todos"),
       notes: () => schedeNote("notes") + notesPage(),
       settings: settingsPage,
@@ -116,9 +116,9 @@ export function render() {
   if (page === "hotel") bindHotel(render);
   if (page === "sviluppo") bindSviluppo(render);
   if (page === "university") bindUniversita(render);
+  if (page === "sport") bindPalestra(render);
   bindAttachments();
   bindAgenda(render);
-  bindSport(render);
   document.querySelector("#navigation-more").onclick = toggleMenu;
   bindNotebook(render);
   bindNotes(render);

@@ -18,6 +18,9 @@ function notifyArchive(saved,request_id){
 }
 // Dal menu del telefono "Pasti" apre direttamente il diario (#/sport/cibo).
 export function apriSchedaForma(chiave){if(tabs[chiave])tab=chiave;}
+// Solo la finestra della Forma classica su una sua scheda: la usa la sezione nativa
+// Palestra e alimentazione per le schede non ancora rifatte.
+export function formaClassica(chiave){if(tabs[chiave])tab=chiave;return '<div class="forma-editor-wrap"><iframe id="forma-editor" src="forma/index.html?v=65" title="Forma · '+esc(tabs[tab])+'" allow="camera" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-modals"></iframe></div>';}
 export function formaDashboardNutrition(){
  const data=nutritionToday(today(state.timezone));return data?'<div class="forma-nutrition-home"><span>Alimentazione di oggi</span><strong>'+Math.round(data.total.k)+' <small>kcal registrate</small></strong><p>Proteine '+Math.round(data.total.p)+' g · Carboidrati '+Math.round(data.total.c)+' g · Grassi '+Math.round(data.total.g)+' g</p><a class="link" href="#/sport" data-forma-open-food>Apri alimentazione →</a></div>':'';
 }

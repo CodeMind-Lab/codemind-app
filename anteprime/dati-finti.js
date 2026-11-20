@@ -44,13 +44,23 @@ state.weeklyGoals = [
 ];
 const gs = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'][(new Date(oggi + 'T12:00:00Z').getUTCDay() + 6) % 7];
 const ora_ms = Date.now();
+const ieri = shiftDate(oggi, -1), l = (d, slot, n, q, k, p, c, g) => ({ t: 'l', id: id(), d, slot, n, q, k, p, c, g, updatedAt: ora_ms });
 state.formaArchive = { revision: 1, source_id: crypto.randomUUID(), archive: { version: 1, settings: { recDefault: 90 }, graves: {}, items: [
-  { t: 'cfg', id: 'cfg', target: { kcal: 2300, kcalOff: 2000, prot: 150, carb: 260, gras: 70 }, updatedAt: ora_ms },
-  { t: 's', id: 's1', n: 'Scheda A', giorni: [{ n: 'Push', eser: [{ n: 'Panca piana', serie: 4, rip: '8', peso: 62.5 }, { n: 'Spinte manubri inclinata', serie: 3, rip: '10', peso: 22 }, { n: 'Alzate laterali', serie: 3, rip: '12', peso: 8 }, { n: 'Dip', serie: 3, rip: '10' }, { n: 'French press', serie: 3, rip: '12', peso: 20 }, { n: 'Push-down', serie: 3, rip: '15' }] }], updatedAt: ora_ms },
-  { t: 'pa', id: 'allena-' + gs, gs, sid: 's1', gn: 'Push', updatedAt: ora_ms },
-  { t: 'l', id: 'l1', d: oggi, n: 'Colazione: yogurt, avena, frutta', q: 100, k: 420, p: 28, c: 50, g: 12, updatedAt: ora_ms },
-  { t: 'l', id: 'l2', d: oggi, n: 'Pranzo: riso, pollo, verdure', q: 100, k: 780, p: 46, c: 85, g: 24, updatedAt: ora_ms },
-  { t: 'l', id: 'l3', d: oggi, n: 'Spuntino: pane e bresaola', q: 100, k: 220, p: 18, c: 25, g: 8, updatedAt: ora_ms },
+  { t: 'cfg', id: 'cfg', target: { kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65, acqua: 2500, passi: 8000, olio: 25 }, profilo: { nome: '', altezza: 178, pesoObiettivo: 75, giroObiettivo: 88 }, updatedAt: ora_ms },
+  { t: 's', id: 's1', n: 'PPL 4 giorni', giorni: [{ n: 'Push A', eser: [{ n: 'Panca piana bilanciere', serie: 4, rip: '8–10', peso: 60 }, { n: 'Spinte manubri panca inclinata', serie: 3, rip: '10', peso: 22 }, { n: 'Croci ai cavi', serie: 3, rip: '12–15', peso: 12 }, { n: 'Military press', serie: 3, rip: '8', peso: 35 }, { n: 'Alzate laterali', serie: 3, rip: '15', peso: 8 }, { n: 'Push-down alla corda', serie: 3, rip: '12', peso: 25 }] }, { n: 'Pull A', eser: [{ n: 'Trazioni', serie: 4, rip: '6–8' }, { n: 'Rematore bilanciere', serie: 4, rip: '8', peso: 50 }] }], updatedAt: ora_ms },
+  { t: 'pa', id: 'allena-' + gs, gs, sid: 's1', gn: 'Push A', updatedAt: ora_ms },
+  { t: 'w', id: 'w1', d: shiftDate(oggi, -6), sid: 's1', sn: 'PPL 4 giorni', gn: 'Push A', fine: true, dur: 58, inizio: ora_ms - 6 * 864e5, eser: [], updatedAt: ora_ms },
+  { t: 'w', id: 'w2', d: shiftDate(oggi, -2), sid: 's1', sn: 'PPL 4 giorni', gn: 'Pull A', fine: true, dur: 61, inizio: ora_ms - 2 * 864e5, eser: [], updatedAt: ora_ms },
+  { t: 'gt', id: 'gt1', n: 'Giorno on', tipo: 'on', righe: [{ slot: 'spuntino2', n: 'Banana', q: 120, k: 65, p: 1.2, c: 15.4, g: 0.3 }, { slot: 'spuntino2', n: 'Parmigiano Reggiano', q: 20, k: 392, p: 33.5, c: 0, g: 28.1 }, { slot: 'cena', n: 'Salmone', q: 150, k: 185, p: 18.4, c: 1, g: 12 }, { slot: 'cena', n: 'Patate', q: 250, k: 85, p: 2.1, c: 18, g: 1 }, { slot: 'cena', n: 'Lattuga', q: 80, k: 19, p: 1.8, c: 2.2, g: 0.4 }], updatedAt: ora_ms },
+  { t: 'p', id: 'piano-' + gs, gs, gt: 'gt1', updatedAt: ora_ms },
+  { t: 'g', id: 'g-' + oggi, d: oggi, acqua: 1250, passi: 5430, updatedAt: ora_ms },
+  { t: 'm', id: 'm1', d: shiftDate(oggi, -15), peso: 79, updatedAt: ora_ms }, { t: 'm', id: 'm2', d: shiftDate(oggi, -1), peso: 78.4, updatedAt: ora_ms },
+  { t: 'a', id: 'a1', n: 'Skyr naturale · Exquisa', k: 63, p: 11, c: 4, g: 0.2, cat: 'Latticini/Uova', ean: '4019300005307', updatedAt: ora_ms },
+  { t: 'r', id: 'r1', n: 'Bowl riso e tonno', righe: [{ n: 'Riso basmati', q: 80, k: 350, p: 7, c: 78, g: 0.6 }, { n: 'Tonno al naturale', q: 80, k: 103, p: 25, c: 0, g: 0.3 }], updatedAt: ora_ms },
+  l(oggi, 'colazione', 'Yogurt greco 0% grassi', 170, 59, 10.3, 3.6, 0.4), l(oggi, 'colazione', "Fiocchi d'avena", 40, 372, 13.3, 66, 7), l(oggi, 'colazione', 'Mirtilli', 80, 45, 0.9, 10, 0.2),
+  l(oggi, 'spuntino1', 'Mandorle', 18, 603, 22, 4.6, 55.3),
+  l(oggi, 'pranzo', 'Petto di pollo', 150, 100, 23, 0, 1.2), l(oggi, 'pranzo', 'Riso basmati', 80, 350, 7, 78, 0.6), l(oggi, 'pranzo', 'Zucchine', 200, 11, 1.3, 1.4, 0.1), l(oggi, 'pranzo', 'Olio di oliva extra vergine', 10, 899, 0, 0, 99.9),
+  l(ieri, 'pranzo', 'Pasta di semola', 90, 353, 12, 72, 1.5), l(ieri, 'cena', 'Merluzzo', 200, 71, 17, 0, 0.3), l(ieri, 'colazione', 'Skyr naturale · Exquisa', 150, 63, 11, 4, 0.2),
 ] } };
 // Lavoro Hotel: contratto di prova (paga fissa con 13ª e 14ª), assenze, una busta paga.
 const mesePrima = new Date(Date.UTC(Number(oggi.slice(0, 4)), Number(oggi.slice(5, 7)) - 2, 1)).toISOString().slice(0, 10);

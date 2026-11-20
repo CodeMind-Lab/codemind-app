@@ -17,6 +17,8 @@ export async function loadForma(){
  try{const rows=await readAll('forma_archives');if(version!==epoch||who!==owner())return;state.formaArchive=rows[0]||null;state.formaError='';}
  catch{if(version===epoch&&who===owner())state.formaError='L’archivio Forma non è disponibile. Aggiorna i dati e riprova.';}
 }
+// Toglie le modifiche in attesa di questo account (scelta "Scarta" dopo un conflitto).
+export function scartaPendingForma(){const who=owner();if(who)localStorage.removeItem(pendingKey(who));}
 export function pendingForma(){try{return JSON.parse(localStorage.getItem(pendingKey(owner()))||'null');}catch{return null;}}
 export function saveForma(value,base,source_id){
  const normalized=formaModel.normalize(value),who=owner(),version=epoch;

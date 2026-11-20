@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="it" data-theme="light" data-stile="c" data-menu="b" data-font="chakra">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anteprima · Palestra e alimentazione</title>
+<style>@font-face{font-family:"Chakra Petch";font-weight:400;src:url("../dist/assets/fonts/chakra-petch-400.woff2") format("woff2")}@font-face{font-family:"Chakra Petch";font-weight:500;src:url("../dist/assets/fonts/chakra-petch-500.woff2") format("woff2")}@font-face{font-family:"Chakra Petch";font-weight:600;src:url("../dist/assets/fonts/chakra-petch-600.woff2") format("woff2")}@font-face{font-family:"Chakra Petch";font-weight:700;src:url("../dist/assets/fonts/chakra-petch-700.woff2") format("woff2")}[data-font="chakra"] *{font-family:"Chakra Petch",system-ui,sans-serif!important}</style>
+<link rel="stylesheet" href="base.css"><style>
+/* Anteprima della sezione Palestra e alimentazione (Mac). Stesso Bento di Hotel e Università. */
+.schede{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.chip{font-size:13px;padding:6px 14px;border-radius:999px;background:var(--pannello);color:var(--testo-2);border:0}
+.chip.on{background:var(--primario);color:var(--su-primario)}
+.giorno-nav{display:flex;align-items:center;gap:8px;margin-left:auto}
+.giorno-nav b{font-size:15px;min-width:120px;text-align:center}
+.icona-btn{width:36px;height:36px;border-radius:50%;border:0;background:var(--pannello);color:var(--testo);font-size:16px}
+.kpi .k.t-navy{background:#0B1A2E!important;color:#fff!important}.kpi .k.t-navy .etichetta,.kpi .k.t-navy small,.kpi .k.t-navy .sotto{color:#9FB0C7!important}
+.kpi .k.t-lilla{background:#E8E4FB!important;color:#0B1A2E!important}.kpi .k.t-azzurro{background:#D9F3FB!important;color:#0B1A2E!important}
+.kpi .k.t-lilla .etichetta,.kpi .k.t-lilla .sotto,.kpi .k.t-azzurro .etichetta,.kpi .k.t-azzurro .sotto,.kpi .k.t-azzurro small,.kpi .k.t-lilla small{color:#4F5D70!important}
+.kpi .k.t-corallo{background:#FF664C!important;color:#fff!important}.kpi .k.t-corallo .etichetta,.kpi .k.t-corallo .sotto,.kpi .k.t-corallo small{color:#FFE3DD!important}
+.kpi .k .barra{background:#0B1A2E1a}.kpi .k.t-corallo .barra,.kpi .k.t-navy .barra{background:#ffffff33}
+.contenuto{padding:2px 18px 16px}
+/* pasti per fascia */
+.fascia{border-top:1px solid var(--riga);padding:10px 0 6px}
+.fascia:first-child{border-top:0;padding-top:2px}
+.fascia-t{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.fascia-t b{font-size:15px}.fascia-t small{color:var(--testo-3);font-size:12.5px}
+.fascia-t .tot{margin-left:auto;font-size:13px;color:var(--testo-2);font-variant-numeric:tabular-nums}
+.piu{width:30px;height:30px;border-radius:50%;border:0;background:var(--pannello-2);color:var(--testo);font-size:17px;line-height:1}
+.vuota{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--testo-3);padding:6px 10px;border-radius:12px;border:1.5px dashed var(--riga-forte)}
+.vuota .btn{margin-left:auto;padding:5px 12px;font-size:12.5px}
+table.dati{width:100%;border-collapse:collapse;font-size:13.5px}
+table.dati td{padding:6px 0;border-top:0;text-align:left;color:var(--testo)}
+table.dati td.n{text-align:right;color:var(--testo-2);font-variant-numeric:tabular-nums;width:72px}
+table.dati td.q{color:var(--testo-3);width:110px;white-space:nowrap}
+/* anello e macro */
+.kcal{display:flex;align-items:center;gap:18px}
+.anello.grande{width:112px;height:112px;background:conic-gradient(#FF664C 0 47%,var(--pannello-2) 47% 100%)}
+.anello.grande div{width:88px;height:88px}.anello.grande b{font-size:22px}
+.macro div{grid-template-columns:92px 1fr 78px}
+.m-p i{background:#1E8DBA}.m-c i{background:#8F80EE}.m-g i{background:#F5A524}.m-o i{background:#15803D}
+/* acqua e passi */
+.due{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{border-radius:16px;padding:14px;background:var(--pannello-2)}
+.mini .etichetta{font-size:12.5px;color:var(--testo-2)}
+.mini .num{font-size:24px;font-weight:700;margin:2px 0}.mini .num small{font-size:13px;color:var(--testo-3);font-weight:500}
+.mini .azioni{display:flex;gap:6px;margin-top:8px}
+.mini .azioni button{border:0;border-radius:999px;padding:5px 10px;background:var(--pannello);font:600 12.5px "Chakra Petch";color:var(--testo)}
+.bicchieri{display:flex;gap:4px;margin-top:6px}.bicchieri i{flex:1;height:18px;border-radius:5px;background:#D9F3FB}.bicchieri i.f{background:#1E8DBA}
+/* allenamento */
+.all-t{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:#FFE3DD;margin-bottom:8px}
+.all-t b{display:block;font-size:16px}.all-t small{color:#8A3A2A;font-size:12.5px}
+.all-t .btn{margin-left:auto;background:#FF664C;color:#fff}
+.es{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:7px 2px;font-size:13.5px;border-top:1px solid var(--riga)}
+.es:first-of-type{border-top:0}.es span{color:var(--testo-3);font-variant-numeric:tabular-nums}.es em{font-style:normal;color:var(--testo-2);font-variant-numeric:tabular-nums}
+/* settimana */
+.sett{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.sg{border-radius:14px;background:var(--pannello-2);padding:8px 4px;text-align:center;line-height:1.25}
+.sg b{display:block;font-size:12px;color:var(--testo-2)}.sg span{display:block;font-size:16px;font-weight:700}
+.sg em{display:block;font-style:normal;font-size:11px;color:var(--testo-3);margin-top:2px}
+.sg .pall{display:block;width:8px;height:8px;border-radius:50%;margin:5px auto 0;background:var(--riga-forte)}
+.sg .pall.ok{background:#FF664C}
+.sg.oggi{background:#6CD4F0}.sg.oggi b,.sg.oggi em{color:#0B1A2E}
+.legenda{display:flex;gap:14px;font-size:12px;color:var(--testo-2);margin-top:10px;flex-wrap:wrap}
+.legenda i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px}
+.p-c{background:#FFE3DD;color:#B5412B}
+.nota{font-size:12.5px;color:var(--testo-2);margin-top:8px}
+[data-theme="dark"] .all-t{background:#3A1C18}[data-theme="dark"] .all-t small{color:#FFB9A8}
+[data-theme="dark"] .bicchieri i{background:#0F3346}[data-theme="dark"] .bicchieri i.f{background:#6CD4F0}
+[data-theme="dark"] .anello.grande{background:conic-gradient(#FF8A73 0 47%,#14243A 47% 100%)}
+</style></head>
+<body><svg width="0" height="0" style="position:absolute">
+  <symbol id="i-oggi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-agenda" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M7.5 13.5h3M7.5 17h6"/></symbol>
+  <symbol id="i-uni" viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"/></symbol>
+  <symbol id="i-hotel" viewBox="0 0 24 24"><path d="M3 20V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v14M15 10h4a2 2 0 0 1 2 2v8M1.5 20h21M7 8h2M7 12h2M7 16h2M11 8h0M11 12h0"/></symbol>
+  <symbol id="i-dev" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+  <symbol id="i-forma" viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+  <symbol id="i-imp" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 8v8M11 8v8M14 8v8M17 8v8"/></symbol>
+</svg><div class="app"><aside class="rail">
+    <div class="marchio"><img src="img/marchio.png" alt=""><div><b>CodeMind<span>.Lab</span></b><small>PROJECTS</small></div></div>
+    <div class="gruppo">Giornata</div>
+    <a class="voce" href="#"><svg><use href="#i-oggi"/></svg>Oggi</a>
+    <a class="voce" href="#"><svg><use href="#i-agenda"/></svg>Agenda</a>
+    <div class="gruppo">Studio e lavoro</div>
+    <a class="voce" href="#"><svg><use href="#i-uni"/></svg>Università<span class="conta">6</span></a>
+    <a class="voce" href="#"><svg><use href="#i-hotel"/></svg>Lavoro Hotel</a>
+    <a class="voce" href="#"><svg><use href="#i-dev"/></svg>Lavoro Sviluppo<span class="conta">12</span></a>
+    <div class="gruppo">Persona</div>
+    <a class="voce attiva" href="#"><svg><use href="#i-forma"/></svg>Palestra e alimentazione</a>
+    <a class="voce" href="#"><svg><use href="#i-note"/></svg>Note e to-do</a>
+    <a class="voce" href="#" style="margin-top:14px"><svg><use href="#i-imp"/></svg>Impostazioni</a>
+    <div class="rail-piede"><span class="avatar">RN</span><div>Profilo<br><small>CodeMind.Lab</small></div><button class="tema" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'" title="Tema">◐</button></div>
+  </aside><main class="main">
+<div class="testa"><div><h1>Palestra e alimentazione</h1><p>Venerdì 20 novembre · <span class="pill p-c">Chiusura 15:30–23:30</span> · obiettivo da giorno di turno</p></div>
+ <div class="giorno-nav"><button class="icona-btn">‹</button><b>Oggi</b><button class="icona-btn">›</button></div>
+ <button class="btn btn-sec"><svg width="18" height="18" style="stroke:currentColor;fill:none;stroke-width:1.8"><use href="#i-scan"/></svg>Scansiona</button><button class="btn btn-acc">+ Alimento</button></div>
+<nav class="schede"><span class="chip on">Oggi</span><span class="chip">Diario pasti</span><span class="chip">Allenamenti</span><span class="chip">Schede</span><span class="chip">Piano settimanale</span><span class="chip">Misure</span><span class="chip">Report</span><span class="chip">Obiettivi e alimenti</span></nav>
+<section class="kpi">
+ <div class="card k t-corallo"><div class="etichetta">Calorie</div><div class="num">936 <small>/ 2.000 kcal</small></div><div class="barra"><i style="width:47%;background:#fff"></i></div><div class="sotto">restano 1.064 · 3 pasti su 6 registrati</div></div>
+ <div class="card k t-azzurro"><div class="etichetta">Proteine</div><div class="num">70 <small>/ 130 g</small></div><div class="barra"><i style="width:54%;background:#1E8DBA"></i></div><div class="sotto">mancano 60 g</div></div>
+ <div class="card k t-navy"><div class="etichetta">Allenamento di oggi</div><div class="num">Push A</div><div class="sotto">6 esercizi · ore 10:00, prima del turno</div></div>
+ <div class="card k t-lilla"><div class="etichetta">Peso</div><div class="num">78,4 <small>kg</small></div><div class="sotto">−0,6 in 2 settimane · obiettivo 75</div></div>
+</section>
+<div class="griglia">
+ <div class="col">
+  <section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#">Usa il piano della settimana →</a></div><div class="contenuto">
+   <div class="fascia"><div class="fascia-t"><b>Colazione</b><small>08:10</small><span class="tot">285 kcal · 24 g P</span><button class="piu">+</button></div>
+    <table class="dati"><tr><td>Yogurt greco 0% grassi</td><td class="q">170 g</td><td class="n">100 kcal</td><td class="n">17,5 P</td></tr>
+     <tr><td>Fiocchi d'avena</td><td class="q">40 g</td><td class="n">149 kcal</td><td class="n">5,3 P</td></tr>
+     <tr><td>Mirtilli</td><td class="q">80 g</td><td class="n">36 kcal</td><td class="n">0,7 P</td></tr></table></div>
+   <div class="fascia"><div class="fascia-t"><b>Spuntino mattina</b><small>11:30</small><span class="tot">109 kcal · 4 g P</span><button class="piu">+</button></div>
+    <table class="dati"><tr><td>Mandorle</td><td class="q">15 mandorle</td><td class="n">109 kcal</td><td class="n">4,0 P</td></tr></table></div>
+   <div class="fascia"><div class="fascia-t"><b>Pranzo</b><small>13:00</small><span class="tot">542 kcal · 43 g P</span><button class="piu">+</button></div>
+    <table class="dati"><tr><td>Petto di pollo</td><td class="q">150 g</td><td class="n">150 kcal</td><td class="n">34,5 P</td></tr>
+     <tr><td>Riso basmati</td><td class="q">80 g</td><td class="n">280 kcal</td><td class="n">5,6 P</td></tr>
+     <tr><td>Zucchine</td><td class="q">200 g</td><td class="n">22 kcal</td><td class="n">2,6 P</td></tr>
+     <tr><td>Olio di oliva extra vergine</td><td class="q">1 cucchiaio</td><td class="n">90 kcal</td><td class="n">—</td></tr></table></div>
+   <div class="fascia"><div class="fascia-t"><b>Spuntino pomeriggio</b><small>prima del turno</small><span class="tot">—</span><button class="piu">+</button></div>
+    <div class="vuota">Dal piano: banana 120 g + Parmigiano 20 g · 156 kcal<button class="btn btn-sec">Aggiungi</button></div></div>
+   <div class="fascia"><div class="fascia-t"><b>Cena</b><small>in pausa turno</small><span class="tot">—</span><button class="piu">+</button></div>
+    <div class="vuota">Dal piano: salmone, patate e insalata · 610 kcal<button class="btn btn-sec">Aggiungi</button></div></div>
+   <div class="fascia"><div class="fascia-t"><b>Spuntino sera / turno notte</b><span class="tot">—</span><button class="piu">+</button></div></div>
+  </div></section>
+ </div>
+ <div class="col">
+  <section class="card"><div class="card-testa"><h2>Macro</h2></div><div class="contenuto">
+   <div class="kcal"><div class="anello grande"><div><b>936</b><small>di 2.000</small></div></div>
+    <div class="macro"><div class="m-p">Proteine<span class="barra"><i style="width:54%"></i></span><span>70 / 130 g</span></div>
+     <div class="m-c">Carboidrati<span class="barra"><i style="width:53%"></i></span><span>106 / 200 g</span></div>
+     <div class="m-g">Grassi<span class="barra"><i style="width:38%"></i></span><span>25 / 65 g</span></div>
+     <div class="m-o">Olio<span class="barra"><i style="width:40%"></i></span><span>10 / 25 g</span></div></div></div></div></section>
+  <section class="card"><div class="card-testa"><h2>Acqua e passi</h2></div><div class="contenuto"><div class="due">
+   <div class="mini"><div class="etichetta">Acqua</div><div class="num">1.250 <small>/ 2.500 ml</small></div><div class="bicchieri"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i><i></i><i></i></div><div class="azioni"><button>+250</button><button>+500</button></div></div>
+   <div class="mini"><div class="etichetta">Passi</div><div class="num">5.430 <small>/ 8.000</small></div><div class="barra"><i style="width:68%;background:#15803D"></i></div><div class="azioni"><button>Scrivi passi</button></div></div>
+  </div></div></section>
+  <section class="card"><div class="card-testa"><h2>Allenamento di oggi</h2><a class="link" href="#">Cambia →</a></div><div class="contenuto">
+   <div class="all-t"><div><b>Push A</b><small>Scheda PPL 4 giorni · ultima volta venerdì 14/11, 58 min</small></div><button class="btn">Inizia</button></div>
+   <div class="es">Panca piana bilanciere<span>4 × 8–10</span><em>60 kg</em></div>
+   <div class="es">Spinte manubri panca inclinata<span>3 × 10</span><em>22 kg</em></div>
+   <div class="es">Croci ai cavi<span>3 × 12–15</span><em>12 kg</em></div>
+   <div class="es">Military press<span>3 × 8</span><em>35 kg</em></div>
+   <div class="es">Alzate laterali<span>3 × 15</span><em>8 kg</em></div>
+   <div class="es">Push-down alla corda<span>3 × 12</span><em>25 kg</em></div>
+  </div></section>
+  <section class="card"><div class="card-testa"><h2>Settimana</h2><a class="link" href="#">Report →</a></div><div class="contenuto">
+   <div class="sett"><div class="sg"><b>Lun</b><span>16</span><em>1.980</em><i class="pall ok"></i></div><div class="sg"><b>Mar</b><span>17</span><em>2.110</em><i class="pall"></i></div><div class="sg"><b>Mer</b><span>18</span><em>1.870</em><i class="pall ok"></i></div><div class="sg"><b>Gio</b><span>19</span><em>1.910</em><i class="pall"></i></div><div class="sg oggi"><b>Ven</b><span>20</span><em>936</em><i class="pall"></i></div><div class="sg"><b>Sab</b><span>21</span><em>—</em><i class="pall"></i></div><div class="sg"><b>Dom</b><span>22</span><em>—</em><i class="pall"></i></div></div>
+   <div class="legenda"><span><i style="background:#FF664C"></i>allenamento fatto</span><span>numeri: kcal del giorno</span></div>
+   <p class="nota">2 allenamenti su 4 in programma · media 1.968 kcal nei giorni chiusi</p></div></section>
+ </div>
+</div></main></div>
+</body></html>

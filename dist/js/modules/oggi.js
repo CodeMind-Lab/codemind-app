@@ -3,7 +3,8 @@
 // obiettivi della settimana, pasti e allenamento. Le scadenze stanno nelle sezioni.
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
-import { nutritionToday } from '../services/formaService.js?v=65';
+import { archivio } from '../services/palestraService.js?v=73';
+import { riepilogoGiorno } from '../utils/palestra.js?v=73';
 import { entryForm } from './agenda.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';
@@ -105,14 +106,16 @@ function obiettivi(data, tz) {
   return `<section class="card"><div class="card-testa"><h2>Obiettivi della settimana</h2><a class="link" href="#/today">Gestisci →</a></div><div class="obj">${righe}</div></section>`;
 }
 
+// Calorie e macro del giorno dall'archivio di Forma, comprese le modifiche non ancora salvate.
+function nutritionToday(d) { const a = archivio(); if (!a) return null; const r = riepilogoGiorno(a, d); return { total: r.tot, rows: r.righe.length }; }
 // Dati di Forma: bersagli in "cfg", piano di allenamento della settimana in "pa",
 // schede in "s". Se l'archivio non è collegato le schede lo dicono invece di mostrare zeri.
 function forma() {
-  const archivio = state.formaArchive?.archive;
-  if (!archivio) return null;
-  const item = t => archivio.items.filter(i => i.t === t);
+  const a = archivio();
+  if (!a) return null;
+  const item = t => a.items.filter(i => i.t === t);
   const cfg = item('cfg')[0] || {};
-  return { archivio, item, target: { kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65, ...(cfg.target || {}) } };
+  return { archivio: a, item, target: { kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65, ...(cfg.target || {}) } };
 }
 function allenamentoDi(f, data) {
   const gs = SETTIMANA_FORMA[(new Date(data + 'T12:00:00Z').getUTCDay() + 6) % 7];
