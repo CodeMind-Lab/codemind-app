@@ -2,7 +2,7 @@
 // l'Agenda, #/projects è Lavoro Sviluppo) così i collegamenti già salvati funzionano.
 export const pages = {
   dashboard: 'Oggi', today: 'Agenda', university: 'Università', hotel: 'Lavoro Hotel',
-  projects: 'Lavoro Sviluppo', tasks: 'Attività', archive: 'Archivio',
+  sviluppo: 'Lavoro Sviluppo', projects: 'Progetti', tasks: 'Attività', archive: 'Archivio',
   sport: 'Palestra e alimentazione', notes: 'Note e to-do', 'daily-todos': 'To-do',
   settings: 'Impostazioni',
 };

@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v70";
+const CACHE = "codemind-shell-v71";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -51,6 +51,7 @@ const ASSETS = [
  "./js/modules/checklistImport.js",
  "./js/modules/dashboard.js",
  "./js/modules/formaWorkspace.js",
+ "./js/modules/hotel.js",
  "./js/modules/navigation.js",
  "./js/modules/notebook.js",
  "./js/modules/notes.js",
@@ -62,6 +63,7 @@ const ASSETS = [
  "./js/modules/sezioni.js",
  "./js/modules/shifts.js",
  "./js/modules/sport.js",
+ "./js/modules/sviluppo.js",
  "./js/modules/tasks.js",
  "./js/modules/university.js",
  "./js/router.js",
@@ -78,6 +80,7 @@ const ASSETS = [
  "./js/services/dashboardService.js",
  "./js/services/dataService.js",
  "./js/services/formaService.js",
+ "./js/services/lavoroService.js",
  "./js/services/notebookService.js",
  "./js/services/notesService.js",
  "./js/services/sportService.js",
@@ -89,9 +92,12 @@ const ASSETS = [
  "./js/utils/checklist.js",
  "./js/utils/dates.js",
  "./js/utils/dom.js",
+ "./js/utils/esporta.js",
  "./js/utils/helpers.js",
+ "./js/utils/hotel.js",
  "./js/utils/noteLinks.js",
  "./js/utils/sport.js",
+ "./js/utils/sviluppo.js",
  "./js/utils/university.js",
  "./js/utils/workShifts.js",
  "./manifest.json"

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="it" data-theme="light" data-stile="c" data-menu="b" data-font="chakra">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anteprima · Lavoro Hotel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="base.css">
+<style>
+.schede{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.chip{font-size:13px;padding:6px 14px;border-radius:999px;background:var(--pannello);color:var(--testo-2);border:0}
+.chip.on{background:var(--primario);color:var(--su-primario)}
+[data-theme="dark"] .chip.on{background:#6CD4F0;color:#06131F}
+.mese{display:flex;align-items:center;gap:8px;margin-left:auto}
+.mese b{font-size:16px;min-width:150px;text-align:center}
+.icona-btn{width:36px;height:36px;border-radius:50%;border:0;background:var(--pannello);color:var(--testo);font-size:16px}
+table.dati{width:100%;border-collapse:collapse;font-size:13.5px}
+table.dati th{text-align:left;font-weight:600;color:var(--testo-2);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--riga)}
+table.dati td{padding:9px 10px;border-bottom:1px solid var(--riga);text-align:left;color:var(--testo)}
+table.dati td.n,table.dati th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.dati tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--riga-forte)}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px}
+.p-a{background:#D9F3FB;color:#0B6E91}.p-c{background:#FFE3DD;color:#B5412B}.p-n{background:#0B1A2E;color:#fff}.p-off{background:#DDF3EE;color:#15803D}
+.p-f{background:#E8E4FB;color:#4C3DB0}.p-m{background:#FEF3E2;color:#B45309}
+.barra-strumenti{display:flex;gap:8px;align-items:center;padding:0 18px 12px;flex-wrap:wrap}
+.btn-sec{padding:7px 14px;font-size:13px}
+.riga2{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--riga);font-size:13.5px}
+.riga2:first-child{border-top:0}
+.riga2 span{color:var(--testo-2)}.riga2 b{text-align:right;font-variant-numeric:tabular-nums}
+.totale{font-size:15px}.totale b{font-size:18px}
+.delta{margin-top:10px;padding:10px 12px;border-radius:12px;background:#FEF3E2;color:#92400E;font-size:13px}
+.contenuto{padding:4px 18px 16px}
+.nota-turno{padding:10px 0;border-top:1px solid var(--riga);font-size:13.5px}
+.nota-turno:first-child{border-top:0}.nota-turno small{display:block;color:var(--testo-3);font-size:12px;margin-bottom:2px}
+@media (max-width:760px){.mese{margin-left:0}.calendario .giorno em{display:none}table.dati .nascondi{display:none}}
+
+.calendario{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.calendario .intestazione{font-size:12px;font-weight:600;color:var(--testo-3);text-align:center;padding:2px 0}
+.calendario .giorno{background:var(--pannello-2);border-radius:12px;padding:8px;min-height:70px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.calendario .giorno.vuoto{background:transparent}
+.calendario .giorno b{font-size:13px}
+.calendario .giorno em{font-style:normal;font-size:11px;color:var(--testo-3)}
+.calendario .giorno .pill{align-self:flex-start;font-size:11px;padding:1px 7px}
+.calendario .giorno.oggi{background:#6CD4F0}
+.calendario .giorno.oggi em{color:#0B1A2E}
+@media (max-width:760px){.calendario .giorno{min-height:54px;padding:6px 4px}.calendario .giorno .pill{font-size:10px;padding:1px 5px}}
+</style></head>
+<body><svg width="0" height="0" style="position:absolute">
+  <symbol id="i-oggi" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-agenda" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M7.5 13.5h3M7.5 17h6"/></symbol>
+  <symbol id="i-uni" viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"/></symbol>
+  <symbol id="i-hotel" viewBox="0 0 24 24"><path d="M3 20V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v14M15 10h4a2 2 0 0 1 2 2v8M1.5 20h21M7 8h2M7 12h2M7 16h2M11 8h0M11 12h0"/></symbol>
+  <symbol id="i-dev" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+  <symbol id="i-forma" viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></symbol>
+  <symbol id="i-pasti" viewBox="0 0 24 24"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10M17 3c-2 1.5-3 4-3 7h3v11"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+  <symbol id="i-imp" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.1 19.8l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.2 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.6 7l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-piu" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-altro" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+</svg>
+<div class="app"><aside class="rail">
+    <div class="marchio"><img src="img/marchio.png" alt=""><div><b>CodeMind<span>.Lab</span></b><small>PROJECTS</small></div></div>
+    <div class="gruppo">Giornata</div>
+    <a class="voce" href="#"><svg><use href="#i-oggi"/></svg>Oggi</a>
+    <a class="voce" href="#"><svg><use href="#i-agenda"/></svg>Agenda</a>
+    <div class="gruppo">Studio e lavoro</div>
+    <a class="voce" href="#"><svg><use href="#i-uni"/></svg>Università<span class="conta">6</span></a>
+    <a class="voce attiva" href="#"><svg><use href="#i-hotel"/></svg>Lavoro Hotel</a>
+    <a class="voce" href="#"><svg><use href="#i-dev"/></svg>Lavoro Sviluppo<span class="conta">12</span></a>
+    <div class="gruppo">Persona</div>
+    <a class="voce" href="#"><svg><use href="#i-forma"/></svg>Palestra e alimentazione</a>
+    <a class="voce" href="#"><svg><use href="#i-note"/></svg>Note e to-do</a>
+    <a class="voce" href="#" style="margin-top:14px"><svg><use href="#i-imp"/></svg>Impostazioni</a>
+    <div class="rail-piede"><span class="avatar">RN</span><div>Profilo<br><small>CodeMind.Lab</small></div><button class="tema" onclick="cambiaTema()" title="Tema">◐</button></div>
+  </aside>
+<main class="main">
+<div class="testa"><div><h1>Lavoro Hotel</h1><p>Turni, ore, ferie e busta paga</p></div>
+ <div class="mese"><button class="icona-btn">‹</button><b>Novembre 2026</b><button class="icona-btn">›</button></div>
+ <button class="btn btn-sec">Modifica turni</button><button class="btn btn-acc">+ Busta paga</button></div>
+<nav class="schede"><span class="chip on">Mese</span><span class="chip">Ferie e permessi</span><span class="chip">Buste paga</span><span class="chip">Note di turno</span><span class="chip">Contratto</span></nav>
+<section class="kpi">
+ <div class="card k eroe"><div class="etichetta">Ore lavorate a novembre <span class="badge">al 20/11</span></div><div class="num">112 h <small style="color:#FFE3DD">/ 168 h previste</small></div><div class="sotto">14 turni fatti · 7 ancora in calendario</div></div>
+ <div class="card k"><div class="etichetta">Straordinari</div><div class="num">6 h</div><div class="sotto">oltre le 40 h settimanali</div></div>
+ <div class="card k"><div class="etichetta">Notturne · festive</div><div class="num">35 h <small>· 8 h</small></div><div class="sotto">notte 22:00–06:00 · 1 festivo</div></div>
+ <div class="card k"><div class="etichetta">Ferie e permessi</div><div class="num">14 g <small>· 22 h</small></div><div class="sotto">residui · 2 giorni di ferie a novembre</div></div>
+</section>
+<div class="griglia">
+ <div class="col">
+  <section class="card"><div class="card-testa"><h2>Calendario dei turni</h2><a class="link" href="#">Modifica settimana →</a></div><div class="contenuto"><div class="calendario"><div class="intestazione">Lun</div><div class="intestazione">Mar</div><div class="intestazione">Mer</div><div class="intestazione">Gio</div><div class="intestazione">Ven</div><div class="intestazione">Sab</div><div class="intestazione">Dom</div><div class="giorno vuoto"></div><div class="giorno vuoto"></div><div class="giorno vuoto"></div><div class="giorno vuoto"></div><div class="giorno vuoto"></div><div class="giorno vuoto"></div><div class="giorno"><b>1</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>2</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>3</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>4</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>5</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>6</b><span class="pill p-n">Notte</span><em>23:30–07:30</em></div><div class="giorno"><b>7</b><span class="pill p-n">Notte</span><em>23:30–07:30</em></div><div class="giorno"><b>8</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>9</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>10</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>11</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>12</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>13</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>14</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>15</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>16</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>17</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>18</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>19</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno oggi"><b>20</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>21</b><span class="pill p-n">Notte</span><em>23:30–07:30</em></div><div class="giorno"><b>22</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>23</b><span class="pill p-f">Ferie</span><em></em></div><div class="giorno"><b>24</b><span class="pill p-f">Ferie</span><em></em></div><div class="giorno"><b>25</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>26</b><span class="pill p-a">Apertura</span><em>07:30–15:30</em></div><div class="giorno"><b>27</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>28</b><span class="pill p-c">Chiusura</span><em>15:30–23:30</em></div><div class="giorno"><b>29</b><span class="pill p-off">OFF</span><em></em></div><div class="giorno"><b>30</b><span class="pill p-n">Notte</span><em>23:30–07:30</em></div></div></div></section>
+  <section class="card"><div class="card-testa"><h2>Turni della settimana</h2><a class="link" href="#">Tutto il mese →</a></div>
+   <div class="barra-strumenti"><span class="chip on">Tutti</span><span class="chip">Apertura</span><span class="chip">Chiusura</span><span class="chip">Notte</span><span class="chip">OFF</span><span style="margin-left:auto"></span><button class="btn btn-sec">CSV</button><button class="btn btn-sec">PDF</button></div>
+   <div class="contenuto"><table class="dati"><thead><tr><th>Giorno</th><th>Turno</th><th class="nascondi">Orario</th><th class="n">Ore</th><th class="n nascondi">Notturne</th><th class="n nascondi">Festive</th><th class="nascondi">Note di turno</th></tr></thead><tbody><tr><td>lun 16/11</td><td><span class="pill p-a">Apertura</span></td><td class="nascondi">07:30–15:30</td><td class="n">8</td><td class="n nascondi">–</td><td class="n nascondi">–</td><td class="nascondi"></td></tr><tr><td>mar 17/11</td><td><span class="pill p-a">Apertura</span></td><td class="nascondi">07:30–15:30</td><td class="n">8</td><td class="n nascondi">–</td><td class="n nascondi">–</td><td class="nascondi"></td></tr><tr><td>mer 18/11</td><td><span class="pill p-off">OFF</span></td><td class="nascondi">—</td><td class="n">–</td><td class="n nascondi">–</td><td class="n nascondi">–</td><td class="nascondi"></td></tr><tr><td>gio 19/11</td><td><span class="pill p-c">Chiusura</span></td><td class="nascondi">15:30–23:30</td><td class="n">8</td><td class="n nascondi">0,5</td><td class="n nascondi">–</td><td class="nascondi"></td></tr><tr><td>ven 20/11</td><td><span class="pill p-c">Chiusura</span></td><td class="nascondi">15:30–23:30</td><td class="n">8</td><td class="n nascondi">0,5</td><td class="n nascondi">–</td><td class="nascondi">2 consegne dal collega del mattino</td></tr><tr><td>sab 21/11</td><td><span class="pill p-n">Notte</span></td><td class="nascondi">23:30–07:30</td><td class="n">8</td><td class="n nascondi">7</td><td class="n nascondi">–</td><td class="nascondi">Check-in gruppo 23:45</td></tr></tbody>
+   <tfoot><tr><td>Settimana</td><td></td><td class="nascondi"></td><td class="n">40</td><td class="n nascondi">15</td><td class="n nascondi">0</td><td class="nascondi"></td></tr></tfoot></table></div></section>
+ </div>
+ <div class="col">
+  <section class="card"><div class="card-testa"><h2>Stipendio previsto</h2><a class="link" href="#">Contratto →</a></div><div class="contenuto">
+   <div class="riga2"><span>Paga base (168 h × 9,80 €)</span><b>1.646,40 €</b></div>
+   <div class="riga2"><span>Straordinari (6 h, +30%)</span><b>76,44 €</b></div>
+   <div class="riga2"><span>Maggiorazione notturna (35 h, +25%)</span><b>85,75 €</b></div>
+   <div class="riga2"><span>Festivi (8 h, +20%)</span><b>15,68 €</b></div>
+   <div class="riga2 totale"><span>Lordo previsto</span><b>1.824,27 €</b></div>
+   <div class="delta">Busta paga di ottobre: 1.781,10 € lordi, <b>43,17 € in meno</b> del previsto. Controlla straordinari e notturne.</div>
+  </div></section>
+  <section class="card"><div class="card-testa"><h2>Note di turno</h2><a class="link" href="#">Tutte →</a></div><div class="contenuto">
+   <div class="nota-turno"><small>ven 20/11 · Chiusura</small>2 consegne dal collega del mattino: camera 214 late check-out, taxi alle 6:00 per la 108.</div>
+   <div class="nota-turno"><small>sab 21/11 · Notte</small>Check-in gruppo alle 23:45, 12 camere già assegnate.</div>
+   <div class="nota-turno"><small>gio 19/11 · Chiusura</small>Cassa chiusa, versamento fatto.</div>
+  </div></section>
+  <section class="card"><div class="card-testa"><h2>Ferie e permessi</h2><a class="link" href="#">Registra →</a></div><div class="contenuto">
+   <div class="riga2"><span>Ferie maturate nel 2026</span><b>24 g</b></div>
+   <div class="riga2"><span>Ferie godute</span><b>10 g</b></div>
+   <div class="riga2 totale"><span>Ferie residue</span><b>14 g</b></div>
+   <div class="riga2"><span>Permessi residui</span><b>22 h</b></div>
+   <div class="riga2"><span>Malattia nel 2026</span><b>3 g</b></div>
+  </div></section>
+ </div>
+</div></main></div>
+<nav class="tab"><a href="#"><svg><use href="#i-oggi"/></svg>Oggi</a><a href="#"><svg><use href="#i-agenda"/></svg>Agenda</a><a href="#"><svg><use href="#i-forma"/></svg>Palestra</a><a href="#"><svg><use href="#i-pasti"/></svg>Pasti</a><a class="attiva" href="#"><svg><use href="#i-altro"/></svg>Altro</a></nav>
+<script>if(location.hash==='#scuro')document.documentElement.dataset.theme='dark';
+function cambiaTema(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'}</script>
+</body></html>

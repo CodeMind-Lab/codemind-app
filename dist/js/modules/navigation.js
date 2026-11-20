@@ -3,13 +3,13 @@ import { icon } from '../utils/helpers.js?v=65';
 // Il menu deciso il 19/11/2026: tre gruppi più le Impostazioni in fondo.
 const groups = [
   ['Giornata', ['dashboard', 'today']],
-  ['Studio e lavoro', ['university', 'hotel', 'projects']],
+  ['Studio e lavoro', ['university', 'hotel', 'sviluppo']],
   ['Persona', ['sport', 'notes']],
   ['', ['settings']],
 ];
 // Le pagine "figlie" accendono la voce della sezione a cui appartengono.
-const parent = { tasks: 'projects', archive: 'projects', 'daily-todos': 'notes' };
-const icons = { dashboard: 'oggi', today: 'agenda', university: 'university', hotel: 'hotel', projects: 'sviluppo', sport: 'sport', notes: 'notes', settings: 'settings' };
+const parent = { projects: 'sviluppo', tasks: 'sviluppo', archive: 'sviluppo', 'daily-todos': 'notes' };
+const icons = { dashboard: 'oggi', today: 'agenda', university: 'university', hotel: 'hotel', sviluppo: 'sviluppo', sport: 'sport', notes: 'notes', settings: 'settings' };
 // Sul telefono la barra in basso tiene le quattro cose che si aprono in giro:
 // il resto sta sotto "Altro".
 const mobile = [['dashboard', 'Oggi', 'oggi', '#/dashboard'], ['today', 'Agenda', 'agenda', '#/today'], ['sport', 'Palestra', 'sport', '#/sport'], ['pasti', 'Pasti', 'pasti', '#/sport/cibo']];

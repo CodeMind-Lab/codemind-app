@@ -14,7 +14,10 @@ import {
 } from "./modules/notebook.js?v=65";
 import { quickAdd } from "./modules/quickAdd.js?v=65";
 import { oggiPage, bindOggi } from "./modules/oggi.js?v=70";
-import { hotelPage, bindHotel, schedeSviluppo, schedeNote } from "./modules/sezioni.js?v=70";
+import { schedeSviluppo, schedeNote } from "./modules/sezioni.js?v=70";
+import { hotelPage, bindHotel } from "./modules/hotel.js?v=70";
+import { sviluppoPage, bindSviluppo } from "./modules/sviluppo.js?v=70";
+import { clearLavoro } from "./services/lavoroService.js?v=70";
 import {
   projects,
   projectHeading,
@@ -92,7 +95,8 @@ export function render() {
     const views = {
       university: () => universityPage(id),
       dashboard: oggiPage,
-      hotel: hotelPage,
+      hotel: () => hotelPage(id),
+      sviluppo: () => sviluppoPage(id),
       projects: () => schedeSviluppo("projects") + projects(false),
       archive: () => schedeSviluppo("archive") + projects(true),
       tasks: () => schedeSviluppo("tasks") + tasksPage(),
@@ -109,6 +113,7 @@ export function render() {
   bind();
   if (page === "dashboard") bindOggi(render);
   if (page === "hotel") bindHotel(render);
+  if (page === "sviluppo") bindSviluppo(render);
   bindUniversity(render);
   bindAttachments();
   bindAgenda(render);
@@ -316,7 +321,7 @@ async function init() {
       state.mode = "signed_out";
       state.projects = [];
       state.tasks = [];
-      clearAgenda(); clearSport(); clearForma();
+      clearAgenda(); clearSport(); clearForma(); clearLavoro();
       const s = await session();
       if (s) {
         await loadCloud();
@@ -332,7 +337,7 @@ async function init() {
           state.tasks = [];
           state.dailyTodos = [];
           state.notes = [];
-          clearAgenda(); clearSport(); clearForma();
+          clearAgenda(); clearSport(); clearForma(); clearLavoro();
           clearNotebookDrafts();
           render();
         }

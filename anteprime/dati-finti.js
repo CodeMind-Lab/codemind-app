@@ -52,6 +52,35 @@ state.formaArchive = { revision: 1, source_id: crypto.randomUUID(), archive: { v
   { t: 'l', id: 'l2', d: oggi, n: 'Pranzo: riso, pollo, verdure', q: 100, k: 780, p: 46, c: 85, g: 24, updatedAt: ora_ms },
   { t: 'l', id: 'l3', d: oggi, n: 'Spuntino: pane e bresaola', q: 100, k: 220, p: 18, c: 25, g: 8, updatedAt: ora_ms },
 ] } };
+// Lavoro Hotel: contratto di prova (paga fissa con 13ª e 14ª), assenze, una busta paga.
+const mesePrima = new Date(Date.UTC(Number(oggi.slice(0, 4)), Number(oggi.slice(5, 7)) - 2, 1)).toISOString().slice(0, 10);
+state.hotelContratto = { id: 'contratto', netto_mensile: 1500, lordo_mensile: null, mensilita_extra: [{ mese: 7, nome: '14ª' }, { mese: 12, nome: '13ª' }], ore_giornaliere: 8, ore_settimanali: 40, notte_inizio: '22:00', notte_fine: '06:00', ferie_giorni_anno: 26, permessi_ore_anno: 72, ferie_saldo_iniziale: 3, permessi_saldo_iniziale: 8, anno_saldo: Number(oggi.slice(0, 4)), note: '', updated_at: new Date().toISOString() };
+state.hotelAssenze = [
+  { id: id(), data: shiftDate(oggi, 3), tipo: 'ferie', ore: null, note: 'Ponte' },
+  { id: id(), data: shiftDate(oggi, 4), tipo: 'ferie', ore: null, note: '' },
+  { id: id(), data: shiftDate(oggi, -9), tipo: 'permesso', ore: 2, note: 'Visita medica' },
+  { id: id(), data: oggi.slice(0, 5) + '02-10', tipo: 'malattia', ore: null, note: '' },
+];
+state.bustePaga = [{ id: id(), mese: mesePrima, netto: 1486.4, lordo: 1920, ore_pagate: 168, straordinari_pagati: 4, note: 'Trattenuta sindacale', updated_at: new Date().toISOString() }];
+for (const v of state.scheduleEntries.filter(e => e.kind === 'shift' && e.entry_date <= oggi).slice(-3)) v.notes = 'Consegne: camera 214 late check-out, taxi alle 6:00 per la 108.';
+// Lavoro Sviluppo: clienti, preventivi con incassi, formazione.
+state.clienti = [
+  { id: 'c-sd', nome: 'Studio Design', referente: 'Marco', email: 'info@example.com', telefono: '', sito: 'https://example.com', colore: '#5B4BC4', interno: false, archiviato: false, note: 'Shopify', updated_at: new Date().toISOString() },
+  { id: 'c-bb', nome: 'B&B Esempio', referente: '', email: '', telefono: '', sito: '', colore: '#E2553C', interno: false, archiviato: false, note: '', updated_at: new Date().toISOString() },
+  { id: 'c-mio', nome: 'Progetti miei', referente: '', email: '', telefono: '', sito: '', colore: '#0B1A2E', interno: true, archiviato: false, note: '', updated_at: new Date().toISOString() },
+];
+for (const p of state.projects) p.cliente_id = { 'p-dld': 'c-sd', 'p-forma': 'c-mio' }[p.id] || null;
+state.preventivi = [
+  { id: 'pr1', cliente_id: 'c-sd', project_id: 'p-dld', titolo: 'Shop Shopify · fase 2', importo: 1200, stato: 'accettato', data: shiftDate(oggi, -20), scadenza: shiftDate(oggi, 5), note: '', updated_at: new Date().toISOString() },
+  { id: 'pr2', cliente_id: 'c-bb', project_id: null, titolo: 'Pagina prenotazioni', importo: 450, stato: 'accettato', data: shiftDate(oggi, -10), scadenza: null, note: '', updated_at: new Date().toISOString() },
+  { id: 'pr3', cliente_id: 'c-bb', project_id: null, titolo: 'Restyling logo', importo: 250, stato: 'inviato', data: shiftDate(oggi, -3), scadenza: null, note: '', updated_at: new Date().toISOString() },
+];
+state.incassi = [{ id: id(), preventivo_id: 'pr1', data: shiftDate(oggi, -15), importo: 400, note: 'Acconto', updated_at: new Date().toISOString() }];
+state.formazione = [
+  { id: id(), titolo: 'RAG e ricerca vettoriale', tipo: 'corso', link: 'https://example.com/rag', stato: 'in_corso', ore_previste: 10, ore_fatte: 6, note: '', updated_at: new Date().toISOString() },
+  { id: id(), titolo: 'Agenti con strumenti e MCP', tipo: 'documentazione', link: '', stato: 'da_fare', ore_previste: 4, ore_fatte: 0, note: '', updated_at: new Date().toISOString() },
+];
+state.lavoroError = '';
 state.mode = 'cloud'; state.loaded = true; state.user = { id: 'prova', email: 'prova@esempio.it' }; state.agendaAvailable = true;
 render();
 'dati finti caricati';
