@@ -8,6 +8,7 @@ import * as P from '../services/palestraService.js?v=73';
 import { riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, ricette, porzioniDi, righePiano, allenamentoDelGiorno, ultimaSessione, sessioniDel, pesoAttuale, settimana, lunediDi, slotOra, macro, somma, prodottoDaOFF, di, PASTI, CATEGORIE } from '../utils/palestra.js?v=73';
 import { Scanner } from '../utils/scanner.js?v=73';
 import { formaClassica, bindFormaWorkspace } from './formaWorkspace.js?v=65';
+import { vistaPiano, vistaMisure, vistaReport, bindPiano } from './palestraPiano.js?v=73';
 import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=73';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
@@ -17,7 +18,7 @@ import { openModal, closeModal, toast, confirmDelete } from '../utils/dom.js?v=6
 
 const SCHEDE = [['oggi', 'Oggi'], ['cibo', 'Diario pasti'], ['allena', 'Allenamenti'], ['schede', 'Schede'], ['piano', 'Piano settimanale'], ['misure', 'Misure'], ['report', 'Report'], ['obiettivi', 'Obiettivi e alimenti']];
 // Schede non ancora rifatte → scheda della Forma classica che le contiene.
-const CLASSICHE = { piano: 'cibo', misure: 'report', report: 'report' };
+const CLASSICHE = {};
 const PILL = { apertura: 'p-a', chiusura: 'p-c', notte: 'p-n', off: 'p-off', custom: 'p-x' };
 const OFF_API = 'https://world.openfoodfacts.org/api/v2/product/';
 const ICONA_SCAN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>';
@@ -211,17 +212,17 @@ export function palestraPage(id, sub) {
   if (a && id === 'sessione') return `<div class="lavoro palestra" data-scheda="sessione"><div id="pal-stato">${statoHtml()}</div>${vistaSessione(a, sub)}</div>`;
   const scheda = SCHEDE.some(([k]) => k === id) ? id : 'oggi';
   if (!a) return `<div class="lavoro palestra">${testa(null, d)}${vuoto()}</div>`;
-  const viste = { oggi: () => vistaOggi(a, d), cibo: () => vistaCibo(a, d), allena: () => vistaAllena(a, d), schede: () => vistaSchede(a, d), obiettivi: () => vistaObiettivi(a) };
+  const viste = { oggi: () => vistaOggi(a, d), cibo: () => vistaCibo(a, d), allena: () => vistaAllena(a, d), schede: () => vistaSchede(a, d), piano: () => vistaPiano(a, d), misure: () => vistaMisure(a, d), report: () => vistaReport(a, d), obiettivi: () => vistaObiettivi(a) };
   const corpo = viste[scheda] ? viste[scheda]() : vistaClassica(scheda);
   return `<div class="lavoro palestra" data-scheda="${scheda}">${testa(a, d)}<div class="pal-sotto-testa">${schede(scheda)}<span class="pal-salvataggio" id="pal-salvataggio" role="status">${testoStato()}</span></div><div id="pal-stato">${statoHtml()}</div>${corpo}</div>`;
 }
 
 // ------------------------------------------------------------ aggiungere un alimento
 const FILTRI = [['tutti', 'Tutti'], ['recenti', 'Recenti'], ['miei', 'Miei'], ['ricette', 'Ricette']];
-function apriAggiungi(d, slot, scelto = null) {
-  ctx = { d, slot: slot || (d === oggi() ? slotOra() : 'pranzo'), filtro: 'tutti', testo: '', scelto, q: scelto ? (scelto.q || porzioniDi(scelto.n)[0]?.q || 100) : '' };
-  openModal('Aggiungi un alimento', `<div class="pal-agg">
-    <div class="pal-agg-testa"><label class="field">Pasto<select id="pal-slot">${PASTI.map(p => `<option value="${p.id}" ${p.id === ctx.slot ? 'selected' : ''}>${esc(p.l)}</option>`).join('')}</select></label><span class="subtext piccolo">${esc(dataLunga(d))}</span></div>
+function apriAggiungi(d, slot, scelto = null, dest = null) {
+  ctx = { dest, d, slot: slot || (d === oggi() ? slotOra() : 'pranzo'), filtro: 'tutti', testo: '', scelto, q: scelto ? (scelto.q || porzioniDi(scelto.n)[0]?.q || 100) : '' };
+  openModal(dest ? `Aggiungi a ${dest.nome || 'giornata'}` : 'Aggiungi un alimento', `<div class="pal-agg">
+    <div class="pal-agg-testa"><label class="field">Pasto<select id="pal-slot">${PASTI.map(p => `<option value="${p.id}" ${p.id === ctx.slot ? 'selected' : ''}>${esc(p.l)}</option>`).join('')}</select></label><span class="subtext piccolo">${dest ? 'giornata tipo del piano' : esc(dataLunga(d))}</span></div>
     <div class="pal-cerca"><input id="pal-testo" type="search" placeholder="Cerca un alimento…" autocomplete="off" enterkeyhint="search" ${scelto ? '' : 'autofocus'}><button type="button" class="pal-scan-btn" data-pal-scan-modal aria-label="Scansiona il codice a barre">${ICONA_SCAN}</button></div>
     <div class="pal-filtri">${FILTRI.map(([k, n]) => `<button type="button" class="chip ${k === 'tutti' ? 'on' : ''}" data-pal-filtro="${k}">${n}</button>`).join('')}</div>
     <div id="pal-scelto"></div><div id="pal-risultati" class="pal-risultati"></div>
@@ -289,7 +290,8 @@ function disegnaScelto() {
 function conferma() {
   const x = ctx.scelto, err = document.querySelector('#pal-scelto .form-error');
   try {
-    if (x.ricetta) { const n = P.aggiungiRicetta(ctx.d, ctx.slot, x); toast(`${x.n}: ${n} alimenti in ${nomePasto(ctx.slot)}`); }
+    if (ctx.dest) { for (const r of x.ricetta ? x.righe : [{ ...x, q: ctx.q }]) P.aggiungiRigaGiornata(ctx.dest.gt, ctx.slot, r, r.q); toast(`Aggiunto alla giornata: ${x.n}`); }
+    else if (x.ricetta) { const n = P.aggiungiRicetta(ctx.d, ctx.slot, x); toast(`${x.n}: ${n} alimenti in ${nomePasto(ctx.slot)}`); }
     else { const r = P.aggiungiRiga(ctx.d, ctx.slot, x, ctx.q); toast(`Aggiunto a ${nomePasto(ctx.slot)}: ${x.n} · ${fmt(r.q, 1)} g`); }
     // La finestra resta aperta per il prossimo alimento dello stesso pasto.
     ctx.scelto = null; ctx.testo = '';
@@ -436,6 +438,7 @@ export function bindPalestra(render) {
   if (obiettivi) obiettivi.onsubmit = e => { e.preventDefault(); try { P.salvaObiettivi(Object.fromEntries(new FormData(obiettivi))); toast('Obiettivi salvati'); render(); } catch (err) { obiettivi.querySelector('.form-error').textContent = err.message; } };
   su('[data-pal-inizia]', b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(d, sid, gn.join('|')); } catch (e) { toast(e.message); } });
   bindAllena(pagina, render, d);
+  bindPiano(pagina, render, d, apriAggiungi);
   if (pagina.querySelector('#forma-editor')) {
     // Prima di aprire la Forma classica salvo le modifiche fatte qui, così la vede aggiornata.
     if (P.inAttesa()) P.salva().catch(() => {});

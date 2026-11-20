@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v74";
+const CACHE = "codemind-shell-v75";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -58,6 +58,7 @@ const ASSETS = [
  "./js/modules/oggi.js",
  "./js/modules/palestra.js",
  "./js/modules/palestraAllena.js",
+ "./js/modules/palestraPiano.js",
  "./js/modules/projects.js",
  "./js/modules/quickAdd.js",
  "./js/modules/search.js",
@@ -86,6 +87,7 @@ const ASSETS = [
  "./js/services/lavoroService.js",
  "./js/services/notebookService.js",
  "./js/services/notesService.js",
+ "./js/services/offline.js",
  "./js/services/palestraService.js",
  "./js/services/sportService.js",
  "./js/services/store.js",
@@ -132,11 +134,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (
     event.request.method !== "GET" ||
-    url.origin !== self.location.origin ||
-    url.pathname.endsWith("/config.js")
+    url.origin !== self.location.origin
   )
     return;
+  // config.js (indirizzo e chiave pubblica di Supabase) non è nel repository: lo scrive la
+  // pubblicazione. Si tiene in cache alla prima apertura, così l'app parte anche offline.
   if (
+    !url.pathname.endsWith("/js/config.js") &&
     !ASSETS.some(
       (asset) =>
         new URL(asset, self.registration.scope).pathname === url.pathname,

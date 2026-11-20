@@ -1,4 +1,5 @@
 import { clearForma } from './services/formaService.js?v=65';
+import { ripristinaOffline, ultimoUtente } from "./services/offline.js?v=75";
 import { startAppUpdates } from "./services/appUpdate.js?v=68";
 import { palestraPage, bindPalestra } from './modules/palestra.js?v=73';
 import { clearSport } from './services/sportService.js?v=65';
@@ -72,10 +73,10 @@ export function render() {
   document.querySelector("#breadcrumb").textContent = pages[page] || "Ricerca";
   document.querySelector('.topbar').classList.toggle('is-compact', ['dashboard','today'].includes(page));
   const banner = document.querySelector("#mode-banner");
-  banner.hidden = state.mode === 'cloud' && navigator.onLine;
+  banner.hidden = state.mode === 'cloud' && navigator.onLine && !state.offline;
   banner.innerHTML =
     state.mode === "cloud"
-      ? `<span>${navigator.onLine ? "Workspace collegato a Supabase" : "Sei offline · Il salvataggio richiede una connessione"}</span><button class="link" data-action="refresh">↻ Aggiorna dati</button>`
+      ? `<span>${state.offline ? "Sei offline · dati dell'ultima apertura: pasti e allenamenti si salvano quando torna la rete" : navigator.onLine ? "Workspace collegato a Supabase" : "Sei offline · Palestra salva sul telefono, il resto richiede una connessione"}</span><button class="link" data-action="refresh">↻ Aggiorna dati</button>`
       : "<span>Accedi per aprire il tuo workspace.</span>";
   const main = document.querySelector("#main");
   if (state.mode === "starting" || (state.mode === "cloud" && !state.loaded)) {
@@ -313,7 +314,11 @@ window.addEventListener("beforeinstallprompt", (e) => {
   installEvent = e;
   if (route().page === "settings") render();
 });
-window.addEventListener("online", render);
+// Tornata la rete dopo un avvio offline: si ricaricano i dati veri dal cloud.
+window.addEventListener("online", async () => {
+  if (state.offline) { try { await loadCloud(); } catch { /* resta la copia */ } }
+  render();
+});
 window.addEventListener("offline", render);
 async function init() {
   try {
@@ -325,7 +330,8 @@ async function init() {
       clearAgenda(); clearSport(); clearForma(); clearLavoro(); clearUniversita();
       const s = await session();
       if (s) {
-        await loadCloud();
+        try { await loadCloud(); }
+        catch (err) { if (navigator.onLine || !ripristinaOffline(s.user)) throw err; }
         applyTheme(
           localStorage.getItem("cm-theme") || state.profile?.theme || "light",
         );
@@ -345,11 +351,14 @@ async function init() {
       });
     } else state.mode = "signed_out";
   } catch (e) {
-    state.mode = "signed_out";
-    state.projects = [];
-    state.tasks = [];
-    clearAgenda(); clearSport(); clearForma();
-    toast("Connessione non disponibile: " + e.message);
+    // Senza rete e senza sessione rinnovabile: si riparte dalla copia dell'ultima apertura.
+    if (navigator.onLine || !ripristinaOffline(ultimoUtente())) {
+      state.mode = "signed_out";
+      state.projects = [];
+      state.tasks = [];
+      clearAgenda(); clearSport(); clearForma();
+      toast("Connessione non disponibile: " + e.message);
+    }
   }
   render();
   if (sessionStorage.getItem("cm-connection-ready") === "yes") {

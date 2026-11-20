@@ -739,3 +739,21 @@ table.pal-editor th:nth-child(1) { width: 52px; } table.pal-editor th:nth-child(
 table.pal-editor th:nth-child(7) { width: 20%; } table.pal-editor th:nth-child(8) { width: 36px; }
 table.pal-editor td:nth-child(2) .cella, table.pal-editor td:nth-child(7) .cella { min-width: 0; }
 table.pal-editor td.n .cella { width: 100%; }
+
+/* Palestra, tappa 3: piano dei pasti, spesa, misure, report */
+.pal-macro-piano { margin: 8px 0 6px; }
+.cella-g { width: 70px; border: 0; border-radius: 9px; background: var(--pannello-2); color: var(--testo); font: inherit; font-size: 13.5px; padding: 5px 8px; text-align: right; }
+table.pal-righe-piano td.q { width: 120px; } table.pal-righe-piano tr { cursor: default; }
+table.pal-righe-piano .x { border: 0; background: none; color: var(--testo-3); cursor: pointer; }
+.spesa-r { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 64px; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--riga); font-size: 14px; cursor: pointer; }
+.spesa-r b { font-variant-numeric: tabular-nums; } .spesa-r small { color: var(--testo-3); font-size: 12px; text-align: right; }
+.spesa-r.preso span, .spesa-r.preso b { color: var(--testo-3); text-decoration: line-through; }
+.spesa-r input { width: 18px; height: 18px; accent-color: var(--corallo); }
+.palestra .barra-strumenti .chip:disabled { opacity: .45; cursor: default; }
+.pal-grafico { width: 100%; height: auto; display: block; }
+.pal-grafico .linea { fill: none; stroke: var(--corallo); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.pal-grafico .punto { fill: var(--pannello); stroke: var(--corallo); stroke-width: 2.5; }
+.pal-grafico .obiettivo { stroke: var(--teal); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.pal-grafico .et { font-size: 11px; fill: var(--testo-3); }
+.pal-report-grafico { margin-bottom: 4px; }
+@media (max-width: 600px) { .spesa-r { grid-template-columns: 22px minmax(0, 1fr) auto; } .spesa-r small { display: none; } }

@@ -6,6 +6,7 @@
 // Se il salvataggio non riesce (offline, conflitto) la copia resta sul dispositivo,
 // in attesa, e si riprova quando torna la rete.
 import { state } from './store.js?v=65';
+import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
 import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=73';
 
@@ -65,7 +66,7 @@ export async function salva() {
   inCorso = saveForma(copia, server.archive, server.source_id);
   try {
     const salvato = await inCorso;
-    if (versione === inviata) { locale = null; avvisa('salvato'); }
+    if (versione === inviata) { locale = null; avvisa('salvato'); salvaCopiaOffline(); }
     else { avvisa('in-attesa'); timer = setTimeout(() => { salva().catch(() => {}); }, 300); }
     return salvato;
   } catch (e) {
@@ -359,3 +360,70 @@ export function impostaGiornoSettimana(gs, sid, gn) {
     p.sid = sid || ''; p.gn = sid ? gn : ''; p.updatedAt = ora;
   });
 }
+
+// ------------------------------------------------------------ giornate tipo (t:'gt') e piano (t:'p')
+function giornataIn(a, id) { const g = a.items.find(x => x.id === id && x.t === 'gt'); if (!g) throw Error('Giornata non trovata.'); g.righe = g.righe || []; return g; }
+const tipoGiornata = t => ['', 'on', 'off'].includes(t || '') ? (t || '') : '';
+export function creaGiornata(nome, tipo, righe = []) {
+  const n = testoBreve(nome, 80, 'il nome della giornata');
+  return modifica((a, ora) => { const g = { id: idNuovo(), t: 'gt', n, tipo: tipoGiornata(tipo), righe: structuredClone(righe), updatedAt: ora }; a.items.push(g); return g; });
+}
+export function rinominaGiornata(id, nome, tipo) {
+  const n = testoBreve(nome, 80, 'il nome della giornata');
+  return modifica((a, ora) => { const g = giornataIn(a, id); g.n = n; g.tipo = tipoGiornata(tipo); g.updatedAt = ora; });
+}
+export const duplicaGiornata = id => modifica((a, ora) => { const g = giornataIn(a, id), c = { ...structuredClone(g), id: idNuovo(), n: (g.n + ' (copia)').slice(0, 80), updatedAt: ora }; a.items.push(c); return c; });
+// I giorni della settimana che la usavano restano senza giornata; il diario già scritto non cambia.
+export const eliminaGiornata = id => modifica((a, ora) => { togli(a, id, ora); for (const p of a.items.filter(x => x.t === 'p' && x.gt === id)) { p.gt = ''; p.updatedAt = ora; } });
+export function aggiungiRigaGiornata(id, slot, alimento, grammi) {
+  const v = valori100(alimento), q = numero(grammi, 1, 5000, 'i grammi'); pasto(slot);
+  return modifica((a, ora) => { const g = giornataIn(a, id); g.righe.push({ slot, ...v, q }); g.updatedAt = ora; return g.righe.length - 1; });
+}
+export function modificaRigaGiornata(id, i, campi) {
+  return modifica((a, ora) => {
+    const g = giornataIn(a, id), r = g.righe[i]; if (!r) throw Error('Voce non trovata.');
+    if (campi.q != null) r.q = numero(campi.q, 1, 5000, 'i grammi');
+    if (campi.slot) r.slot = pasto(campi.slot);
+    g.updatedAt = ora;
+  });
+}
+export const togliRigaGiornata = (id, i) => modifica((a, ora) => { const g = giornataIn(a, id); g.righe.splice(i, 1); g.updatedAt = ora; });
+// Il diario di un giorno diventa una giornata tipo (per riusarlo nel piano).
+export function giornataDalDiario(d, nome) {
+  data(d);
+  const righe = (archivio()?.items || []).filter(x => x.t === 'l' && x.d === d).map(r => ({ slot: r.slot, n: r.n, q: r.q, k: r.k, p: r.p, c: r.c, g: r.g }));
+  if (!righe.length) throw Error('Il diario di questo giorno è vuoto.');
+  return creaGiornata(nome, '', righe);
+}
+export function impostaPianoGiorno(gs, gt) {
+  if (!GIORNI_SETT.includes(gs)) throw Error('Giorno della settimana non valido.');
+  return modifica((a, ora) => {
+    if (gt) giornataIn(a, gt);
+    let p = a.items.find(x => x.t === 'p' && x.gs === gs);
+    if (!p) { p = { id: 'piano-' + gs, t: 'p', gs }; a.items.push(p); delete a.graves[p.id]; }
+    p.gt = gt || ''; p.updatedAt = ora;
+  });
+}
+// ------------------------------------------------------------ lista della spesa (preferenze dell'archivio)
+export function impostaGiorniSpesa(giorni) {
+  const l = GIORNI_SETT.filter(g => giorni.includes(g));
+  return modifica(a => { a.settings.spesaGiorni = l; });
+}
+export function segnaPreso(nome, preso) {
+  return modifica(a => { const p = { ...(a.settings.spesaPresi || {}) }; if (preso) p[nome] = true; else delete p[nome]; a.settings.spesaPresi = p; });
+}
+export const azzeraSpesa = () => modifica(a => { a.settings.spesaPresi = {}; });
+
+// ------------------------------------------------------------ misure (t:'m'), una per giorno
+export function salvaMisura(v) {
+  const d = data(v.d), opz = (x, min, max, cosa) => String(x ?? '').trim() === '' ? undefined : numero(x, min, max, cosa);
+  const valori = { peso: opz(v.peso, 30, 300, 'il peso'), giro: opz(v.giro, 40, 200, 'il giro vita'), mg: opz(v.mg, 2, 60, 'la massa grassa') };
+  if (Object.values(valori).every(x => x === undefined)) throw Error('Scrivi almeno una misura.');
+  return modifica((a, ora) => {
+    let m = a.items.find(x => x.t === 'm' && x.d === d);
+    if (!m) { m = { id: idNuovo(), t: 'm', d }; a.items.push(m); }
+    for (const [k, x] of Object.entries(valori)) { if (x === undefined) delete m[k]; else m[k] = x; }
+    m.updatedAt = ora; return m;
+  });
+}
+export const eliminaMisura = id => modifica((a, ora) => togli(a, id, ora));

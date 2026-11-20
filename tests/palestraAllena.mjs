@@ -76,3 +76,38 @@ assert.equal(U.sessioni(P.archivio()).length, 1); assert.deepEqual(U.schedeDi(P.
 P.eliminaGiorno(copia.id, 0); assert.deepEqual(P.archivio().items.find(i => i.id === copia.id).giorni.map(g => g.n), ['Push']);
 await P.salva();
 console.log('PASS: Palestra allenamenti — gruppi, cardio, recupero, statistiche; schede con giorni, esercizi, ordine e controlli; settimana collegata ai nomi; sessione da scheda con serie, cardio, esercizi aggiunti e tolti; durata con limite di 5 ore; progressi, serie per gruppo, ultima sessione; duplica ed elimina senza perdere lo storico.');
+
+// --- tappa 3: giornate tipo, piano, spesa, misure, report
+const gt = P.creaGiornata('Giorno di turno', 'on');
+P.aggiungiRigaGiornata(gt.id, 'pranzo', { n: 'Riso basmati', k: 350, p: 7, c: 78, g: 0.6 }, 80);
+P.aggiungiRigaGiornata(gt.id, 'cena', { n: 'Salmone', k: 185, p: 18.4, c: 1, g: 12 }, 150);
+assert.throws(() => P.aggiungiRigaGiornata(gt.id, 'merenda', { n: 'X', k: 1, p: 0, c: 0, g: 0 }, 10), /pasto/);
+P.modificaRigaGiornata(gt.id, 0, { q: 90 });
+P.impostaPianoGiorno('lun', gt.id); P.impostaPianoGiorno('gio', gt.id);
+assert.equal(U.righePiano(P.archivio(), '2026-11-16', 'pranzo')[0].q, 90);
+const lista = U.spesa(P.archivio(), ['lun', 'gio', 'ven']);
+assert.deepEqual(lista.flatMap(g => g.voci.map(v => [v.n, v.q, v.giorni.size])), [['Salmone', 300, 2], ['Riso basmati', 180, 2]]);
+assert.equal(lista.flatMap(g => g.voci).find(v => v.n === 'Riso basmati').q, 180);
+P.segnaPreso('Riso basmati', true); assert.equal(P.archivio().settings.spesaPresi['Riso basmati'], true);
+P.impostaGiorniSpesa(['gio', 'lun', 'x']); assert.deepEqual(P.archivio().settings.spesaGiorni, ['lun', 'gio']);
+P.azzeraSpesa(); assert.deepEqual(P.archivio().settings.spesaPresi, {});
+const copiaGt = P.duplicaGiornata(gt.id); P.eliminaGiornata(gt.id);
+assert.equal(U.pianoPasti(P.archivio()).find(p => p.gs === 'lun').gt, ''); assert.equal(U.giornate(P.archivio()).length, 1);
+P.togliRigaGiornata(copiaGt.id, 1); assert.equal(P.archivio().items.find(i => i.id === copiaGt.id).righe.length, 1);
+P.aggiungiRiga('2026-11-18', 'pranzo', { n: 'Pasta', k: 353, p: 12, c: 72, g: 1.5 }, 90);
+assert.equal(P.giornataDalDiario('2026-11-18', 'Mercoledì').righe[0].n, 'Pasta');
+assert.throws(() => P.giornataDalDiario('2026-11-10', 'Vuota'), /vuoto/);
+// Misure: una per giorno, i campi vuoti si tolgono.
+P.salvaMisura({ d: '2026-11-02', peso: '79', giro: '90', mg: '' });
+P.salvaMisura({ d: '2026-11-19', peso: '78,4', giro: '', mg: '18' });
+P.salvaMisura({ d: '2026-11-19', peso: '78,2', giro: '', mg: '' });
+assert.throws(() => P.salvaMisura({ d: '2026-11-19', peso: '', giro: '', mg: '' }), /almeno/);
+assert.throws(() => P.salvaMisura({ d: '2026-11-19', peso: '500' }), /peso/);
+const ms = U.misure(P.archivio());
+assert.equal(ms.length, 2); assert.equal(ms[0].peso, 78.2); assert.equal(ms[0].mg, undefined);
+P.eliminaMisura(ms[1].id); assert.equal(U.misure(P.archivio()).length, 1);
+P.salvaMisura({ d: '2026-11-02', peso: '79' });
+const rep = U.reportSettimane(P.archivio(), '2026-11-16', 3);
+assert.equal(rep[0].da, '2026-11-16'); assert.equal(rep[0].giorni, 1); assert.equal(Math.round(rep[0].kcal), 318); assert.equal(rep[0].allenamenti, 1); assert.equal(rep[0].peso, 78.2); assert.equal(rep[2].peso, 79);
+await P.salva();
+console.log('PASS: Palestra piano e misure — giornate tipo, righe, piano della settimana, spesa sommata per giorni, spunte, giornata dal diario, misure una per giorno, report settimanali.');

@@ -220,3 +220,34 @@ export function nomiEsercizi(a) {
 }
 export const schedeDi = a => di(a, 's').sort((x, y) => String(x.n).localeCompare(String(y.n), 'it'));
 export const pianoAllenamento = a => GIORNI_SETT.map(gs => { const p = di(a, 'pa').find(x => x.gs === gs); return { gs, sid: p?.sid || '', gn: p?.gn || '' }; });
+
+// ------------------------------------------------------------ piano dei pasti e spesa
+// Giornate tipo (t:'gt'): "Giorno on", "Giorno off"… ogni giorno della settimana (t:'p') ne punta una.
+export const giornate = a => di(a, 'gt').sort((x, y) => String(x.n || '').localeCompare(String(y.n || ''), 'it', { numeric: true }));
+export const pianoPasti = a => GIORNI_SETT.map(gs => { const p = di(a, 'p').find(x => x.gs === gs); return { gs, gt: p?.gt || '' }; });
+// Somma per alimento sui giorni scelti: se lunedì e giovedì vogliono 60 g di riso, ne servono 120.
+export function spesa(a, giorni) {
+  const per = new Map(), cat = new Map(catalogo(a).map(x => [x.n.toLowerCase(), x.cat]));
+  for (const { gs, gt } of pianoPasti(a)) {
+    if (!giorni.includes(gs) || !gt) continue;
+    for (const r of di(a, 'gt').find(x => x.id === gt)?.righe || []) {
+      const k = r.n.toLowerCase(), v = per.get(k) || { n: r.n, q: 0, giorni: new Set(), cat: cat.get(k) || 'Altro' };
+      v.q += num(r.q); v.giorni.add(gs); per.set(k, v);
+    }
+  }
+  return CATEGORIE.map(c => ({ cat: c, voci: [...per.values()].filter(v => v.cat === c).sort((x, y) => x.n.localeCompare(y.n, 'it')) })).filter(g => g.voci.length);
+}
+
+// ------------------------------------------------------------ misure e report
+export const misure = a => di(a, 'm').filter(m => m.d).sort((x, y) => y.d.localeCompare(x.d));
+// Settimane da lunedì a domenica, dalla più recente: medie dei giorni con il diario compilato.
+export function reportSettimane(a, lunedi, quante = 8) {
+  return Array.from({ length: quante }, (_, i) => {
+    const da = shiftDate(lunedi, -7 * i), al = shiftDate(da, 6), giorni = settimana(a, da), scritti = giorni.filter(g => g.kcal != null);
+    const tot = scritti.reduce((t, g) => { const s = somma(righeDi(a, g.d)); return { k: t.k + s.k, p: t.p + s.p }; }, { k: 0, p: 0 });
+    const ses = sessioni(a, da, al).filter(w => w.fine), vol = ses.reduce((t, w) => t + statSessione(w).volume, 0);
+    const pesi = di(a, 'm').filter(m => m.d >= da && m.d <= al && num(m.peso) > 0).sort((x, y) => x.d.localeCompare(y.d));
+    return { da, al, giorni: scritti.length, kcal: scritti.length ? tot.k / scritti.length : null, prot: scritti.length ? tot.p / scritti.length : null,
+      allenamenti: ses.length, volume: vol, peso: pesi.length ? num(pesi[pesi.length - 1].peso) : null };
+  });
+}

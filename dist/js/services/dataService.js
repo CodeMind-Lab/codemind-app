@@ -6,6 +6,7 @@ import { loadAgenda, importLegacyWorkShifts } from "./agendaService.js?v=65";
 import { loadLavoro } from "./lavoroService.js?v=70";
 import { loadUniversita } from "./universitaService.js?v=70";
 import { state } from "./store.js?v=65";
+import { salvaCopiaOffline, dimenticaCopieAltrui } from "./offline.js?v=75";
 import { getClient, unwrap, readAll } from "./supabase.js?v=65";
 import { uid, safeURL, statuses } from "../utils/helpers.js?v=65";
 const todoDateFromStorage = (date) => date === "9999-12-31" ? null : date;
@@ -37,6 +38,9 @@ export async function loadCloud() {
   await Promise.all([loadAgenda(),loadSport(),loadForma(),loadLavoro(),loadUniversita()]);
   await importLegacyWorkShifts();
   state.loaded = true;
+  state.offline = false;
+  dimenticaCopieAltrui(s.user.id);
+  salvaCopiaOffline();
 }
 function validateDates(value) {
   if (value.start_date && value.due_date && value.start_date > value.due_date)
