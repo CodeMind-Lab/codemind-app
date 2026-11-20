@@ -136,14 +136,15 @@ function weekLabel(start, end) {
 // posto delle 24 ore, senza i tragitti (restano nella Griglia oraria).
 let vistaAgenda = (() => { try { return localStorage.getItem('cm-agenda-vista') || 'compatta'; } catch { return 'compatta'; } })();
 const sceltaVista = () => `<div class="vista-agenda" role="group" aria-label="Vista della settimana"><button data-agenda-vista="compatta" aria-pressed="${vistaAgenda === 'compatta'}">Fasce</button><button data-agenda-vista="griglia" aria-pressed="${vistaAgenda === 'griglia'}">Ore</button></div>`;
-// Tre fasce fisse al posto delle 24 ore: mattina 6–14, pomeriggio 14–22, notte 22–6.
-const FASCE = [['Mattina', 360, 840], ['Pomeriggio', 840, 1320], ['Notte', 1320, 1800]];
+// Tre fasce fisse al posto delle 24 ore, come i turni dell'hotel (scelte il 20/11/2026):
+// mattina 7:30–15:30, pomeriggio 15:30–23:30, sera 23:30–7:30.
+const FASCE = [['Mattina', 450, 930], ['Pomeriggio', 930, 1410], ['Sera', 1410, 1890]];
 export function weekCompatta(days, now, perOggi = false) {
   const model = calendarWeek(state.scheduleEntries, days, state.timezone, categoryFilter);
   const conflictIds = new Set(agendaConflicts(state.scheduleEntries, days[0], days.at(-1), state.timezone).flatMap(c => [c.a.id, c.b.id]));
   const weekday = date => new Intl.DateTimeFormat('it-IT', { weekday: 'short', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'));
   const stile = e => `--category-color:${categoryColors[e.category]};--category-ink:${categoryTextColor(categoryColors[e.category])}`;
-  // La notte comprende 22–24 e 0–6 dello stesso giorno: i minuti dopo mezzanotte valgono +1440.
+  // La sera comprende 23:30–24 e 0–7:30 dello stesso giorno: i minuti dopo mezzanotte valgono +1440.
   const nellaFascia = (x, [, da, a]) => { const tratti = da < 1440 && a > 1440 ? [[da, 1440], [0, a - 1440]] : [[da, a]]; return tratti.some(([i, f]) => x.startMinute < f && x.endMinute > i); };
   const lavoro = e => e.kind === 'shift' || e.category === 'work';
   const voce = x => { const e = x.entry, orario = `${minuteLabel(x.startMinute)}–${x.endMinute === 1440 ? '24:00' : minuteLabel(x.endMinute)}`;
