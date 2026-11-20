@@ -1,11 +1,16 @@
-// Pagina "Oggi": la prima cosa che si vede aprendo l'app.
+// Pagina "Oggi": la prima cosa che si vede aprendo l'app. Rivista il 20/11/2026: tre
+// riquadri (turno e prossimo impegno, calorie e acqua, allenamento), settimana a fasce,
+// scheda Sviluppo con ore della settimana e prossima scadenza.
 // Mostra solo quello che è stato scelto il 19/11/2026: turno e agenda del giorno,
 // obiettivi della settimana, pasti e allenamento. Le scadenze stanno nelle sezioni.
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
 import { archivio } from '../services/palestraService.js?v=73';
 import { riepilogoGiorno } from '../utils/palestra.js?v=73';
-import { entryForm } from './agenda.js?v=65';
+import { entryForm, weekCompatta } from './agenda.js?v=65';
+import { cambiaAcqua } from '../services/palestraService.js?v=73';
+import { bottoneInizia, inizia } from './palestraAllena.js?v=73';
+import { universityData } from '../utils/university.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';
 import { shiftPresets, shiftPreset } from '../utils/workShifts.js?v=65';
@@ -47,24 +52,23 @@ function vociDelGiorno(data, tz) {
     .sort((x, y) => x.da.localeCompare(y.da));
 }
 
+function prossimoImpegno(tz) {
+  const ora = new Date().toISOString();
+  const x = state.scheduleEntries.filter(e => e.starts_at && e.starts_at > ora && e.kind !== 'commute' && e.kind !== 'off').sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
+  if (!x) return '';
+  const quando = wallTime(x.starts_at, tz), oggi = today(tz);
+  const giorno = quando.slice(0, 10) === oggi ? '' : quando.slice(0, 10) === shiftDate(oggi, 1) ? 'domani ' : quando.slice(8, 10) + '/' + Number(quando.slice(5, 7)) + ' ';
+  return `<div class="prossimo-imp" data-oggi-voce="${x.id}" role="button" tabindex="0"><span>Prossimo</span><b>${giorno}${quando.slice(11)} · ${esc(x.title)}</b></div>`;
+}
 function schedaTurno(data, tz) {
-  const voce = turnoDel(data);
-  if (!voce) return `<div class="k eroe vuoto"><div class="etichetta">Turno di oggi</div><div class="num">Da inserire</div><div class="sotto"><a href="#/hotel">Inserisci i turni della settimana →</a></div></div>`;
-  if (voce.kind === 'off') return `<div class="k eroe libero-oggi"><div class="etichetta">Turno di oggi <span class="badge">OFF</span></div><div class="num">Giorno libero</div><div class="sotto">Niente lavoro in hotel oggi</div></div>`;
+  const voce = turnoDel(data), prossimo = prossimoImpegno(tz);
+  if (!voce) return `<div class="k eroe vuoto"><div class="etichetta">Turno di oggi</div><div class="num">Da inserire</div><div class="sotto"><a href="#/hotel">Inserisci i turni della settimana →</a></div>${prossimo}</div>`;
+  if (voce.kind === 'off') return `<div class="k eroe libero-oggi"><div class="etichetta">Turno di oggi <span class="badge">OFF</span></div><div class="num">Giorno libero</div><div class="sotto">Niente lavoro in hotel oggi</div>${prossimo}</div>`;
   const andata = state.scheduleEntries.find(e => e.shift_id === voce.id && e.commute_leg === 'outbound');
   const ritorno = state.scheduleEntries.find(e => e.shift_id === voce.id && e.commute_leg === 'return');
-  return `<div class="k eroe"><div class="etichetta">Turno di oggi <span class="badge">${esc(nomeTurno(voce, tz))}</span></div><div class="num">${ora(voce.starts_at, tz)} – ${ora(voce.ends_at, tz)}</div><div class="sotto">${andata ? `Partenza alle ${ora(andata.starts_at, tz)}` : ''}${andata && ritorno ? ' · ' : ''}${ritorno ? `rientro verso le ${ora(ritorno.ends_at, tz)}` : ''}</div></div>`;
+  return `<div class="k eroe"><div class="etichetta">Turno di oggi <span class="badge">${esc(nomeTurno(voce, tz))}</span></div><div class="num">${ora(voce.starts_at, tz)} – ${ora(voce.ends_at, tz)}</div><div class="sotto">${andata ? `Partenza alle ${ora(andata.starts_at, tz)}` : ''}${andata && ritorno ? ' · ' : ''}${ritorno ? `rientro verso le ${ora(ritorno.ends_at, tz)}` : ''}</div>${prossimo}</div>`;
 }
 
-function settimanaTurni(data, tz) {
-  const lun = weekStart(data);
-  return `<section class="settimana-turni">${GIORNI.map((g, i) => {
-    const d = shiftDate(lun, i), voce = turnoDel(d), nome = voce ? nomeTurno(voce, tz) : null;
-    const corto = !voce ? '–' : voce.kind === 'off' ? 'OFF' : nome.slice(0, 1);
-    const orario = voce?.kind === 'shift' ? `${ora(voce.starts_at, tz)}–${ora(voce.ends_at, tz)}` : voce ? 'giorno libero' : 'da inserire';
-    return `<a class="g ${d === data ? 'oggi' : ''} ${voce?.kind === 'off' ? 'off' : ''} ${!voce ? 'manca' : ''}" href="#/hotel"><b>${g} ${Number(d.slice(8))}${d === data ? ' · oggi' : ''}</b><span><i class="lungo">${voce ? esc(nome) : '—'}</i><i class="corto">${corto}</i></span><em>${orario}</em></a>`;
-  }).join('')}</section>`;
-}
 
 function giornata(data, tz) {
   const righe = vociDelGiorno(data, tz);
@@ -133,36 +137,40 @@ function pasti(data, f, off) {
   const macro = [['Proteine', n.total.p, f.target.prot, 'var(--c-palestra)'], ['Carboidrati', n.total.c, f.target.carb, 'var(--teal)'], ['Grassi', n.total.g, f.target.gras, 'var(--c-sviluppo)']];
   return `<section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#/sport/cibo">Diario →</a></div><div class="pasti"><div class="kcal"><div class="anello" style="--giro:${giro}%"><div><b>${numero(n.total.k)}</b><small>di ${numero(obiettivo)}</small></div></div><div class="macro">${macro.map(([nome, v, t, c]) => `<div>${nome}${barra(v, t, c)}<span>${Math.round(v)}/${t} g</span></div>`).join('')}</div></div><p class="nota-pasti">${n.rows ? `${n.rows} alimenti registrati` : 'Ancora niente registrato oggi'} · obiettivo da giorno ${off ? 'di riposo' : 'di turno'}</p></div></section>`;
 }
-function allenamento(data, f) {
-  if (!f) return '';
-  const a = allenamentoDi(f, data);
-  if (!a) return `<section class="card"><div class="card-testa"><h2>Allenamento</h2><a class="link" href="#/sport/allena">Schede →</a></div><p class="vuoto-giornata">Oggi riposo: nessuna seduta nel piano della settimana.</p></section>`;
-  const esercizi = a.giorno.eser || [];
-  return `<section class="card"><div class="card-testa"><h2>Allenamento</h2><a class="link" href="#/sport/allena">Schede →</a></div><div class="all"><div class="all-head"><div class="ic">${icon('sport')}</div><div><b>${esc(a.giorno.n)}</b><small>${esc(a.scheda.n || 'Scheda')} · ${esercizi.length} esercizi</small></div><a class="btn" href="#/sport/allena">Inizia</a></div><table class="esercizi">${esercizi.slice(0, 4).map(x => `<tr><td>${esc(x.n || '')}</td><td>${esc(String(x.serie || ''))}${x.rip ? ' × ' + esc(String(x.rip)) : ''}</td><td>${x.peso ? esc(String(x.peso)) + ' kg' : ''}</td></tr>`).join('')}${esercizi.length > 4 ? `<tr><td colspan="3" class="altri">+ altri ${esercizi.length - 4} esercizi</td></tr>` : ''}</table></div></section>`;
+// Lavoro sviluppo: ore di sviluppo della settimana e prossima scadenza di un progetto.
+function sviluppo(data, tz) {
+  const lun = weekStart(data), s = summary(state.scheduleEntries.filter(e => e.category === 'dev'), state.timeLogs, lun, shiftDate(lun, 6), tz).byCategory.dev;
+  const prossimo = state.projects.filter(p => !universityData(p) && p.due_date && p.due_date >= data && !['completed', 'archived', 'done'].includes(p.status)).sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+  const giorni = prossimo ? Math.round((Date.parse(prossimo.due_date + 'T12:00:00Z') - Date.parse(data + 'T12:00:00Z')) / 864e5) : 0;
+  return `<section class="card"><div class="card-testa"><h2>Lavoro sviluppo</h2><a class="link" href="#/sviluppo">Apri →</a></div><div class="obj">
+    <div class="obj-r"><b>Ore questa settimana</b><span>${durata(s.actual)} fatte · ${durata(s.planned)} in agenda</span>${barra(s.actual, s.planned, 'var(--c-sviluppo)')}</div>
+    <div class="obj-r"><b>Prossima scadenza</b><span>${prossimo ? `${giorni === 0 ? 'oggi' : giorni === 1 ? 'domani' : 'tra ' + giorni + ' giorni'}` : '—'}</span><em>${prossimo ? `<a href="#/projects/${prossimo.id}">${esc(prossimo.name)}</a> · ${esc(prossimo.due_date.split('-').reverse().join('/'))}` : 'Nessun progetto con scadenza'}</em></div>
+  </div></section>`;
 }
 
 export function oggiPage() {
   const tz = state.timezone, data = today(tz);
-  const lun = weekStart(data), dom = shiftDate(lun, 6);
+  const lun = weekStart(data);
   const turno = turnoDel(data), off = turno?.kind === 'off';
-  const studio = state.weeklyGoals.find(g => g.week_start === lun && g.category === 'study');
-  const studioFatto = studio ? goalProgress(studio, state.scheduleEntries, state.timeLogs, tz) : summary(state.scheduleEntries.filter(e => e.category === 'study'), state.timeLogs, lun, dom, tz).byCategory.study.actual;
   const f = forma(), n = f ? nutritionToday(data) : null, a = f ? allenamentoDi(f, data) : null;
   const kcalObiettivo = f ? (off ? f.target.kcalOff : f.target.kcal) : 0;
+  const acqua = f ? Number(f.item('g').find(g => g.d === data)?.acqua) || 0 : 0, acquaObiettivo = f ? Number(f.archivio.items.find(i => i.t === 'cfg')?.target?.acqua) || 2500 : 2500;
+  const fatto = f && a ? f.item('w').some(w => w.d === data && w.fine && w.sid === a.scheda.id && w.gn === a.giorno.n) : false;
   return `<div class="oggi">
     <div class="testa"><div><h1>Oggi</h1><p>${esc(longDate(tz).replace(/^./, c => c.toUpperCase()))}</p></div></div>
-    <section class="kpi">
+    <section class="kpi kpi-tre">
       ${schedaTurno(data, tz)}
-      <div class="k studio-k"><div class="etichetta">Studio della settimana</div><div class="num">${durata(studioFatto)} <small>${studio ? '/ ' + durata(studio.target) : 'registrate'}</small></div>${studio ? barra(studioFatto, studio.target, 'var(--c-studio)') : ''}</div>
-      <div class="k kcal-k"><div class="etichetta">Calorie di oggi</div>${f ? `<div class="num">${numero(n?.total.k || 0)} <small>/ ${numero(kcalObiettivo)} kcal</small></div>${barra(n?.total.k || 0, kcalObiettivo, 'var(--azzurro)')}` : `<div class="num">—</div><div class="sotto"><a href="#/sport">Collega Forma</a></div>`}</div>
-      <div class="k all-k"><div class="etichetta">Allenamento</div>${a ? `<div class="num">${esc(a.giorno.n)}</div><div class="sotto">${esc(a.scheda.n || '')} · ${(a.giorno.eser || []).length} esercizi</div>` : `<div class="num">${f ? 'Riposo' : '—'}</div><div class="sotto">${f ? 'Nessuna seduta in piano' : 'Collega Forma'}</div>`}</div>
+      <div class="k kcal-k"><div class="etichetta">Calorie e acqua</div>${f ? `<div class="num">${numero(n?.total.k || 0)} <small>/ ${numero(kcalObiettivo)} kcal</small></div>${barra(n?.total.k || 0, kcalObiettivo, 'var(--azzurro)')}<div class="sotto acqua-r">💧 ${numero(acqua)} / ${numero(acquaObiettivo)} ml<span><button data-oggi-acqua="250">+250</button><button data-oggi-acqua="500">+500</button></span></div>` : `<div class="num">—</div><div class="sotto"><a href="#/sport">Apri Palestra</a></div>`}</div>
+      <div class="k all-k"><div class="etichetta">Allenamento</div>${a ? `<div class="num">${esc(a.giorno.n)}</div><div class="sotto all-r"><span>${esc(a.scheda.n || '')} · ${(a.giorno.eser || []).length} esercizi</span>${fatto ? '<b>fatto ✓</b>' : bottoneInizia(f.archivio, data, a.scheda.id, a.giorno.n, 'oggi-inizia')}</div>` : `<div class="num">${f ? 'Riposo' : '—'}</div><div class="sotto">${f ? 'Nessuna seduta in piano' : 'Apri Palestra'}</div>`}</div>
     </section>
-    ${settimanaTurni(data, tz)}
-    <div class="griglia"><div class="col">${giornata(data, tz)}</div><div class="col">${obiettivi(data, tz)}${pasti(data, f, off)}${allenamento(data, f)}</div></div>
+    ${weekCompatta(Array.from({ length: 7 }, (_, i) => shiftDate(lun, i)), data, true)}
+    <div class="griglia"><div class="col">${giornata(data, tz)}</div><div class="col">${obiettivi(data, tz)}${pasti(data, f, off)}${sviluppo(data, tz)}</div></div>
   </div>`;
 }
 
 export function bindOggi(render) {
+  document.querySelectorAll('[data-oggi-acqua]').forEach(b => b.onclick = () => { try { cambiaAcqua(today(state.timezone), Number(b.dataset.oggiAcqua)); render(); } catch (e) { toast(e.message); } });
+  document.querySelectorAll('.oggi [data-pal-inizia]').forEach(b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(today(state.timezone), sid, gn.join('|')); } catch (e) { toast(e.message); } });
   document.querySelectorAll('[data-oggi-fatto]').forEach(b => b.onclick = async e => {
     e.stopPropagation();
     const voce = state.scheduleEntries.find(x => x.id === b.dataset.oggiFatto);

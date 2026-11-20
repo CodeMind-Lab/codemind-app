@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v77";
+const CACHE = "codemind-shell-v78";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",

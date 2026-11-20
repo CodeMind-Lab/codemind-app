@@ -865,3 +865,17 @@ html[data-theme="dark"] .fasce-giorno.is-today { background: var(--azzurro); } h
 html[data-theme="dark"] .fasce-voce.is-off { background: #10301F; color: #86EFAC; }
 @media (max-width: 600px) { .fasce-griglia { grid-template-columns: 62px repeat(7, minmax(104px, 1fr)); } }
 .fasce-voce:not(.is-lavoro):not(.is-off) { flex-direction: column; align-items: flex-start; gap: 0; } .fasce-voce:not(.is-lavoro) time { margin-left: 0; } .fasce-voce b { max-width: 100%; }
+
+/* Pagina Oggi rivista (20/11/2026): tre riquadri, settimana a fasce, scheda Sviluppo */
+.oggi .kpi.kpi-tre { grid-template-columns: 1.5fr 1fr 1fr; }
+.prossimo-imp { margin-top: 10px; padding: 8px 10px; border-radius: 12px; background: #ffffff1f; cursor: pointer; }
+.prossimo-imp span { display: block; font-size: 11px; opacity: .8; }
+.prossimo-imp b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acqua-r, .all-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.acqua-r span, .all-r > :last-child { margin-left: auto; display: inline-flex; gap: 6px; }
+.acqua-r button, .oggi-inizia { border: 0; border-radius: 999px; padding: 5px 12px; font: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; background: var(--pannello); color: var(--testo); text-decoration: none; }
+.oggi .all-k .oggi-inizia { background: var(--corallo); color: #fff; }
+.oggi .fasce-oggi { margin-bottom: 12px; }
+.fasce-apri { margin-left: auto; color: var(--azzurro); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.obj-r em a { color: inherit; font-weight: 600; }
+@media (max-width: 600px) { .oggi .kpi.kpi-tre { grid-template-columns: 1fr; } .oggi .kpi.kpi-tre .k { grid-column: auto !important; } }
