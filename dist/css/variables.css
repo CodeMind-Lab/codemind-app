@@ -1,0 +1,47 @@
+/* Palette originale CodeMind.Lab: navy #0c2441, cyan #6cd4f0, coral #ff674c. */
+:root {
+  color-scheme: light;
+  --brand-navy: #10213a;
+  --brand-cyan: #06b6d4;
+  --brand-coral: #ff674c;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f7fc;
+  --surface-hover: #eaf1ff;
+  --text: #10213a;
+  --muted: #53647e;
+  --text-faint: #61718a;
+  --line: #dce5f1;
+  --border: var(--line);
+  --border-strong: #b7c6db;
+  --accent: #2458dc;
+  --accent-soft: #edf3ff;
+  --sidebar: #ffffff;
+  --danger: #bd3448;
+  --ok: #13754b;
+  --warn: #93600c;
+  --tech-violet: #7042d6;
+  --violet-soft: #f3efff;
+  --shadow: 0 8px 32px #10213a0d;
+  --radius: 7px;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #09182b;
+  --surface: #10273e;
+  --surface-2: #16324b;
+  --text: #eef5fb;
+  --muted: #a9bed0;
+  --line: #28465f;
+  --accent: #6cd4f0;
+  --accent-soft: #163c51;
+  --danger: #ff9b87;
+  --surface-hover: #20415b;
+  --border-strong: #47627a;
+  --text-faint: #a9bed0;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --tech-violet: #c4b5fd;
+  --violet-soft: #292344;
+  --shadow: 0 8px 40px #0003;
+}

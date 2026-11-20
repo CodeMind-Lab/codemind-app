@@ -1,0 +1,55 @@
+import { seminaSettimana } from './datiDiProva.mjs';
+import assert from 'node:assert/strict';
+import {state} from '../dist/js/services/store.js?v=65';
+import {clearAgenda, saveWorkShift, saveWorkWeek, saveEntry, saveLog, deleteAgenda, importLegacyWorkShifts} from '../dist/js/services/agendaService.js?v=65';
+import {shiftPreset} from '../dist/js/utils/workShifts.js?v=65';
+import {toInstant, wallTime, summary} from '../dist/js/utils/agenda.js?v=65';
+const storage=new Map(); globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
+state.mode='demo';state.timezone='Europe/Rome';clearAgenda();
+const date='2026-10-12', children=id=>state.scheduleEntries.filter(e=>e.shift_id===id);
+for(const [preset, from, to] of [['apertura','07:30','15:30'],['chiusura','15:30','23:30'],['notte','23:30','07:30']]) {
+ await saveWorkShift(date,preset);
+ const shift=state.scheduleEntries.find(e=>e.kind==='shift');
+ assert.equal(shiftPreset(shift,state.timezone),preset); assert.equal(shift.planned_minutes,480);
+ assert.equal(wallTime(shift.starts_at).slice(11),from);assert.equal(wallTime(shift.ends_at).slice(11),to);
+ assert.equal(children(shift.id).length,2);
+ assert.equal(children(shift.id).find(e=>e.commute_leg==='outbound').ends_at,shift.starts_at);
+ assert.equal(children(shift.id).find(e=>e.commute_leg==='return').starts_at,shift.ends_at);
+ assert(children(shift.id).every(e=>e.planned_minutes===30));assert.equal(state.scheduleEntries.length,3);
+ const ids=state.scheduleEntries.map(e=>e.id).sort();await saveWorkShift(date,preset);assert.deepEqual(state.scheduleEntries.map(e=>e.id).sort(),ids);
+}
+let shift=state.scheduleEntries.find(e=>e.kind==='shift');
+assert.equal(children(shift.id).find(e=>e.commute_leg==='return').entry_date,'2026-10-13');
+await saveWorkShift(date,'off');assert.equal(state.scheduleEntries.length,1);assert.equal(state.scheduleEntries[0].kind,'off');
+await saveWorkShift(date,'');assert.equal(state.scheduleEntries.length,0);
+await saveWorkShift('2026-10-18','notte');shift=state.scheduleEntries.find(e=>e.kind==='shift');
+assert.equal(summary(state.scheduleEntries,[],'2026-10-12','2026-10-18',state.timezone).planned,60);
+assert.equal(summary(state.scheduleEntries,[],'2026-10-19','2026-10-25',state.timezone).planned,480);
+const unrelated=await saveEntry({title:'Evento personale',category:'study',entry_date:date,planned_minutes:120});
+await saveWorkShift(date,'apertura');shift=state.scheduleEntries.find(e=>e.entry_date===date&&e.kind==='shift');
+const journey=children(shift.id).find(e=>e.commute_leg==='outbound');
+const log=await saveLog({entry_id:journey.id,started_at:journey.starts_at,ended_at:journey.ends_at});
+const snapshot=JSON.stringify(state.scheduleEntries);
+await assert.rejects(()=>saveWorkShift(date,'off'),/ore registrate/);assert.equal(JSON.stringify(state.scheduleEntries),snapshot);
+await assert.rejects(()=>saveWorkShift(date,''),/ore registrate/);
+await assert.rejects(()=>saveWorkWeek(date,[{preset:'chiusura'},{kind:'shift',from:'bad',to:'15:30'},...Array(5).fill({kind:''})]));
+assert.equal(JSON.stringify(state.scheduleEntries),snapshot);
+await saveWorkShift(date,'chiusura');shift=state.scheduleEntries.find(e=>e.id===shift.id);
+assert.equal(children(shift.id).find(e=>e.commute_leg==='outbound').id,journey.id);
+assert.equal(state.timeLogs.find(e=>e.id===log.id).started_at,log.started_at);
+const moved=await saveEntry({...shift,entry_date:'2026-10-13',starts_at:toInstant('2026-10-13T15:30'),ends_at:toInstant('2026-10-13T23:30')},shift);
+assert.equal(children(shift.id).find(e=>e.commute_leg==='outbound').entry_date,'2026-10-13');
+await deleteAgenda('schedule_entries',moved);assert.equal(children(shift.id).length,0);assert.equal(state.timeLogs.length,0);assert(state.scheduleEntries.some(e=>e.id===unrelated.id));
+// Existing seed journeys are linked, not duplicated, on upgrade and repeated saves.
+clearAgenda();await seminaSettimana();state.scheduleEntries.forEach(e=>{delete e.shift_id;delete e.commute_leg;});
+const legacyIds=state.scheduleEntries.map(e=>e.id).sort();await saveWorkShift('2026-10-07','apertura');
+assert.deepEqual(state.scheduleEntries.map(e=>e.id).sort(),legacyIds);assert.equal(state.scheduleEntries.filter(e=>e.shift_id).length,2);
+// Account-scoped one-time legacy import preserves calendar choices and original backup.
+storage.set('cm-work-shifts:demo',JSON.stringify({'2026-10-07':'chiusura','2026-10-12':'apertura','2026-10-13':'off','2026-10-14':'notte'}));
+await importLegacyWorkShifts();assert.equal(shiftPreset(state.scheduleEntries.find(e=>e.entry_date==='2026-10-07'&&e.kind==='shift'),state.timezone),'apertura');
+assert(state.scheduleEntries.some(e=>e.entry_date==='2026-10-12'&&e.kind==='shift'));
+assert.equal(JSON.parse(storage.get('cm-work-shifts:demo'))['2026-10-12'],'apertura');
+const count=state.scheduleEntries.length;await importLegacyWorkShifts();assert.equal(state.scheduleEntries.length,count);
+await saveWorkShift('2026-10-12','');await importLegacyWorkShifts();assert(!state.scheduleEntries.some(e=>e.entry_date==='2026-10-12'&&e.kind==='shift'));
+state.mode='signed_out';await assert.rejects(()=>saveWorkShift(date,'apertura'));
+console.log('PASS: fixed presets, automatic 30m journeys, stable IDs/no duplicates, OFF/removal, Sunday night/week clipping, atomic validation, logged journeys protected, actual history preserved, shift drag sync, cascade, legacy seed adoption/import/backup/conflicts and no resurrection after deletion.');

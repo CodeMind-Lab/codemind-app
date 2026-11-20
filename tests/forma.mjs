@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import '../dist/forma/forma-model.js';
+const {normalize,merge,applyTurns}=globalThis.FormaModel;
+const base={items:[{id:'g-2026-10-12',t:'g',d:'2026-10-12',acqua:1200,passi:5000,turno:'off',pasti:['pranzo'],updatedAt:10},{id:'l1',t:'l',d:'2026-10-12',n:'Pasto',q:100,k:120,p:5,c:12,g:4,updatedAt:10}],settings:{recDefault:90},graves:{}};
+const cleaned=normalize({...base,sync:{access:'PRIVATE'},settings:{...base.settings,token:'PRIVATE'},items:[...base.items,{id:'cfg',t:'cfg',target:{kcal:2000},access:'PRIVATE'}]});
+assert.equal(JSON.stringify(cleaned).includes('PRIVATE'),false);
+assert.throws(()=>normalize({...base,items:[...base.items,base.items[0]]}));
+const local=structuredClone(base),remote=structuredClone(base);local.items[0].acqua=1500;remote.items[0].passi=8000;
+assert.equal(merge(base,local,remote).items[0].acqua,1500);assert.equal(merge(base,local,remote).items[0].passi,8000);
+remote.items[0].acqua=2000;assert.throws(()=>merge(base,local,remote),/contemporanee/);
+const deleted=structuredClone(base);deleted.items.pop();deleted.graves.l1=100;
+assert.equal(merge(base,deleted,base).items.some(i=>i.id==='l1'),false);
+const shifted=applyTurns(base,[{date:'2026-10-12',preset:'notte'}]);
+const g=shifted.items.find(i=>i.t==='g');assert.equal(g.turno,'cm-work-notte');assert.equal(g.acqua,1200);assert.deepEqual(g.pasti,['pranzo']);assert.deepEqual(shifted.items.find(i=>i.id==='l1'),base.items[1]);
+assert.equal(applyTurns(shifted,[],[{date:'2026-10-12',preset:'notte'}]).items.find(i=>i.t==='g').turno,'');
+assert.equal(globalThis.FormaModel.same({a:1,b:{c:2,d:3}},{b:{d:3,c:2},a:1}),true);
+console.log('PASS: complete archive strips credentials, preserves nutrition and preferences, independent edits merge, conflicting edits stop, deletions persist and shifts only change turno.');

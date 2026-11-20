@@ -1,0 +1,42 @@
+import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth,public to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
+for(const migration of ['001_initial','002_daily_focus','003_daily_notebook','004_notes','007_personal_agenda']) await db.exec(fs.readFileSync(`supabase/migrations/${migration}.sql`,'utf8'));
+const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
+await db.query('insert into auth.users(id) values($1),($2)',[A,B]);
+const rows=async(sql,args=[]) => (await db.query(sql,args)).rows;
+const parent=(await rows(`insert into schedule_entries(user_id,title,category,kind,entry_date,starts_at,ends_at,planned_minutes,notes) values($1,'Night','work','shift','2026-10-18','2026-10-18T21:30Z','2026-10-19T05:30Z',480,'Keep notes') returning *`,[A]))[0];
+const oldJourney=(await rows(`insert into schedule_entries(user_id,title,category,kind,entry_date,starts_at,ends_at,planned_minutes,is_completed,notes) values($1,'Tragitto · andata','personal','commute','2026-10-18','2026-10-18T21:00Z','2026-10-18T21:30Z',30,true,'Keep journey notes') returning *`,[A]))[0];
+await db.query(`insert into time_logs(user_id,entry_id,started_at,ended_at) values($1,$2,'2026-10-18T21:00Z','2026-10-18T21:30Z')`,[A,oldJourney.id]);
+await db.exec(fs.readFileSync('supabase/migrations/008_work_shift_calendar.sql','utf8'));
+const linked=await rows('select * from schedule_entries where shift_id=$1 order by commute_leg',[parent.id]);
+assert.equal(linked.length,2);assert.equal(linked[0].id,oldJourney.id);assert.equal(linked[0].notes,'Keep journey notes');assert(linked[0].is_completed);assert.equal((await rows('select * from time_logs')).length,1);
+assert.equal(new Date(linked[1].entry_date).toISOString().slice(0,10),'2026-10-19');assert.equal((await rows('select notes from schedule_entries where id=$1',[parent.id]))[0].notes,'Keep notes');
+async function role(id){await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);}
+async function fails(fn){await assert.rejects(fn);}
+await role(B);assert.equal((await rows('select * from schedule_entries')).length,0);
+await fails(()=>db.query(`insert into schedule_entries(user_id,title,kind,category,entry_date,starts_at,ends_at,planned_minutes,shift_id,commute_leg) values($1,'Bad','commute','personal','2026-10-18','2026-10-18T20:00Z','2026-10-18T20:30Z',30,$2,'outbound')`,[B,parent.id]));
+await role(A);let shift=(await rows('select * from schedule_entries where id=$1',[parent.id]))[0];
+const change=()=>({id:shift.id,expected_updated_at:shift.updated_at,remove:false,title:'Chiusura',kind:'shift',entry_date:'2026-10-18',starts_at:'2026-10-18T13:30Z',ends_at:'2026-10-18T21:30Z',planned_minutes:480});
+await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([{id:shift.id,expected_updated_at:shift.updated_at,remove:true}])]));
+await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([{...change(),kind:'off',starts_at:null,ends_at:null,planned_minutes:0}])]));
+assert.equal((await rows('select * from schedule_entries')).length,3);
+const stale=change();await db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([stale])]);
+const after=await rows('select * from schedule_entries where shift_id=$1 order by commute_leg',[shift.id]);
+assert.deepEqual(after.map(e=>e.id),linked.map(e=>e.id));assert.equal(new Date(after[0].starts_at).toISOString(),'2026-10-18T13:00:00.000Z');assert.equal((await rows('select * from time_logs')).length,1);
+await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([stale])]));
+shift=(await rows('select * from schedule_entries where id=$1',[parent.id]))[0];
+const invalid=[{...change(),title:'Should roll back'}, {id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',title:'Bad',kind:'shift',entry_date:'2026-10-20',starts_at:'2026-10-20T05:30Z',ends_at:'2026-10-20T05:00Z',planned_minutes:480}];
+await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify(invalid)]));
+assert.equal((await rows('select title from schedule_entries where id=$1',[shift.id]))[0].title,'Chiusura');
+assert.deepEqual((await rows('select * from schedule_entries where shift_id=$1 order by commute_leg',[shift.id])).map(e=>new Date(e.starts_at).toISOString()),after.map(e=>new Date(e.starts_at).toISOString()));
+const ids=after.map(e=>e.id);await db.query('update schedule_entries set is_completed=true where id=$1',[shift.id]);assert.deepEqual((await rows('select id from schedule_entries where shift_id=$1 order by commute_leg',[shift.id])).map(e=>e.id),ids);
+await fails(()=>db.query(`insert into schedule_entries(user_id,title,kind,category,entry_date,starts_at,ends_at,planned_minutes,shift_id) values($1,'No leg','commute','personal','2026-10-18','2026-10-18T12:00Z','2026-10-18T12:30Z',30,$2)`,[A,parent.id]));
+await db.query('delete from schedule_entries where id=$1',[shift.id]);assert.equal((await rows('select * from schedule_entries')).length,0);assert.equal((await rows('select * from time_logs')).length,0);
+// Initial import remains atomic and does not duplicate legacy client-supplied journeys.
+const seed={week_start:'2026-10-12',entries:[{id:parent.id,title:'Opening',kind:'shift',category:'work',entry_date:'2026-10-12',starts_at:'2026-10-12T05:30Z',ends_at:'2026-10-12T13:30Z',planned_minutes:480},{id:oldJourney.id,title:'Tragitto · andata',category:'personal',kind:'commute',entry_date:'2026-10-12',starts_at:'2026-10-12T05:00Z',ends_at:'2026-10-12T05:30Z',planned_minutes:30}],goals:[]};
+await db.query('select seed_agenda_week($1::jsonb)',[JSON.stringify(seed)]);await db.query('select seed_agenda_week($1::jsonb)',[JSON.stringify(seed)]);assert.equal((await rows('select * from schedule_entries')).length,3);
+await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([{...seed.entries[0],id:oldJourney.id}])]));
+await db.exec('reset role;set role anon');await fails(()=>db.query('select * from schedule_entries'));await fails(()=>db.query('select save_agenda_shifts($1::jsonb)',[JSON.stringify([])]));
+await db.close();console.log('PASS: production migration backfill preserves legacy IDs/notes/completion/logs; owner isolation, night return date, linked log guards, stable journey updates, stale writes, full transaction rollback, completion, link validation, parent cascade, seed no duplicates and concurrent same-day insert protection.');

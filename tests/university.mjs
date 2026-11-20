@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {universityData,encodeUniversity,validateSubject,universityStats,universityNotes} from '../dist/js/utils/university.js';
+const item=d=>({notes:encodeUniversity(validateSubject(d))});
+const list=[item({studyStatus:'passed',grade:30,honours:true,credits:12}),item({studyStatus:'passed',grade:24,credits:6}),item({studyStatus:'passed',passFail:true,credits:3}),item({studyStatus:'studying',credits:9})];
+const s=universityStats(list);assert.equal(s.weighted,28);assert.equal(s.mean,27);assert.equal(s.credits,21);assert.equal(s.totalCredits,30);assert.equal(s.honours,1);assert.equal(s.passed,3);
+assert.equal(universityStats([]).weighted,null);
+assert.equal(universityData({notes:'Plain notes'}),null);assert.equal(universityNotes({notes:'Plain notes'}),'Plain notes');
+assert.throws(()=>validateSubject({studyStatus:'passed',grade:31}),/18 e 30/);
+assert.throws(()=>validateSubject({studyStatus:'passed',grade:29,honours:true}),/solo/);
+assert.throws(()=>validateSubject({studyStatus:'studying',grade:28}),/Superato/);
+assert.throws(()=>validateSubject({studyStatus:'passed',passFail:true,grade:30}),/idoneità/);
+assert.throws(()=>validateSubject({studyStatus:'passed'}),/indica/);
+assert.throws(()=>validateSubject({studyStatus:'planned',credits:-3}),/CFU/);
+assert.throws(()=>validateSubject({studyStatus:'ready',examDate:'2026-10-01',enrolmentDate:'2026-10-03'}),/successiva/);
+assert.equal(universityData(item({studyStatus:'studying',notes:'Appunti è 😀'})).notes,'Appunti è 😀');
+console.log('PASS university: weighted means, CFU/idoneity, honours, validation and lossless storage.');

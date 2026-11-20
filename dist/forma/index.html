@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Forma</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F2F1EC">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forma">
+<meta name="description" content="Gestionale di alimentazione e allenamento: diario, filtri, report.">
+<link rel="stylesheet" href="app.css"><link rel="stylesheet" href="projects.css"><script>globalThis.FORMA_PROJECTS_HOST=true;</script>
+<script>
+  /* Il tema si applica PRIMA che la pagina si disegni. Se questo script
+     finisse in fondo, a ogni avvio si vedrebbe il lampo chiaro prima che il
+     tema scuro entri in vigore. */
+  (function () {
+    try {
+      /* Di serie il tema segue il sistema: l'iPhone passa allo scuro la sera
+         e l'app deve seguirlo senza che glielo si dica. */
+      var scelto = localStorage.getItem('forma.tema');
+      if (scelto !== 'chiaro' && scelto !== 'scuro') {
+        scelto = matchMedia('(prefers-color-scheme: dark)').matches ? 'scuro' : 'chiaro';
+      }
+      document.documentElement.setAttribute('data-tema', scelto);
+      /* Si aggiorna il meta che sta qui sopra invece di scriverne un secondo:
+         con due, vince l'ultimo, e quello aggiornato dal codice sarebbe il
+         primo — cioè quello ignorato. */
+      document.querySelector('meta[name="theme-color"]')
+        .setAttribute('content', scelto === 'scuro' ? '#131311' : '#F2F1EC');
+    } catch (e) {
+      document.documentElement.setAttribute('data-tema', 'chiaro');
+    }
+  })();
+</script>
+</head>
+<body>
+
+<!-- Sul Mac la navigazione sta a sinistra come nel gestionale; sul telefono
+     questa colonna sparisce e restano le schede in basso. -->
+<aside id="side">
+  <div class="side-logo">
+    <span class="mk">F</span>
+    <div class="sub"><b>Forma</b><span>by CodeMind.Lab</span></div>
+  </div>
+  <nav class="side-menu">
+    <span class="side-ind" id="sideInd"></span>
+    <button data-tab="oggi"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg><span>Oggi</span></button>
+    <button data-tab="agenda"><svg viewBox="0 0 24 24"><path d="M4 6h2.5M4 12h2.5M4 18h2.5"/><path d="M10 6h10M10 12h10M10 18h10"/></svg><span>Agenda</span></button>
+    <button data-tab="cibo"><svg viewBox="0 0 24 24"><path d="M5 3v8a3 3 0 0 0 6 0V3"/><path d="M8 11v10"/><path d="M18 3c-1.7 1.6-2.5 3.6-2.5 6 0 1.7.8 2.9 2.5 3.2V21"/></svg><span>Cibo</span></button>
+    <button data-tab="allena"><svg viewBox="0 0 24 24"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg><span>Allenamento</span></button>
+    <button data-tab="report"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M7 20V10M12 20V4M17 20v-7"/></svg><span>Report</span></button>
+    <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 14a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9h-.2a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg><span>Impostazioni</span></button>
+  </nav>
+  <div class="side-foot">
+    <div class="side-az">
+      <button id="btnTema" title="Chiaro o scuro">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg><span>Tema</span>
+      </button>
+      <button data-tab="settings" title="Impostazioni">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 14a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9h-.2a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg><span>Impostazioni</span>
+      </button>
+
+    </div>
+    <div class="side-ver" id="sideFoot"></div>
+  </div>
+</aside>
+
+<header id="topbar">
+  <button class="icon-btn" id="backBtn" hidden aria-label="Indietro">
+    <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+  </button>
+  <h1 id="topTitle">Forma</h1>
+  <button class="icon-btn" id="btnTemaTop" aria-label="Cambia tema">
+    <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+  </button>
+  <button class="icon-btn" id="settingsBtn" aria-label="Impostazioni">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 14a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9h-.2a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+  </button>
+</header>
+
+<main id="app"></main>
+
+<button id="fab" aria-label="Aggiungi">
+  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<nav id="tabbar">
+  <button data-tab="oggi"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg><span>Oggi</span></button>
+  <button data-tab="agenda"><svg viewBox="0 0 24 24"><path d="M4 6h2.5M4 12h2.5M4 18h2.5"/><path d="M10 6h10M10 12h10M10 18h10"/></svg><span>Agenda</span></button>
+  <button data-tab="cibo"><svg viewBox="0 0 24 24"><path d="M5 3v8a3 3 0 0 0 6 0V3"/><path d="M8 11v10"/><path d="M18 3c-1.7 1.6-2.5 3.6-2.5 6 0 1.7.8 2.9 2.5 3.2V21"/></svg><span>Cibo</span></button>
+  <button data-tab="allena"><svg viewBox="0 0 24 24"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg><span>Allena</span></button>
+  <button data-tab="report"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M7 20V10M12 20V4M17 20v-7"/></svg><span>Report</span></button>
+</nav>
+
+<div id="rest" hidden>
+  <span id="restLabel">Recupero</span>
+  <b id="restTime">1:30</b>
+  <button id="restPlus">+30s</button>
+  <button id="restStop" aria-label="Ferma il recupero">
+    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+</div>
+
+<div id="scan" hidden>
+  <video id="scanVideo" playsinline muted autoplay></video>
+  <div id="scanMask">
+    <div class="sm-box"><i></i></div>
+    <p id="scanStato">Inquadra il codice a barre</p>
+    <button id="scanManuale">Scrivi il codice a mano</button>
+  </div>
+  <button id="scanChiudi" aria-label="Chiudi">
+    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+</div>
+
+<div id="sheet" hidden>
+  <div id="sheetBackdrop"></div>
+  <div id="sheetPanel">
+    <button id="sheetClose" aria-label="Chiudi">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div id="sheetContent"></div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="data.js"></script>
+<script src="importa.js"></script>
+<script src="scanner.js"></script>
+<script src="app.js"></script>
+<script>const Sync={schedule(){},signedIn(){return false},panel(){return '<div class="panel"><div class="label">Collegato a Projects</div><p>Le modifiche si salvano sul tuo account Projects. I turni si modificano nella scheda Turni.</p></div>'}};</script>
+
+<script src="forma-model.js"></script>
+<script src="projects-host.js"></script>
+</body>
+</html>

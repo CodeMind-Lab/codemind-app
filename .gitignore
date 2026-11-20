@@ -1,0 +1,12 @@
+dist/js/config.js
+.env
+.env.*
+!.env.example
+node_modules/
+.DS_Store
+*.log
+.sites-runtime/
+work/
+outputs/*.tar.gz
+outputs/CodeMind-Projects/
+outputs/*.zip

@@ -1,0 +1,40 @@
+# Pubblica dist/ su GitHub Pages a ogni push su main.
+# L'indirizzo e la chiave PUBBLICA (publishable/anon) di Supabase non stanno nel codice:
+# sono variabili del repository (Settings → Secrets and variables → Actions → Variables)
+# e vengono scritte in dist/js/config.js solo nel pacchetto pubblicato.
+name: Pubblica su GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scrive la configurazione di Supabase
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "Mancano le variabili SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY del repository."; exit 1
+          fi
+          case "$SUPABASE_KEY" in sb_secret_*) echo "Serve la chiave publishable, non quella secret."; exit 1;; esac
+          printf 'export default { url: "%s", key: "%s" };\n' "$SUPABASE_URL" "$SUPABASE_KEY" > dist/js/config.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

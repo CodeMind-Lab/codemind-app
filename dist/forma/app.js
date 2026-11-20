@@ -1,0 +1,5543 @@
+/* Forma — alimentazione e allenamento.
+   I dati vivono in localStorage sul dispositivo e funzionano senza rete.
+   Se colleghi Supabase (Impostazioni) la stessa roba si ritrova su Mac e iPhone. */
+
+'use strict';
+
+/* ============================================================
+   1. Archivio locale
+   ============================================================ */
+
+/* Da alzare a ogni pubblicazione: si legge nelle impostazioni e dice a colpo
+   d'occhio se il telefono sta usando i file nuovi o quelli vecchi. */
+const APP_VERSION = '2026.10.12.1';
+const PROJECTS_EMBEDDED = globalThis.FORMA_PROJECTS_HOST === true && window.parent !== window;
+
+const KEY = 'forma.v1';
+
+/* Tutto ciò che deve viaggiare tra i dispositivi sta in items, una riga per
+   cosa, con un tipo:
+     cfg  target e profilo (una sola riga, id fisso)
+     g    il giorno: turno o riposo, acqua, passi
+     l    una riga del diario alimentare
+     a    un alimento aggiunto da te
+     r    una combinazione salvata (un pasto ricorrente)
+     s    una scheda di allenamento
+     w    una sessione di allenamento svolta
+     m    una misura: peso, girovita, massa grassa
+   sync/dirty/graves restano fuori da items: sono la sincronizzazione stessa. */
+const DB = {
+  items: [],
+  settings: { recDefault: 90 },
+  sync: { url: '', anon: '', email: '', access: '', refresh: '', expires: 0, cursor: '', at: 0 },
+  dirty: {},
+  graves: {}
+};
+
+function load() {
+  if (PROJECTS_EMBEDDED) return;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      DB.items = Array.isArray(d.items) ? d.items : [];
+      DB.settings = Object.assign(DB.settings, d.settings || {});
+      DB.sync = Object.assign(DB.sync, d.sync || {});
+      DB.dirty = d.dirty || {};
+      DB.graves = d.graves || {};
+    }
+  } catch (e) {
+    console.error('Dati illeggibili', e);
+  }
+}
+
+let saveTimer = null;
+function save(now) {
+  clearTimeout(saveTimer);
+  const write = () => {
+    if (PROJECTS_EMBEDDED) { window.dispatchEvent(new Event('forma:data-changed')); return; }
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        v: 1, items: DB.items, settings: DB.settings,
+        sync: DB.sync, dirty: DB.dirty, graves: DB.graves
+      }));
+      window.dispatchEvent(new Event('forma:data-changed'));
+    } catch (e) {
+      toast('Memoria piena: esporta un backup e libera spazio');
+    }
+  };
+  if (now || PROJECTS_EMBEDDED) write(); else saveTimer = setTimeout(write, 400);
+}
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* Ogni modifica passa da qui: segna l'ora e mette la riga in coda per il
+   server. Chiamarla è l'unico modo perché una modifica esca dal telefono. */
+function tocca(it) {
+  if (it.t === 'a') scadeCatalogo();
+  it.updatedAt = Date.now();
+  DB.dirty[it.id] = 1;
+  save();
+  if (typeof Sync !== 'undefined') Sync.schedule();
+  return it;
+}
+
+function aggiungi(it) {
+  it.id = it.id || uid();
+  DB.items.push(it);
+  return tocca(it);
+}
+
+function elimina(id) {
+  const i = DB.items.findIndex(x => x.id === id);
+  if (i < 0) return;
+  if (DB.items[i].t === 'a') scadeCatalogo();
+  DB.items.splice(i, 1);
+  DB.graves[id] = Date.now();
+  delete DB.dirty[id];
+  save();
+  if (typeof Sync !== 'undefined') Sync.schedule();
+}
+
+/* ============================================================
+   2. Utilità
+   ============================================================ */
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const num = (v, d) => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : (d || 0); };
+const r0 = n => Math.round(n);
+const r1 = n => Math.round(n * 10) / 10;
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.hidden = true; }, 2400);
+}
+
+function haptic() { if (navigator.vibrate) navigator.vibrate(8); }
+
+const oggiISO = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+const spostaData = (iso, n) => {
+  const d = new Date((iso || oggiISO()) + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+function nomeGiorno(iso) {
+  if (iso === oggiISO()) return 'Oggi';
+  if (iso === spostaData(oggiISO(), -1)) return 'Ieri';
+  if (iso === spostaData(oggiISO(), 1)) return 'Domani';
+  return new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long' })
+    .replace(/^./, c => c.toUpperCase());
+}
+const dataLunga = iso =>
+  new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+const dataCorta = iso =>
+  new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+
+function durata(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+/* ============================================================
+   3. Lettura dei dati
+   ============================================================ */
+
+const di = t => DB.items.filter(i => i.t === t);
+
+/* Numeri di partenza, non consigli: servono solo perché l'app abbia qualcosa da
+   mostrare prima che tu apra le impostazioni. I bersagli veri li mette chi usa
+   l'app, e da quel momento viaggiano nella sincronizzazione come tutto il resto. */
+const TARGET_DEFAULT = {
+  kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65,
+  acqua: 2500, passi: 8000, olio: 25
+};
+const PROFILO_DEFAULT = { nome: '', altezza: 175, pesoObiettivo: 75, giroObiettivo: 90 };
+
+function cfg() {
+  let c = DB.items.find(i => i.t === 'cfg');
+  if (!c) {
+    c = aggiungi({ id: 'cfg', t: 'cfg', target: Object.assign({}, TARGET_DEFAULT), profilo: Object.assign({}, PROFILO_DEFAULT) });
+  }
+  c.target = Object.assign({}, TARGET_DEFAULT, c.target || {});
+  c.profilo = Object.assign({}, PROFILO_DEFAULT, c.profilo || {});
+  return c;
+}
+
+/* Il giorno esiste come riga solo quando ci scrivi qualcosa: aprire il diario
+   di una data non deve creare righe da sincronizzare. */
+function giorno(d, crea) {
+  let g = DB.items.find(i => i.t === 'g' && i.d === d);
+  if (!g && crea) g = aggiungi({ id: 'g-' + d, t: 'g', d, tipo: 'turno', acqua: 0, passi: 0 });
+  return g || { t: 'g', d, tipo: 'turno', acqua: 0, passi: 0, _finto: true };
+}
+
+/* Il turno della settimana: il modello fisso, quello che di solito fai. */
+function turnoRec(gs, crea) {
+  let p = DB.items.find(i => i.t === 'tu' && i.gs === gs);
+  if (!p && crea) p = aggiungi({ id: 'turno-' + gs, t: 'tu', gs, turno: '' });
+  return p || { t: 'tu', gs, turno: '', _finto: true };
+}
+
+/* Il turno di una data precisa. Vale quello scritto sul giorno, se c'è:
+   i turni si scambiano, e il modello settimanale non deve impedirti di dire
+   che questo giovedì hai fatto la notte. */
+function turnoDi(d) {
+  const g = giorno(d);
+  if (g.turno) return g.turno;
+  return turnoRec(gsDiData(d)).turno || '';
+}
+const turnoScritto = d => !!giorno(d).turno;
+
+const kcalTarget = d => {
+  const t = cfg().target;
+  const tn = turnoInfo(turnoDi(d));
+  return tn && tn.riposo ? t.kcalOff : t.kcal;
+};
+
+const righeDi = d => di('l').filter(i => i.d === d);
+
+/* L'olio consumato in un giorno non si chiede: si somma da quello che hai già
+   registrato. È una delle poche regole numeriche del piano — "massimo 25 g al
+   giorno, cucchiaio dosatore, mai a occhio" — e chiedere di ricontarlo a mano
+   sarebbe farlo due volte. */
+const RX_OLIO = /\bolio\b/i;
+const olioDi = d => righeDi(d).filter(r => RX_OLIO.test(r.n)).reduce((t, r) => t + r.q, 0);
+
+/* Da una riga del diario ai numeri veri: il database ha i valori per 100 g,
+   la riga ha i grammi. */
+function macro(riga) {
+  const f = riga.q / 100;
+  return { k: riga.k * f, p: riga.p * f, c: riga.c * f, g: riga.g * f };
+}
+function somma(righe) {
+  const t = { k: 0, p: 0, c: 0, g: 0 };
+  for (const r of righe) { const m = macro(r); t.k += m.k; t.p += m.p; t.c += m.c; t.g += m.g; }
+  return t;
+}
+
+/* Il catalogo completo: prima i tuoi alimenti, poi quelli del database. In caso
+   di nome uguale vince il tuo, così puoi correggere un valore senza toccare i
+   file dell'app.
+ *
+ * Il risultato si tiene da parte: con quasi mille alimenti e quattordici punti
+ * del codice che lo chiedono, ricostruire la lista a ogni chiamata si sentiva
+ * mentre si scriveva nella casella di ricerca. Basta buttare la copia quando
+ * cambia qualcosa fra i TUOI alimenti — il resto è fisso. */
+let _catalogo = null;
+function catalogo() {
+  if (_catalogo) return _catalogo;
+  const miei = di('a').map(a => ({ n: a.n, k: a.k, p: a.p, c: a.c, g: a.g, cat: a.cat || 'Altro', nt: a.nt || '', id: a.id, ean: a.ean, mio: true }));
+  const nomi = new Set(miei.map(a => a.n.toLowerCase()));
+  _catalogo = miei.concat(ALIMENTI.filter(a => !nomi.has(a.n.toLowerCase())));
+  return _catalogo;
+}
+const scadeCatalogo = () => { _catalogo = null; };
+
+/* Gli ultimi alimenti usati, dal più recente: nella pratica il 90% di ciò che
+   mangi in una settimana sta nelle prime dieci righe. */
+function recenti(n) {
+  /* Il catalogo si costruisce una volta sola: dentro il ciclo verrebbe
+     ricostruito per ogni riga del diario, e il diario cresce ogni giorno. */
+  const indice = {};
+  for (const a of catalogo()) indice[a.n.toLowerCase()] = a;
+
+  const visti = new Set(), out = [];
+  const righe = di('l').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  for (const r of righe) {
+    const k = r.n.toLowerCase();
+    if (visti.has(k)) continue;
+    visti.add(k);
+    if (indice[k]) out.push(indice[k]);
+    if (out.length >= (n || 12)) break;
+  }
+  return out;
+}
+
+/* L'agenda di un giorno mette insieme tre cose: quello che ricorre ogni
+   settimana, quello che hai scritto solo per quella data, e quello che l'app
+   sa già da sé — il turno e l'allenamento previsto. Le prime due si toccano,
+   la terza no: si cambia dove è nata.
+ *
+ * Le voci ricorrenti tengono l'elenco delle date in cui le hai spuntate,
+ * invece di una bandierina: una bandierina sola le segnerebbe fatte per
+ * sempre, dalla settimana prossima in poi. */
+function agendaDi(data) {
+  const gs = gsDiData(data);
+  const out = [];
+
+  for (const r of di('agr').filter(x => x.gs === gs)) {
+    out.push({
+      id: r.id, ric: true, ora: r.ora || '', fine: r.fine || '', n: r.n,
+      cat: r.cat || 'personale', fatto: (r.fatti || []).includes(data), note: r.note || ''
+    });
+  }
+  for (const v of di('ag').filter(x => x.d === data)) {
+    out.push({
+      id: v.id, ric: false, ora: v.ora || '', fine: v.fine || '', n: v.n,
+      cat: v.cat || 'personale', fatto: !!v.fatto, note: v.note || ''
+    });
+  }
+
+  /* Con l'ora prima, in ordine; senza ora dopo, che è dove stanno le cose da
+     fare quando capita. */
+  return out.sort((a, b) => {
+    if (!a.ora && !b.ora) return 0;
+    if (!a.ora) return 1;
+    if (!b.ora) return -1;
+    return a.ora < b.ora ? -1 : a.ora > b.ora ? 1 : 0;
+  });
+}
+
+/* Le cose da fare rimaste indietro. Una lista che dimentica quello che non hai
+   fatto non è una lista: è un diario delle buone intenzioni. Si guarda fino a
+   due settimane addietro, oltre le quali una cosa non fatta è una cosa che non
+   farai. */
+function arretrati(data) {
+  if (data !== oggiISO()) return [];
+  const da = spostaData(data, -14);
+  return di('ag')
+    .filter(v => !v.fatto && !v.ora && v.d >= da && v.d < data)
+    .sort((a, b) => a.d < b.d ? -1 : 1);
+}
+
+const agendaFatta = v => v.fatto;
+
+/* Quanto resta da fare oggi, per il riepilogo sulla dashboard. */
+function agendaRestano(data) {
+  const l = agendaDi(data).filter(v => !v.fatto);
+  return l.length + arretrati(data).length;
+}
+
+const misure = () => di('m').sort((a, b) => a.d < b.d ? -1 : 1);
+const ultimaMisura = () => { const m = misure(); return m[m.length - 1] || null; };
+const sessioni = () => di('w').sort((a, b) => a.d < b.d ? 1 : -1);
+const schede = () => di('s');
+
+/* I turni di lavoro sono dati, non codice: si rinominano, si cambiano gli
+   orari, se ne aggiungono. Un turno con riposo=true abbassa il bersaglio delle
+   calorie a quello dei giorni di riposo — è l'unica cosa che il turno decide. */
+/* Gli identificativi restano quelli di prima anche dove il nome è cambiato:
+   sono già scritti nei turni salvati sul telefono, e rinominarli farebbe
+   diventare grigi i turni esistenti al primo aggiornamento. Cambiano solo il
+   nome mostrato e la tinta, che ora è tarata sul pannello viola scuro. */
+const COLORI_TURNO = [
+  { id: 'ambra',   n: 'Ambra',      v: '#E0A93C' },
+  { id: 'corallo', n: 'Terracotta', v: '#D06438' },
+  { id: 'viola',   n: 'Prugna',     v: '#9B6C8F' },
+  { id: 'azzurro', n: 'Ardesia',    v: '#5E8CB8' },
+  { id: 'verde',   n: 'Verde',      v: '#3E9E75' },
+  { id: 'grigio',  n: 'Grigio',     v: '#8A877C' }
+];
+const coloreTurno = t => (COLORI_TURNO.find(c => c.id === (t && t.col)) || COLORI_TURNO[5]).v;
+
+/* I primi quattro, creati una volta sola. Gli orari vengono dal piano
+   alimentare v3, dove le giornate tipo sono costruite attorno a questi turni. */
+const TURNI_INIZIALI = [
+  { id: 'apertura', n: 'Apertura', ic: '\u{1F305}', ore: '07:30 – 15:30', col: 'ambra',   riposo: false, ord: 0 },
+  { id: 'chiusura', n: 'Chiusura', ic: '\u{1F306}', ore: '15:30 – 23:30', col: 'corallo', riposo: false, ord: 1 },
+  { id: 'notte',    n: 'Notte',    ic: '\u{1F319}', ore: '23:30 – 07:30', col: 'viola',   riposo: false, ord: 2 },
+  { id: 'off',      n: 'OFF',      ic: '\u{1F3E0}', ore: 'riposo',        col: 'verde',   riposo: true,  ord: 3 }
+];
+
+/* Le categorie dell'agenda. Poche e fisse: una tassonomia che cresce a piacere
+   diventa in fretta un elenco di sinonimi in cui non trovi più niente. */
+const CAT_AGENDA = [
+  { id: 'lavoro',      l: 'Lavoro',      ic: '\u{1F4BC}', col: '#0F90B9' },
+  { id: 'palestra',    l: 'Palestra',    ic: '\u{1F3CB}\uFE0F', col: '#FF664C' },
+  { id: 'casa',        l: 'Casa',        ic: '\u{1F3E0}', col: '#2FA37B' },
+  { id: 'salute',      l: 'Salute',      ic: '\u{1FA7A}', col: '#8E7CF0' },
+  { id: 'spesa',       l: 'Spesa',       ic: '\u{1F6D2}', col: '#E8A317' },
+  { id: 'personale',   l: 'Personale',   ic: '\u{1F464}', col: '#6C7CA8' }
+];
+const catAgenda = id => CAT_AGENDA.find(c => c.id === id) || CAT_AGENDA[5];
+
+/* L'integrazione è un elenco fisso che si spunta ogni giorno, come le voci
+   ricorrenti dell'agenda: la voce è una sola e quello che cambia è l'elenco
+   delle date in cui l'hai presa. Segnare "fatto" con una bandierina la darebbe
+   per presa anche domani. */
+/* Un pasto "fatto" non è un pasto che sta nel diario. Caricando il piano si
+   scrivono tutte e cinque le voci in un colpo, e prima di questa distinzione
+   l'app dava per mangiata l'intera giornata alle otto di mattina. La spunta la
+   metti tu, e sta sul giorno perché è un fatto di quel giorno. */
+function pastoFatto(d, slot) {
+  return (giorno(d).pasti || []).includes(slot);
+}
+function segnaPasto(d, slot) {
+  const g = giorno(d, true);
+  g.pasti = g.pasti || [];
+  const i = g.pasti.indexOf(slot);
+  if (i < 0) g.pasti.push(slot); else g.pasti.splice(i, 1);
+  tocca(g);
+}
+
+const integratori = () => di('in').sort((a, b) => (a.ord || 0) - (b.ord || 0));
+
+const MOMENTI = [
+  { id: 'digiuno', l: 'A digiuno', ic: '\u{1F305}' },
+  { id: 'colazione', l: 'Colazione', ic: '\u2615' },
+  { id: 'pre', l: 'Pre-allenamento', ic: '\u26A1' },
+  { id: 'post', l: 'Post-allenamento', ic: '\u{1F4AA}' },
+  { id: 'pranzo', l: 'Pranzo', ic: '\u{1F37D}\uFE0F' },
+  { id: 'cena', l: 'Cena', ic: '\u{1F373}' },
+  { id: 'sera', l: 'Prima di dormire', ic: '\u{1F319}' }
+];
+const momento = id => MOMENTI.find(m => m.id === id) || MOMENTI[1];
+
+/* Quando prenderlo: creatina tutti i giorni, ma il pre-workout solo quando ti
+   alleni davvero, e il magnesio magari solo nei giorni di scarico. */
+const QUANDO_INT = [
+  { id: 'sempre', l: 'Tutti i giorni' },
+  { id: 'on', l: 'Giorni di allenamento' },
+  { id: 'off', l: 'Giorni di riposo' }
+];
+
+/* Un giorno è "di allenamento" se ne hai registrato uno o se il programma ne
+   prevede uno: chi prende il pre-workout lo prende prima di andare, cioè
+   quando la sessione non è ancora scritta da nessuna parte. */
+function giornoDiAllenamento(d) {
+  if (di('w').some(w => w.d === d)) return true;
+  return !!allenamentoDi(gsDiData(d));
+}
+
+function integratoriDi(d) {
+  const on = giornoDiAllenamento(d);
+  return integratori().filter(x =>
+    x.quando === 'on' ? on : x.quando === 'off' ? !on : true);
+}
+
+const integratorePreso = (x, d) => (x.fatti || []).includes(d);
+
+const turni = () => di('tn').sort((a, b) => (a.ord || 0) - (b.ord || 0));
+const turnoInfo = id => (id ? DB.items.find(x => x.t === 'tn' && x.id === id) : null) || null;
+const turnoRiposo = () => turni().find(x => x.riposo) || null;
+
+/* Il seme parte una volta sola, e il segno che è già partito sta nel cfg, che
+   si sincronizza: sul secondo dispositivo i turni arrivano dalla rete, non
+   vengono ricreati uguali col rischio di doppioni. */
+function migraElencoTurni() {
+  const c = cfg();
+  if (c.turniSeed) return;
+  if (!di('tn').length) {
+    for (const x of TURNI_INIZIALI) aggiungi(Object.assign({ t: 'tn' }, x));
+  }
+  c.turniSeed = true;
+  tocca(c);
+}
+
+/* I sette giorni. L'ordine è quello del calendario italiano: getDay() mette la
+   domenica a 0, e usarlo così farebbe cominciare la settimana di domenica. */
+const GIORNI_SETT = [
+  { id: 'lun', b: 'Lun', l: 'Lunedì' }, { id: 'mar', b: 'Mar', l: 'Martedì' },
+  { id: 'mer', b: 'Mer', l: 'Mercoledì' }, { id: 'gio', b: 'Gio', l: 'Giovedì' },
+  { id: 'ven', b: 'Ven', l: 'Venerdì' }, { id: 'sab', b: 'Sab', l: 'Sabato' },
+  { id: 'dom', b: 'Dom', l: 'Domenica' }
+];
+const gsDiData = iso => GIORNI_SETT[(new Date(iso + 'T12:00:00').getDay() + 6) % 7].id;
+
+/* Il lunedì della settimana in cui cade una data. */
+function lunediDi(iso) {
+  const d = new Date((iso || oggiISO()) + 'T12:00:00');
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+/* Le giornate tipo (t:'gt') sono il vero piano: "Giorno 1 off", "Giorno 2 on".
+   Esistono da sole e non appartengono a nessun giorno della settimana — la
+   stessa giornata può stare sul lunedì e sul giovedì, che è come funziona una
+   rotazione vera. I sette giorni della settimana si limitano a puntarci
+   (t:'p'), e quel puntatore è tutto quello che contengono. */
+const giornate = () => di('gt').sort((a, b) => (a.n || '').localeCompare(b.n || '', 'it', { numeric: true }));
+
+function pianoRec(gs, crea) {
+  let p = DB.items.find(i => i.t === 'p' && i.gs === gs);
+  if (!p && crea) p = aggiungi({ id: 'piano-' + gs, t: 'p', gs, gt: '' });
+  return p || { t: 'p', gs, gt: '', _finto: true };
+}
+const giornataDi = gs => {
+  const p = pianoRec(gs);
+  return p.gt ? (DB.items.find(i => i.id === p.gt && i.t === 'gt') || null) : null;
+};
+const righePiano = gs => { const g = giornataDi(gs); return g ? (g.righe || []) : []; };
+const pianoPieno = gs => righePiano(gs).length > 0;
+const giornataById = id => DB.items.find(i => i.id === id && i.t === 'gt') || null;
+
+/* Prima le giornate stavano dentro il giorno della settimana. Chi ha già
+   compilato qualcosa non deve perderlo: al primo avvio della versione nuova
+   ogni vecchio piano diventa una giornata tipo, e il giorno la punta. */
+/* Prima il giorno sapeva solo se era "turno" o "riposo". Ora sa quale turno:
+   i riposi diventano OFF, gli altri restano senza turno finché non lo dici —
+   "turno" non diceva se era apertura, chiusura o notte, e inventarlo sarebbe
+   peggio che lasciarlo vuoto. */
+function migraTurni() {
+  const riposo = turnoRiposo();
+  for (const g of di('g')) {
+    if (g.turno !== undefined) continue;
+    g.turno = (g.tipo === 'off' && riposo) ? riposo.id : '';
+    delete g.tipo;
+    tocca(g);
+  }
+}
+
+function migraPiano() {
+  const vecchi = DB.items.filter(i => i.t === 'p' && Array.isArray(i.righe) && i.righe.length);
+  if (!vecchi.length) return;
+  for (const p of vecchi) {
+    const nome = p.nome || ('Giornata ' + (GIORNI_SETT.find(x => x.id === p.gs) || {}).l);
+    /* Se la stessa giornata è già stata migrata su un altro dispositivo e ci
+       è arrivata con la sincronizzazione, si riusa invece di duplicarla. */
+    let g = di('gt').find(x => x.n === nome && (x.righe || []).length === p.righe.length);
+    if (!g) g = aggiungi({ t: 'gt', n: nome, tipo: '', righe: p.righe });
+    p.gt = g.id;
+    delete p.righe; delete p.nome;
+    tocca(p);
+  }
+}
+
+/* L'allenamento della settimana funziona come il piano alimentare: il giorno
+   della settimana punta a una giornata di una scheda ("Rientro · Circuito A"),
+   e la stessa giornata può stare su più giorni. */
+function pianoAllRec(gs, crea) {
+  let p = DB.items.find(i => i.t === 'pa' && i.gs === gs);
+  if (!p && crea) p = aggiungi({ id: 'allena-' + gs, t: 'pa', gs, sid: '', gn: '' });
+  return p || { t: 'pa', gs, sid: '', gn: '', _finto: true };
+}
+
+function allenamentoDi(gs) {
+  const p = pianoAllRec(gs);
+  if (!p.sid || !p.gn) return null;
+  const sc = DB.items.find(i => i.id === p.sid && i.t === 's');
+  if (!sc) return null;
+  const g = (sc.giorni || []).find(x => x.n === p.gn);
+  return g ? { sc, g } : null;
+}
+
+/* Tutte le coppie scheda-giornata, per il menu a tendina. */
+function coppieAllenamento() {
+  const out = [];
+  for (const sc of schede()) {
+    for (const g of (sc.giorni || [])) {
+      out.push({ v: sc.id + '|' + g.n, l: (schede().length > 1 ? sc.n + ' · ' : '') + g.n, n: (g.eser || []).length });
+    }
+  }
+  return out;
+}
+const settimanaAllenamento = () => GIORNI_SETT.some(g => allenamentoDi(g.id));
+
+/* Copia la giornata assegnata a un giorno della settimana dentro il diario di
+   una data. Le righe diventano voci vere e da lì si modificano come le altre. */
+function applicaPiano(gs, data) {
+  const g = giornataDi(gs);
+  if (!g || !(g.righe || []).length) { toast('Questo giorno non ha ancora una giornata assegnata'); return; }
+
+  const gia = righeDi(data);
+  if (gia.length) {
+    if (!confirm('Il diario di ' + nomeGiorno(data).toLowerCase() + ' ha già ' + gia.length +
+      ' voci. Le sostituisco con il piano?')) return;
+    for (const r of gia) elimina(r.id);
+  }
+  for (const r of g.righe) {
+    aggiungi({ t: 'l', d: data, slot: r.slot, n: r.n, q: r.q, k: r.k, p: r.p, c: r.c, g: r.g });
+  }
+  /* Se la giornata sa di essere di turno o di riposo, lo dice anche al giorno:
+     il bersaglio delle calorie cambia di conseguenza, e ricordarselo a mano
+     ogni volta sarebbe un modo sicuro di sbagliarlo. */
+  /* Una giornata segnata OFF dice anche che quel giorno non lavori. Una
+     segnata ON non dice quale turno, quindi non tocca niente. */
+  const riposo = turnoRiposo();
+  if (g.tipo === 'off' && riposo && turnoDi(data) !== riposo.id) {
+    const gg = giorno(data, true);
+    gg.turno = riposo.id; tocca(gg);
+  }
+  haptic();
+  toast(g.righe.length + ' voci caricate · ' + g.n);
+  render();
+}
+
+/* Caricare un pasto solo, non tutta la giornata. È il gesto vero: il piano si
+   mangia un pasto alla volta, e chi lavora a turni salta o sposta un pasto
+   senza per questo voler ricaricare da capo tutto il giorno. */
+function applicaPasto(gs, data, slot) {
+  const g = giornataDi(gs);
+  if (!g) { toast('Questo giorno non ha ancora una giornata assegnata'); return; }
+  const rp = (g.righe || []).filter(r => r.slot === slot);
+  if (!rp.length) { toast('Il piano non prevede niente per questo pasto'); return; }
+
+  /* Se quel pasto è già scritto non lo si raddoppia: si sostituisce, altrimenti
+     un doppio tocco distratto conta due volte le stesse calorie. */
+  for (const r of righeDi(data).filter(r => r.slot === slot)) elimina(r.id);
+  for (const r of rp) {
+    aggiungi({ t: 'l', d: data, slot: r.slot, n: r.n, q: r.q, k: r.k, p: r.p, c: r.c, g: r.g });
+  }
+  haptic();
+  /* Chi registra un pasto lo sta mangiando adesso: la spunta va da sé.
+     Caricare tutta la giornata invece non spunta niente, ed è la differenza
+     fra "il piano è scritto" e "l'ho mangiato". */
+  if (!pastoFatto(data, slot)) segnaPasto(data, slot);
+  const pa = PASTI.find(x => x.id === slot);
+  toast((pa ? pa.l : 'Pasto') + ' fatto · ' + r0(somma(rp).k) + ' kcal');
+  render();
+}
+
+const slotOra = () => {
+  const h = new Date().getHours();
+  if (h < 10) return 'colazione';
+  if (h < 12) return 'spuntino1';
+  if (h < 15) return 'pranzo';
+  if (h < 18) return 'spuntino2';
+  if (h < 22) return 'cena';
+  return 'spuntino3';
+};
+
+/* ============================================================
+   4. Stato della navigazione
+   ============================================================ */
+
+let view = { name: 'oggi', d: oggiISO() };
+
+const TITOLI = {
+  oggi: 'Oggi', cibo: 'Cibo', allena: 'Allenamento', report: 'Report',
+  settings: 'Impostazioni', scheda: 'Scheda', sessione: 'Allenamento',
+  spesa: 'Lista della spesa', giornata: 'Giornata tipo', agenda: 'Agenda'
+};
+
+/* Le sottoschede: Cibo e Allenamento hanno ciascuna un registro filtrabile e
+   un'anagrafica. Restano in memoria così tornando dalla scheda ci si ritrova
+   dove si era. */
+const SUB = { cibo: 'diario', allena: 'sessioni' };
+
+function vai(v, push) {
+  /* Ogni stato porta con sé la data, anche chi non la usa: senza, un
+     vai({name:'oggi'}) scritto senza pensarci arriverebbe a
+     new Date('undefined') e farebbe cadere la schermata.
+     E la data che si eredita è quella che stavi guardando, non oggi: se stai
+     sistemando giovedì e passi a Cibo, tornando indietro devi ritrovarti su
+     giovedì. Ricominciare da oggi a ogni cambio di scheda voleva dire
+     riselezionare il giorno ogni volta. */
+  if (!v.d) v.d = view.d || oggiISO();
+  view = v;
+  if (push !== false) history.pushState(v, '', '');
+  window.scrollTo(0, 0);
+  render();
+}
+
+function render() {
+  const app = $('#app');
+  const t = view.name;
+  /* Il nome della schermata finisce sull'elemento: serve al CSS, che sul
+     telefono riordina la dashboard e non deve toccare le altre pagine. */
+  app.dataset.vista = t;
+  /* Anche la sincronizzazione e il ripristino di un backup possono aver
+     cambiato i tuoi alimenti senza passare da tocca(). */
+  if (DB._alimentiCambiati) { DB._alimentiCambiati = false; scadeCatalogo(); }
+
+  // vale anche per gli stati vecchi che tornano indietro dalla cronologia
+  if (!view.d) view.d = oggiISO();
+
+  /* Sulla dashboard il titolo è il marchio. Nelle altre schede resta la parola:
+     il logo ripetuto ovunque smetterebbe di dire qualcosa e toglierebbe spazio
+     al nome della schermata in cui ti trovi. */
+  /* Sul telefono la barra in alto porta il marchio, perché è l'unico posto in
+     cui può stare. È scritto, non un'immagine: un PNG a colori fissi non può
+     seguire il tema, e sul fondo nero il vecchio logo spariva. Sul Mac il
+     marchio è già nella colonna di sinistra: ripeterlo due volte sulla stessa
+     schermata è rumore, e quello spazio serve a dire dove sei. */
+  const largo = window.innerWidth >= 1000;
+  $('#topTitle').innerHTML = (t === 'oggi' && !largo)
+    ? `<span class="marchio"><i class="mk">F</i><b>Forma</b></span>`
+    : `${esc(TITOLI[t] || 'Forma')}${largo && ['oggi', 'agenda'].includes(t)
+        ? `<small class="tt-d">${esc(nomeGiorno(view.d))} · ${esc(dataLunga(view.d))}</small>` : ''}`;
+  $('#backBtn').hidden = !['scheda', 'sessione', 'spesa', 'giornata'].includes(t);
+  $('#settingsBtn').hidden = t === 'settings';
+
+  /* La scheda attiva si accende in entrambe le navigazioni: quella in basso sul
+     telefono e quella a sinistra sul Mac. */
+  $$('#tabbar button, .side-menu button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+
+  $('#fab').hidden = !['oggi', 'cibo', 'allena', 'agenda'].includes(t);
+
+  /* Tutto dentro un contenitore: sul Mac si centra invece di restare
+     appiccicato alla colonna di sinistra con il vuoto a destra. */
+  const dentro = html => { app.innerHTML = '<div class="wrap">' + html + '</div>'; };
+
+  if (t === 'oggi') dentro(vistaOggi());
+  else if (t === 'cibo') dentro(vistaCibo());
+  else if (t === 'allena') dentro(vistaAllena());
+  else if (t === 'report') dentro(vistaReport());
+  else if (t === 'settings') dentro(vistaSettings());
+  else if (t === 'scheda') dentro(vistaScheda());
+  else if (t === 'sessione') dentro(vistaSessione());
+  else if (t === 'spesa') dentro(vistaSpesa());
+  else if (t === 'giornata') dentro(vistaGiornata());
+  else if (t === 'agenda') dentro(vistaAgenda());
+
+  aggiornaPallino();
+  muoviPillola();
+  if (t === 'settings') mostraStatoPush();
+
+  const sf = $('#sideFoot');
+  if (sf) sf.innerHTML = 'Versione <b>' + APP_VERSION + '</b><br>' +
+    (typeof Sync !== 'undefined' && Sync.signedIn() ? 'Sincronizzato' : 'Solo su questo dispositivo');
+}
+
+/* ============================================================
+   5. Oggi — il diario della giornata
+   ============================================================ */
+
+function barraGiorno(d) {
+  /* Nessun blocco in avanti. Bloccarlo a oggi sembrava sensato — non puoi aver
+     mangiato domani — ma questo è anche un programma settimanale: dalla
+     domenica non si passava al lunedì dopo, e non si poteva preparare in
+     anticipo la giornata di un turno. */
+  return `<div class="daynav">
+    <button class="arw" data-day="-1" aria-label="Giorno precedente">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="lbl" data-act="calendario">${esc(nomeGiorno(d))}<small>${esc(dataLunga(d))}</small></button>
+    <button class="arw" data-day="1" aria-label="Giorno successivo">
+      <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>`;
+}
+
+/* L'anello delle calorie. Un cerchio SVG con il tratteggio calcolato: niente
+   librerie, e resta nitido su qualunque schermo. */
+function anello(fatto, target) {
+  const R = 42, C = 2 * Math.PI * R;
+  const q = target > 0 ? Math.min(fatto / target, 1) : 0;
+  const over = fatto > target;
+  const resta = r0(target - fatto);
+  return `<div class="ring ${over ? 'over' : ''}">
+    <svg viewBox="0 0 96 96">
+      <circle class="rest" cx="48" cy="48" r="${R}"/>
+      <circle class="arc" cx="48" cy="48" r="${R}"
+        stroke-dasharray="${C.toFixed(1)}"
+        stroke-dashoffset="${(C * (1 - q)).toFixed(1)}"
+        transform="rotate(-90 48 48)"/>
+    </svg>
+    <div class="mid"><b>${r0(fatto)}</b><span>di ${target}</span></div>
+  </div>`;
+}
+
+function barraMacro(cls, nome, fatto, target) {
+  const q = target > 0 ? fatto / target : 0;
+  const over = q > 1.08;
+  /* Sotto la barra i grammi che mancano: "52 su 130" è un rapporto da
+     calcolare a mente, "ne restano 78" è la cosa che poi vai a mangiare. */
+  const resta = r0(target - fatto);
+  return `<div class="macro ${cls}">
+    <div class="mh"><span class="mn">${nome}</span>
+      <span class="mv">${r0(fatto)}<i>/${target}</i></span></div>
+    <div class="bar"><i class="${over ? 'over' : ''}" style="width:${Math.min(q, 1) * 100}%"></i></div>
+    <div class="mr">${resta > 0 ? 'restano ' + resta + ' g' : (resta < 0 ? Math.abs(resta) + ' g oltre' : 'a bersaglio')}</div>
+  </div>`;
+}
+
+function vistaOggi() {
+  const d = view.d;
+  const g = giorno(d);
+  const t = cfg().target;
+  const righe = righeDi(d);
+  const tot = somma(righe);
+  const kt = kcalTarget(d);
+  const resta = r0(kt - tot.k);
+
+  let h = intestazioneOggi(d);
+
+  /* Frecce, data e striscia della settimana sono un comando solo: su schermo
+     largo stanno affiancati, e la data smette di essere scritta tre volte fra
+     titolo della pagina, navigatore e striscia. */
+  /* La settimana in cui cade il giorno mostrato: toccare "Gio" costa un tocco,
+     mentre con le sole frecce ce ne vorrebbero tre. Le frecce e la data stanno
+     già nell'intestazione, quindi qui resta la sola striscia. */
+  const lun = lunediDi(d);
+  h += `<div class="weekstrip">${GIORNI_SETT.map((wg, i) => {
+    const data = spostaData(lun, i);
+    const suo = righeDi(data).length > 0;
+    return `<button data-vaidata="${data}" class="${data === d ? 'on' : ''}">
+      ${wg.b}<i class="${suo ? 'pieno' : (pianoPieno(wg.id) ? 'piano' : '')}"></i></button>`;
+  }).join('')}</div>`;
+
+  /* Turno o riposo non è sparito, è diventato la scritta stessa: dice già quale
+     dei due sei e toccandola passi all'altro. Due pulsanti che ripetevano i
+     numeri già scritti nell'anello occupavano un terzo della scheda per una
+     cosa che si cambia una volta al giorno. */
+  const bicchieri = Math.round(t.acqua / 250);
+  const bevuti = Math.round(g.acqua / 250);
+
+  /* Il turno di lavoro è la cosa che decide la giornata: quando mangi, quanto
+     mangi, se ti alleni. Sta in cima, largo, e si cambia toccandolo. */
+  const tn = turnoInfo(turnoDi(d));
+  h += `<button class="turno-bar ${tn ? (tn.riposo ? 'riposo' : '') : 'vuoto'}" data-act="scegli-turno"
+    ${tn ? `style="border-left-color:${coloreTurno(tn)}"` : ''}>
+    <span class="tb-i">${tn ? (tn.ic || '\u{1F553}') : '\u{1F553}'}</span>
+    <span class="tb-t"><b>${tn ? esc(tn.n) : 'Turno non impostato'}</b>
+      <span>${tn ? esc(tn.ore || '') : 'Tocca per dire che turno fai oggi'}</span></span>
+    <span class="tb-c"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+  </button>`;
+
+  h += tessereOggi(d, tot, kt);
+
+  /* Da qui in giù, due colonne sul Mac e una sola sul telefono: le stesse
+     schede, impilate o affiancate. La navigazione qui sopra resta larga. */
+  h += `<div class="board"><div class="bc-a">`;
+
+  /* Sul telefono questa non si vede: il riepilogo sta più in basso, dopo il
+     piano e le cose da fare. Sul Mac invece è qui in cima a sinistra, dove le
+     colonne affiancate lo tengono sotto gli occhi senza scorrere. */
+  h += `<div class="sez sez-kcal1">` + riquadroCalorie(d, righe, tot, kt) + `</div>`;
+
+  h += riquadroAdesso(d, righe);
+  h += riquadroPiano(d, righe, tot);
+  h += `</div><div class="bc-b">`;
+
+  /* L'allenamento del giorno, se c'è. Sotto le calorie perché la domanda
+     "ho già allenato oggi?" viene dopo "quanto ho mangiato?". */
+  const sess = di('w').filter(w => w.d === d);
+  const prev = allenamentoDi(gsDiData(d));
+  h += `<div class="sez sez-allena">`;
+  h += `<div class="section-head"><h2>Allenamento</h2>
+    ${settimanaAllenamento() ? '<button class="act" data-act="allena-settimana">Settimana</button>' : ''}</div>`;
+
+  if (sess.length) {
+    h += sess.map(w => rigaSessione(w)).join('');
+  } else if (prev) {
+    /* Quello che tocca oggi, con il pulsante per partire: la scheda giusta la
+       sa già il piano della settimana, non deve ricordarsela tu. */
+    const eser = prev.g.eser || [];
+    const nEser = eser.length;
+    const serieTot = eser.reduce((n, e) => n + (isCardio(e) ? 0 : num(e.serie, 0)), 0);
+    /* Come il piano alimentare mostra i pasti, qui si mostrano gli esercizi:
+       "Upper Body · 11 esercizi" non dice niente che tu non sappia già, mentre
+       sapere che si comincia con 5x5 di panca cambia come ci arrivi. */
+    h += `<div class="plan-hero">
+      <div class="ph-top">
+        <span class="ph-badge">${GIORNI_SETT.find(x => x.id === gsDiData(d)).b}</span>
+        <span class="ph-t"><b>${esc(prev.g.n)}</b><small class="ph-gg">${esc(prev.sc.n)}</small>
+          <span>${nEser} ${nEser === 1 ? 'esercizio' : 'esercizi'}${serieTot ? ' · ' + serieTot + ' serie' : ''}</span></span>
+      </div>
+      <div class="ph-meals">
+        ${eser.slice(0, 5).map(e => `<div class="pm">
+          <span class="pmh"><span class="pmn">${esc(e.n)}</span>
+            <b>${isCardio(e) ? (e.min ? e.min + ' min' : 'cardio') : num(e.serie, 3) + '×' + esc(e.rip || '')}</b></span>
+        </div>`).join('')}
+        ${nEser > 5 ? `<div class="pm"><span class="pmh"><span class="pmn">e altri ${nEser - 5}</span></span></div>` : ''}
+      </div>
+      <button class="ph-cta" data-avvia="${prev.sc.id}|${esc(prev.g.n)}">Inizia l'allenamento</button>
+    </div>`;
+  } else if (settimanaAllenamento()) {
+    /* Il piano c'è ma oggi non prevede niente: dirlo vale più di una casella
+       vuota, perché "riposo" è una scelta del programma, non una dimenticanza. */
+    h += `<button class="card-row" data-act="allena-settimana">
+      <span class="cbadge">😴</span>
+      <span class="cb"><h3>Giorno di riposo</h3>
+        <span class="meta">Il programma non prevede allenamento oggi</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  } else {
+    h += `<button class="card-row" data-act="allena-vai">
+      <span class="cbadge coral">＋</span>
+      <span class="cb"><h3>Nessun allenamento</h3>
+        <span class="meta">Tocca per partire da una scheda</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  h += `</div><div class="sez sez-integra">` + riquadroIntegrazione(d) + `</div>`;
+  h += `<div class="sez sez-agenda">`;
+
+  /* Le cose da fare si spuntano da qui, senza passare dall'agenda: sono la
+     metà dei tocchi di una giornata, e mandare a un'altra schermata per una
+     casella da barrare è il modo migliore per non barrarla. */
+  const tutte = agendaDi(d);
+  const voci = tutte.filter(v => !v.fatto);
+  const fatte = tutte.length - voci.length;
+  const arr = arretrati(d);
+  const restano = voci.length + arr.length;
+  h += `<div class="section-head"><h2>Da fare</h2>
+    <span class="count">${restano ? restano + (fatte ? ' · ' + fatte + ' fatte' : '') : (fatte ? fatte + ' fatte' : '')}</span></div>`;
+
+  if (!restano && !fatte) {
+    h += `<button class="card-row" data-act="nuova-agenda">
+      <span class="cbadge coral">\uFF0B</span>
+      <span class="cb"><h3>Niente in agenda</h3>
+        <span class="meta">Tocca per scrivere cosa devi fare ${esc(nomeGiorno(d).toLowerCase())}</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  } else if (!restano) {
+    h += `<button class="card-row" data-act="nuova-agenda">
+      <span class="cbadge">\u2705</span>
+      <span class="cb"><h3>Tutto fatto</h3>
+        <span class="meta">${fatte} ${fatte === 1 ? 'cosa fatta' : 'cose fatte'} · tocca per aggiungerne una</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  } else {
+    /* Prima quelle a orario, che hanno una scadenza dentro la giornata. */
+    const conOra = voci.filter(v => v.ora);
+    const senzaOra = voci.filter(v => !v.ora);
+    const mostra = conOra.concat(senzaOra).slice(0, 4);
+    h += `<div class="panel" style="margin-top:0">
+      ${mostra.map(rigaAgenda).join('')}
+      ${restano > mostra.length + arr.length
+        ? `<button class="ag-piu" data-act="vai-agenda">e altre ${restano - mostra.length - arr.length}</button>`
+        : ''}
+      <button class="ag-piu" data-act="nuova-agenda">\uFF0B Aggiungi</button>
+    </div>`;
+    /* Gli arretrati staccati: una cosa rimasta indietro di tre giorni non è
+       una voce di oggi, e in mezzo alle altre sparisce. */
+    if (arr.length) {
+      h += `<div class="section-head"><h2>In ritardo</h2>
+        <span class="count">${arr.length}</span></div>
+        <div class="panel" style="margin-top:0">${arr.slice(0, 3).map(v => rigaAgenda({
+          id: v.id, ric: false, ora: '', n: v.n, cat: v.cat || 'personale',
+          fatto: false, note: v.note || '', da: v.d
+        })).join('')}</div>`;
+    }
+  }
+
+  /* La settimana sta in una colonna sua: su schermo molto largo si vede senza
+     scorrere, sotto i 1400 px torna in coda alla seconda colonna. */
+  h += `</div>`;
+  /* Il riepilogo di nuovo qui sotto: sul telefono è il punto in cui, dopo aver
+     letto piano, cose da fare e allenamento, ti richiedi quanto ti resta. Sul
+     Mac sta già a sinistra sotto gli occhi, quindi lì si nasconde. */
+  h += `<div class="sez sez-kcal2">
+    <div class="section-head"><h2>Riepilogo</h2>
+      <button class="act" data-act="vai-diario">Vedi il diario</button></div>
+    ${riquadroCalorie(d, righe, tot, kt)}
+  </div>`;
+  h += `</div><div class="bc-c">`;
+  h += riquadroSettimana(d);
+  h += `</div></div>`;
+  return h;
+}
+
+/* Come sta andando la settimana. Prende il posto dell'elenco dei pasti, che
+   ripeteva quello che il riquadro del piano mostra già più in alto e che si
+   legge comunque nel Diario. Qui invece c'è la sola cosa che la giornata
+   singola non può dirti: se la direzione è giusta. */
+/* L'integrazione del giorno. È una lista della spesa che si spunta: quello che
+   conta è vedere in un colpo cosa manca ancora, non la storia. */
+/* L'intestazione della dashboard: saluto a sinistra, data a destra. Il saluto
+   cambia con l'ora — non è un vezzo, è il modo più corto di dire "questa è la
+   giornata di adesso" senza scrivere una data due volte. */
+function intestazioneOggi(d) {
+  const nome = (cfg().profilo.nome || '').trim();
+  const ora = new Date().getHours();
+  const salda = ora < 5 ? 'Buonanotte' : ora < 13 ? 'Buongiorno' : ora < 18 ? 'Buon pomeriggio' : 'Buonasera';
+  const oggi = d === oggiISO();
+
+  /* Quanto dista il giorno che stai guardando. Serve per non perdere il filo
+     quando ti sposti avanti e indietro con le frecce: "3 giorni fa" si capisce
+     al volo, una data no. */
+  const dist = Math.round((new Date(d + 'T12:00:00') - new Date(oggiISO() + 'T12:00:00')) / 864e5);
+  const quando = dist === 0 ? 'oggi' : dist === 1 ? 'domani' : dist === -1 ? 'ieri'
+    : dist > 0 ? 'fra ' + dist + ' giorni' : Math.abs(dist) + ' giorni fa';
+
+  return `<div class="hero">
+    <div class="hero-t">
+      <h1>${oggi ? esc(salda) : esc(nomeGiorno(d))}${nome && oggi ? ' ' + esc(nome) : ''}</h1>
+      <p>${rigaStato(d)}</p>
+    </div>
+    <div class="hero-d">
+      ${oggi ? '' : `<button class="hero-oggi" data-act="oggi">Oggi</button>`}
+      <button class="arw" data-day="-1" aria-label="Giorno precedente">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="hero-lbl" data-act="calendario">${esc(dataLunga(d))}<small>${esc(quando)}</small></button>
+      <button class="arw" data-day="1" aria-label="Giorno successivo">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  </div>`;
+}
+
+/* La riga sotto il saluto. Prima era una frase motivazionale sempre uguale,
+   che dopo due giorni non la leggi più. Adesso dice cosa manca davvero: è
+   l'unico posto della pagina che mette insieme calorie, pasti e allenamento
+   in una frase sola. */
+function rigaStato(d) {
+  const righe = righeDi(d);
+  const kt = kcalTarget(d);
+  const resta = r0(kt - somma(righe).k);
+  const pezzi = [];
+
+  const gt = giornataDi(gsDiData(d));
+  if (righe.length) {
+    pezzi.push(resta >= 0
+      ? `ti restano <b>${resta} kcal</b>`
+      : `sei <b>${Math.abs(resta)} kcal</b> oltre`);
+  } else if (gt && (gt.righe || []).length) {
+    pezzi.push(`il piano di oggi è <b>${esc(gt.n)}</b>, ${r0(somma(gt.righe).k)} kcal`);
+  } else {
+    pezzi.push('non hai ancora registrato niente');
+  }
+
+  /* Quanti pasti del piano mancano: è il numero che decide la serata. */
+  if (gt && (gt.righe || []).length) {
+    const scritti = new Set(righe.map(r => r.slot));
+    const mancano = PASTI.filter(pa => (gt.righe || []).some(r => r.slot === pa.id) && !scritti.has(pa.id)).length;
+    if (mancano) pezzi.push(`<b>${mancano}</b> ${mancano === 1 ? 'pasto' : 'pasti'} da registrare`);
+    else if (righe.length) pezzi.push('piano completato');
+  }
+
+  const sess = di('w').filter(w => w.d === d);
+  const prev = allenamentoDi(gsDiData(d));
+  if (sess.length) pezzi.push(sess.some(w => w.fine) ? 'allenamento fatto' : 'allenamento in corso');
+  else if (prev) pezzi.push(`ti aspetta <b>${esc(prev.g.n)}</b>`);
+
+  const daFare = agendaDi(d).filter(v => !v.fatto).length + arretrati(d).length;
+  if (daFare) pezzi.push(`<b>${daFare}</b> ${daFare === 1 ? 'cosa' : 'cose'} da fare`);
+
+  return pezzi.join(' · ');
+}
+
+/* Le quattro tessere in cima. Sono i numeri che si guardano di sfuggita, e
+   per questo non hanno grafici dentro: valore grande, bersaglio piccolo. */
+function tessereOggi(d, tot, kt) {
+  const g = giorno(d);
+  const t = cfg().target;
+  const olio = olioDi(d);
+  const acqua = g.acqua || 0;
+  const tess = [
+    { ic: '\u{1F45F}', cls: 'verde', l: 'Passi',
+      v: g.passi ? g.passi.toLocaleString('it-IT') : '—', su: '/ ' + t.passi.toLocaleString('it-IT'),
+      q: t.passi ? Math.min(1, (g.passi || 0) / t.passi) : 0, act: 'passi' },
+    { ic: '\u{1F525}', cls: 'ambra', l: 'Calorie',
+      v: r0(tot.k).toLocaleString('it-IT'), su: '/ ' + r0(kt).toLocaleString('it-IT') + ' kcal',
+      q: kt ? Math.min(1, tot.k / kt) : 0, act: 'vai-diario' },
+    { ic: '\u{1F4A7}', cls: 'blu', l: 'Acqua',
+      v: r1(acqua / 1000) + ' L', su: '/ ' + r1(t.acqua / 1000) + ' L',
+      q: t.acqua ? Math.min(1, acqua / t.acqua) : 0, acqua: true },
+    { ic: '\u{1FAD2}', cls: 'oliva', l: 'Olio',
+      v: olio ? r1(olio) + ' g' : '—', su: '/ ' + t.olio + ' g',
+      q: t.olio ? Math.min(1, olio / t.olio) : 0, oltre: olio > t.olio }
+  ];
+  return `<div class="tessere">${tess.map(x => `
+    <div class="tess ${x.cls} ${x.oltre ? 'oltre' : ''}">
+      <div class="tess-h"><span class="tess-i">${x.ic}</span>${esc(x.l)}</div>
+      <div class="tess-v">${x.v}<small>${esc(x.su)}</small></div>
+      <div class="tess-b"><i style="width:${(x.q * 100).toFixed(0)}%"></i></div>
+      ${x.acqua
+        ? `<div class="tess-az">
+             <button data-acqua="-250" aria-label="Togli un bicchiere">−</button>
+             <button data-acqua="250">+250 ml</button>
+           </div>`
+        : x.act ? `<button class="tess-az sola" data-act="${x.act}">${x.act === 'passi' ? 'Aggiorna' : 'Vedi il diario'}</button>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+/* Il riepilogo delle calorie. È una funzione e non un pezzo di vistaOggi
+   perché sul telefono compare due volte: in cima, e di nuovo in fondo dopo
+   piano, cose da fare e allenamento — che è dove ti chiedi di nuovo quanto
+   ti resta, senza voler risalire tutta la pagina. */
+function riquadroCalorie(d, righe, tot, kt) {
+  const g = giorno(d);
+  const t = cfg().target;
+  const resta = r0(kt - tot.k);
+  const bicchieri = Math.round(t.acqua / 250);
+  const bevuti = Math.round(g.acqua / 250);
+  return `<div class="kcal-card">
+    <div class="kcal-top">
+      ${anello(tot.k, kt)}
+      <div class="kcal-side">
+        <div class="big">${resta >= 0 ? resta + ' kcal disponibili' : Math.abs(resta) + ' kcal oltre'}</div>
+        <div class="sub">
+          ${righe.length
+            ? `<button class="link" data-act="vai-diario">${righe.length}${righe.length === 1 ? ' voce registrata' : ' voci registrate'}</button>`
+            : 'Niente ancora'}
+          ${turnoScritto(d) ? '<span class="ecc">turno cambiato a mano</span>' : ''}
+        </div>
+      </div>
+    </div>
+    <div class="macros">
+      ${barraMacro('p', 'Prot', tot.p, t.prot)}
+      ${barraMacro('c', 'Carb', tot.c, t.carb)}
+      ${barraMacro('g', 'Grassi', tot.g, t.gras)}
+    </div>
+    <div class="acqua-row">
+      <span class="ar-t">💧 Acqua<b>${r1(g.acqua / 1000)}<i> / ${r1(t.acqua / 1000)} L</i></b></span>
+      <span class="ar-b">
+        <button data-acqua="-250" aria-label="Togli un bicchiere">−</button>
+        <button data-acqua="250">+250 ml</button>
+      </span>
+      <span class="water">${Array.from({ length: bicchieri }, (_, i) =>
+        `<i class="${i < bevuti ? 'on' : ''}"></i>`).join('')}</span>
+    </div>
+  </div>`;
+}
+
+function riquadroIntegrazione(d) {
+  const voci = integratoriDi(d);
+  const presi = voci.filter(x => integratorePreso(x, d)).length;
+
+  let h = `<div class="section-head"><h2>Integrazione</h2>
+    ${voci.length
+      ? `<span class="count">${presi} di ${voci.length}</span>`
+      : `<button class="act" data-act="int-nuovo">Aggiungi</button>`}</div>`;
+
+  if (!voci.length) {
+    /* Distinguo "non ne hai messi" da "oggi non ne prendi": la seconda è una
+       scelta del programma, e dirlo evita di farla sembrare una dimenticanza. */
+    const tutti = integratori().length;
+    return h + `<button class="card-row" data-act="int-nuovo">
+      <span class="cbadge ${tutti ? '' : 'coral'}">${tutti ? '\u{1F4A4}' : '\uFF0B'}</span>
+      <span class="cb"><h3>${tutti ? 'Niente da prendere oggi' : 'Nessun integratore'}</h3>
+        <span class="meta">${tutti
+          ? 'Quelli che hai messo valgono per altri giorni'
+          : 'Tocca per aggiungere il primo'}</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  h += `<div class="panel" style="margin-top:0">
+    ${voci.map(x => {
+      const m = momento(x.quando_m);
+      const ok = integratorePreso(x, d);
+      return `<div class="ag-r ${ok ? 'fatto' : ''}">
+        <button class="ag-t" data-intfatto="${x.id}" aria-label="Preso">
+          <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg></button>
+        <span class="ag-c" style="background:var(--accento)"></span>
+        <button class="ag-b" data-intmod="${x.id}">
+          <span class="ag-n">${esc(x.n)}${x.dose ? ' <b>' + esc(x.dose) + '</b>' : ''}</span>
+          <span class="ag-m"><i class="em">${m.ic}</i>${esc(m.l)}${
+            x.quando !== 'sempre' ? ' · ' + esc(x.quando === 'on' ? 'giorni di allenamento' : 'giorni di riposo') : ''
+          }${x.note ? ' · ' + esc(x.note) : ''}</span>
+        </button>
+      </div>`;
+    }).join('')}
+    <button class="ag-piu" data-act="int-nuovo">Aggiungi un integratore</button>
+  </div>`;
+  return h;
+}
+
+function riquadroSettimana(d) {
+  const t = cfg().target;
+  const lun = lunediDi(d);
+  const giorni = Array.from({ length: 7 }, (_, i) => spostaData(lun, i));
+  const oggi = oggiISO();
+
+  /* Solo i giorni già passati e con qualcosa scritto: contare i giorni futuri
+     come "zero calorie" farebbe crollare la media e non vorrebbe dire niente. */
+  const conDati = giorni.filter(x => x <= oggi && righeDi(x).length);
+  const kcal = conDati.map(x => somma(righeDi(x)).k);
+  const media = kcal.length ? kcal.reduce((a, b) => a + b, 0) / kcal.length : 0;
+  const prot = conDati.length
+    ? conDati.reduce((a, x) => a + somma(righeDi(x)).p, 0) / conDati.length : 0;
+  const inTarget = conDati.filter(x => Math.abs(somma(righeDi(x)).k - kcalTarget(x)) <= kcalTarget(x) * 0.10).length;
+
+  const sess = di('w').filter(w => w.d >= giorni[0] && w.d <= giorni[6]);
+  const volume = sess.reduce((v, w) => v + statSessione(w).volume, 0);
+
+  const ms = misure();
+  const ultima = ms[ms.length - 1];
+  const prec = ms[ms.length - 2];
+  const dPeso = ultima && prec && ultima.peso && prec.peso ? num(ultima.peso) - num(prec.peso) : null;
+
+  const maxK = Math.max(t.kcal, ...kcal) * 1.05 || 1;
+
+  let h = `<div class="section-head"><h2>La settimana</h2>
+    <button class="act" data-act="vai-report">Report completo</button></div>`;
+
+  if (!conDati.length && !sess.length) {
+    return h + vuoto('📈', 'Ancora niente questa settimana',
+      'Registra un pasto o un allenamento e qui compare l’andamento: media, aderenza al piano e volume.');
+  }
+
+  h += `<div class="panel" style="margin-top:0">
+    <div class="wk-bars">${giorni.map(x => {
+      const futuro = x > oggi;
+      const k = righeDi(x).length ? somma(righeDi(x)).k : 0;
+      const kt = kcalTarget(x);
+      const allenato = di('w').some(w => w.d === x);
+      return `<button class="wb ${x === d ? 'on' : ''}" data-vaidata="${x}">
+        <i class="${!k ? 'vuoto' : (k > kt * 1.05 ? 'over' : '')}"
+           style="height:${k ? Math.max(4, k / maxK * 100) : 4}%"></i>
+        <u class="${allenato ? 'si' : ''}"></u>
+        <span>${GIORNI_SETT[(new Date(x + 'T12:00:00').getDay() + 6) % 7].b}</span>
+      </button>`;
+    }).join('')}</div>
+    <div class="legend" style="margin-top:9px">
+      <span><i style="background:var(--accento)"></i>entro il bersaglio</span>
+      <span><i style="background:var(--evidenza)"></i>oltre</span>
+      <span><i style="background:var(--secondario);border-radius:50%"></i>allenamento</span>
+    </div>
+  </div>`;
+
+  h += `<div class="kpis" style="margin-top:12px">
+    <div class="kpi"><div class="kl">Media kcal</div>
+      <div class="kv">${conDati.length ? r0(media) : '—'}</div>
+      <div class="kd ${!conDati.length ? 'pari' : Math.abs(media - t.kcal) < t.kcal * .05 ? 'pari' : media > t.kcal ? 'su' : 'giu'}">
+        ${conDati.length ? conDati.length + (conDati.length === 1 ? ' giorno' : ' giorni') + ' su 7' : 'niente registrato'}</div></div>
+    <div class="kpi"><div class="kl">Media proteine</div>
+      <div class="kv">${conDati.length ? r0(prot) : '—'}<small> g</small></div>
+      <div class="kd ${prot >= t.prot * .95 ? 'giu' : 'su'}">bersaglio ${t.prot} g</div></div>
+    <div class="kpi"><div class="kl">Aderenza</div>
+      <div class="kv">${conDati.length ? r0(inTarget / conDati.length * 100) : '—'}<small>%</small></div>
+      <div class="kd pari">${inTarget} ${inTarget === 1 ? 'giorno' : 'giorni'} entro il 10%</div></div>
+    <div class="kpi"><div class="kl">Allenamenti</div>
+      <div class="kv">${sess.length}</div>
+      <div class="kd pari">${volume ? r0(volume).toLocaleString('it-IT') + ' kg' : 'nessun volume'}</div></div>
+  </div>`;
+
+  if (dPeso !== null) {
+    h += `<div class="card-row" style="margin-top:12px">
+      <span class="cbadge">⚖️</span>
+      <span class="cb"><h3>${r1(ultima.peso)} kg</h3>
+        <span class="meta">ultima misura del ${esc(dataCorta(ultima.d))}</span></span>
+      <span class="badge ${dPeso < 0 ? 'ok' : dPeso > 0 ? 'no' : 'neutro'}">${dPeso > 0 ? '+' : ''}${r1(dPeso)} kg</span>
+    </div>`;
+  } else {
+    h += `<button class="card-row" style="margin-top:12px" data-act="nuova-misura">
+      <span class="cbadge coral">⚖️</span>
+      <span class="cb"><h3>Registra il peso</h3>
+        <span class="meta">peso e girovita una volta a settimana</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+  return h;
+}
+
+/* Il piano del giorno scelto, in evidenza: è la domanda con cui apri l'app —
+   "cosa devo mangiare oggi" — e finché non è caricato nel diario è anche l'unica
+   azione che ha senso fare qui. Sta subito sotto le calorie, prima di tutto il
+   resto. */
+/* La domanda che si fa aprendo l'app non è "quante calorie ho mangiato" ma
+   "adesso cosa mi tocca". Questo riquadro risponde a quella: il primo pasto del
+   piano che non è ancora nel diario, con dentro cosa c'è e il pulsante per
+   scriverlo. Il pasto giusto lo decide il diario, non l'orologio — chi fa il
+   turno di notte cena alle tre e l'orologio sbaglierebbe sempre. */
+function riquadroAdesso(d, righe) {
+  const gs = gsDiData(d);
+  const gt = giornataDi(gs);
+  if (!gt || !(gt.righe || []).length) return '';
+
+  /* I pasti previsti dal piano, nell'ordine dell'orologio, con accanto se li
+     hai spuntati. La spunta e non il diario: caricare la giornata scrive tutte
+     le voci in una volta, e a quel punto "quale pasto mi tocca" darebbe sempre
+     la stessa risposta sbagliata. */
+  const previsti = PASTI
+    .map(pa => ({ pa, righe: (gt.righe || []).filter(r => r.slot === pa.id) }))
+    .filter(x => x.righe.length);
+  const restano = previsti.filter(x => !pastoFatto(d, x.pa.id));
+
+  const kResta = r0(restano.reduce((k, x) => k + somma(x.righe).k, 0));
+  const fatti = previsti.length - restano.length;
+
+  let h = `<div class="section-head"><h2>Adesso</h2>
+    <span class="count">${fatti} di ${previsti.length} pasti</span></div>`;
+
+  if (!restano.length) {
+    return h + `<div class="adesso fatto">
+      <span class="ad-i">\u2705</span>
+      <span class="ad-t"><b>Piano completato</b>
+        <span>Tutti i ${previsti.length} pasti di ${esc(gt.n)} sono nel diario</span></span>
+    </div>`;
+  }
+
+  /* Quello che tocca adesso è il primo non ancora scritto; se l'orologio è già
+     oltre, lo dice ma non cambia il pasto: saltarne uno è una scelta, non un
+     errore da correggere in automatico. */
+  const x = restano[0];
+  const tm = somma(x.righe);
+  const tardi = PASTI.findIndex(pa => pa.id === slotOra()) > PASTI.findIndex(pa => pa.id === x.pa.id);
+
+  h += `<div class="adesso">
+    <div class="ad-h">
+      <span class="ad-i">${x.pa.ic}</span>
+      <span class="ad-t"><b>${esc(x.pa.l)}</b>
+        <span>${r0(tm.k)} kcal · ${r0(tm.p)} g prot${tardi && d === oggiISO() ? ' · in ritardo' : ''}</span></span>
+      <button class="ad-cta" data-pasto="${gs}|${x.pa.id}" data-data="${d}">Registra</button>
+    </div>
+    <div class="ad-l">${x.righe.map(r => esc(r.n) + ' <b>' + r1(r.q) + ' g</b>').join(' · ')}</div>
+  </div>`;
+
+  /* Quanto resta da mangiare secondo il piano, accanto a quanto resta di
+     budget: è il confronto che dice se la giornata sta tornando o no. */
+  if (restano.length > 1) {
+    h += `<div class="ad-dopo">${restano.slice(1).map(y =>
+      `<button class="ad-p" data-pasto="${gs}|${y.pa.id}" data-data="${d}">
+        <i class="em">${y.pa.ic}</i>${esc(y.pa.l)}<b>${r0(somma(y.righe).k)}</b></button>`).join('')}</div>`;
+  }
+  h += `<div class="ad-tot">Resta da mangiare <b>${kResta} kcal</b> in
+    ${restano.length} ${restano.length === 1 ? 'pasto' : 'pasti'}</div>`;
+  return h;
+}
+
+function riquadroPiano(d, righe, tot) {
+  const gs = gsDiData(d);
+  const g = GIORNI_SETT.find(x => x.id === gs);
+  const gt = giornataDi(gs);
+
+  if (!gt || !(gt.righe || []).length) {
+    return `<button class="plan-hero vuoto" data-act="vai-piano">
+      <span class="ph-badge">${g.b}</span>
+      <span class="ph-t"><b>Nessuna giornata per ${esc(g.l.toLowerCase())}</b>
+        <span>Assegnane una in Cibo → Piano e la ricarichi ogni ${esc(g.l.toLowerCase())} in un tocco</span></span>
+      <span class="ph-go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  const p = gt;
+  const tp = somma(p.righe);
+  /* Quanto ti sei discostato dal piano. È il confronto che conta: la media
+     settimanale non dice se oggi hai seguito il programma o improvvisato. */
+  const scarto = righe.length ? r0(tot.k - tp.k) : null;
+
+  /* L'elenco dei pasti si può ripiegare, ma parte aperto: la prima cosa che
+     vuoi sapere aprendo l'app è cosa mangi, non che esiste un piano. */
+  const aperto = DB.settings.pianoAperto !== false;
+
+  let h = `<div class="plan-hero">
+    <div class="ph-top" data-act="piega-piano">
+      <span class="ph-badge">${g.b}</span>
+      <span class="ph-t"><b>${esc(gt.n)}</b><small class="ph-gg">${esc(g.l)}</small>
+        <span>${r0(tp.k)} kcal · ${r0(tp.p)} g prot</span></span>
+      <button class="ph-edit" data-act="vai-piano">Modifica</button>
+      <span class="ph-chev ${aperto ? 'su' : ''}">
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+    </div>`;
+
+  if (aperto) {
+    /* Un pasto già scritto nel diario si vede a colpo d'occhio: senza questo,
+       l'elenco del piano e quello di quanto hai mangiato sembrano la stessa
+       cosa e non si capisce cosa manca ancora. */
+    const scritti = new Set(righe.map(r => r.slot));
+    h += `<div class="ph-meals">`;
+    for (const pa of PASTI) {
+      const rp = p.righe.filter(r => r.slot === pa.id);
+      if (!rp.length) continue;
+      const tm = somma(rp);
+      const ok = pastoFatto(d, pa.id);
+      const inDiario = scritti.has(pa.id);
+      /* La spunta la metti tu quando hai mangiato. Il "＋" resta solo per i
+         pasti che nel diario non ci sono ancora, e serve a scriverceli. */
+      h += `<div class="pm ${ok ? 'ok' : ''}">
+        <span class="pmh">
+          <button class="pm-t" data-pastofatto="${pa.id}" aria-label="Segna come fatto">
+            <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg></button>
+          <span class="pmn"><i class="pmi">${pa.ic}</i>${esc(pa.l)}</span>
+          ${inDiario ? '' : `<button class="pm-add" data-pasto="${gs}|${pa.id}" data-data="${d}">＋</button>`}
+          <b>${r0(tm.k)} kcal</b></span>
+        <span class="pml">${rp.map(r =>
+          `<span class="pf"><span class="pfn">${esc(r.n)}</span><b>${r1(r.q)} g</b></span>`).join('')}</span>
+        <span class="pmm">${r0(tm.p)} g prot · ${r0(tm.c)} g carb · ${r0(tm.g)} g gras</span>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  if (scarto === null) {
+    h += `<button class="ph-cta" data-applica="${gs}" data-data="${d}">
+      Carica nel diario · ${r0(tp.k)} kcal</button>`;
+  } else {
+    const stato = Math.abs(scarto) <= tp.k * 0.03 ? 'ok' : (scarto > 0 ? 'no' : 'neutro');
+    h += `<div class="ph-conf">
+        <span>Registrato <b>${r0(tot.k)}</b> contro <b>${r0(tp.k)}</b> del piano</span>
+        <span class="badge ${stato}">${Math.abs(scarto) <= tp.k * 0.03 ? 'in linea' : (scarto > 0 ? '+' : '−') + Math.abs(scarto) + ' kcal'}</span>
+      </div>
+      <button class="ph-cta sec" data-applica="${gs}" data-data="${d}">Ricarica il piano</button>`;
+  }
+  return h + `</div>`;
+}
+
+function rigaSessione(w) {
+  const nSerie = (w.eser || []).reduce((n, e) => n + (e.sets || []).filter(s => s.ok).length, 0);
+  const volume = (w.eser || []).reduce((v, e) =>
+    v + (e.sets || []).filter(s => s.ok).reduce((x, s) => x + num(s.r) * num(s.w), 0), 0);
+  const min = (w.eser || []).reduce((x, e) => x + num(e.min), 0);
+  const dettagli = [];
+  if (w.dur) dettagli.push(w.dur + ' min');
+  if (nSerie) dettagli.push(nSerie + ' serie');
+  if (volume) dettagli.push(r0(volume).toLocaleString('it-IT') + ' kg di volume');
+  if (min) dettagli.push(min + ' min di cardio');
+  return `<button class="card-row" data-sess="${w.id}">
+    <span class="cbadge">${w.fine ? '✓' : '▶'}</span>
+    <span class="cb"><h3>${esc(w.gn || w.sn || 'Allenamento')}</h3>
+      <span class="meta">${dettagli.length ? esc(dettagli.join(' · ')) : 'da compilare'}${w.fine ? '' : ' · in corso'}</span></span>
+    <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+  </button>`;
+}
+
+/* ============================================================
+   6. Motore dei filtri
+   ============================================================
+
+   Gli stessi filtri servono in tre punti — la tabella a schermo, i totali in
+   fondo e l'esportazione. Sono un oggetto solo e una funzione sola: se fossero
+   ricopiati, prima o poi l'export mostrerebbe righe diverse da quelle a video.
+*/
+
+const PERIODI = [
+  { id: 'oggi', l: 'Oggi' },
+  { id: '7', l: '7 giorni' },
+  { id: '30', l: '30 giorni' },
+  { id: 'mese', l: 'Questo mese' },
+  { id: 'scorso', l: 'Mese scorso' },
+  { id: 'anno', l: "Quest'anno" },
+  { id: 'tutto', l: 'Tutto' },
+  { id: 'custom', l: 'Date scelte' }
+];
+
+const FILTRI_DEFAULT = {
+  cibo:   { per: '7',  da: '', a: '', q: '', slot: [], cat: [], ord: 'data-' },
+  alim:   { q: '', cat: [], soloMiei: false, ord: 'nome' },
+  allena: { per: '30', da: '', a: '', q: '', gruppo: [], ord: 'data-' },
+  report: { per: '30', da: '', a: '' }
+};
+
+function filtri(k) {
+  DB.settings.filtri = DB.settings.filtri || {};
+  DB.settings.filtri[k] = Object.assign({}, FILTRI_DEFAULT[k], DB.settings.filtri[k] || {});
+  return DB.settings.filtri[k];
+}
+
+/* Da un periodo scelto a due date vere. Restituisce sempre un intervallo
+   chiuso: le query diventano un confronto fra stringhe ISO, che in ordine
+   alfabetico coincide con l'ordine cronologico. */
+function intervallo(f) {
+  const o = oggiISO();
+  switch (f.per) {
+    case 'oggi': return { da: o, a: o };
+    case '7': return { da: spostaData(o, -6), a: o };
+    case '30': return { da: spostaData(o, -29), a: o };
+    case 'mese': return { da: o.slice(0, 8) + '01', a: o };
+    case 'scorso': {
+      const d = new Date(o + 'T12:00:00');
+      const p = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      const u = new Date(d.getFullYear(), d.getMonth(), 0);
+      const iso = x => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      return { da: iso(p), a: iso(u) };
+    }
+    case 'anno': return { da: o.slice(0, 4) + '-01-01', a: o };
+    case 'tutto': return { da: '0000-01-01', a: '9999-12-31' };
+    default: return { da: f.da || '0000-01-01', a: f.a || '9999-12-31' };
+  }
+}
+
+const etichettaPeriodo = f => {
+  const p = PERIODI.find(p => p.id === f.per);
+  if (f.per !== 'custom') return p ? p.l : '';
+  const i = intervallo(f);
+  return dataCorta(i.da) + ' → ' + dataCorta(i.a);
+};
+
+/* Un filtro è "attivo" quando c'è qualcosa da azzerare. Serve solo a spegnere
+   il pulsante Azzera: se restasse acceso a vuoto sembrerebbe rotto. */
+function filtroAttivo(k) {
+  const f = filtri(k), d = FILTRI_DEFAULT[k];
+  return Object.keys(d).some(x => JSON.stringify(f[x]) !== JSON.stringify(d[x]));
+}
+
+function azzeraFiltro(k) {
+  DB.settings.filtri[k] = Object.assign({}, FILTRI_DEFAULT[k]);
+  save();
+  render();
+}
+
+/* ---------- pezzi di interfaccia riutilizzabili ---------- */
+
+function campoPeriodo(k) {
+  const f = filtri(k);
+  return `<div class="fgroup full">
+      <label>Periodo</label>
+      <div class="fchips">
+        ${PERIODI.map(p => `<button data-f="${k}" data-per="${p.id}" class="${f.per === p.id ? 'on' : ''}">${p.l}</button>`).join('')}
+      </div>
+    </div>
+    ${f.per === 'custom' ? `
+    <div class="fgroup"><label>Dal</label>
+      <input type="date" data-f="${k}" data-set="da" value="${esc(f.da)}"></div>
+    <div class="fgroup"><label>Al</label>
+      <input type="date" data-f="${k}" data-set="a" value="${esc(f.a)}"></div>` : ''}`;
+}
+
+function campoRicerca(k, ph) {
+  const f = filtri(k);
+  return `<div class="fgroup full"><label>Ricerca</label>
+    <div class="fsearch">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" data-f="${k}" data-set="q" value="${esc(f.q)}" placeholder="${esc(ph)}"
+        autocapitalize="off" spellcheck="false">
+      ${f.q ? `<button class="clr" data-f="${k}" data-set="q" data-val="">×</button>` : ''}
+    </div></div>`;
+}
+
+function campoMulti(k, campo, etichetta, valori, etichette) {
+  const f = filtri(k), sel = f[campo] || [];
+  return `<div class="fgroup full"><label>${esc(etichetta)}</label>
+    <div class="fchips">
+      ${valori.map((v, i) => `<button data-f="${k}" data-multi="${campo}" data-val="${esc(v)}"
+        class="${sel.includes(v) ? 'on' : ''}">${esc((etichette || valori)[i])}</button>`).join('')}
+    </div></div>`;
+}
+
+/* Il riassunto che si legge a filtri chiusi: dice cosa stai guardando senza
+   doverli riaprire. */
+function riassuntoFiltri(k) {
+  const f = filtri(k), p = [];
+  if (f.per) p.push('<b>' + esc(etichettaPeriodo(f)) + '</b>');
+  if (f.q) p.push('“' + esc(f.q) + '”');
+  if ((f.slot || []).length) p.push(f.slot.length + ' pasti');
+  if ((f.cat || []).length) p.push(f.cat.length + ' categorie');
+  if ((f.gruppo || []).length) p.push(f.gruppo.length + ' gruppi');
+  if (f.soloMiei) p.push('solo i miei');
+  return p.join(' · ') || 'nessuno';
+}
+
+/* Aperti sul Mac, chiusi sul telefono: sullo schermo grande non rubano spazio
+   a niente, su quello piccolo si mangerebbero mezza schermata. */
+function filtriAperti(k) {
+  DB.settings.fAperti = DB.settings.fAperti || {};
+  if (DB.settings.fAperti[k] === undefined) DB.settings.fAperti[k] = window.innerWidth >= 900;
+  return DB.settings.fAperti[k];
+}
+
+function scatolaFiltri(k, dentro) {
+  const aperto = filtriAperti(k);
+  return `<div class="filters ${aperto ? '' : 'chiuso'}">
+    <div class="fhead" data-apri="${k}">
+      <span class="ft">Filtri</span>
+      ${aperto ? '<span class="riass"></span>' : `<span class="riass">${riassuntoFiltri(k)}</span>`}
+      <button class="freset" data-reset="${k}" ${filtroAttivo(k) ? '' : 'disabled'}>Azzera</button>
+      <span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+    </div>
+    <div class="fgrid">${dentro}</div>
+  </div>`;
+}
+
+function rigaRisultati(n, cosa, extra, exp) {
+  return `<div class="fsummary">
+    <span><b>${n}</b> ${esc(cosa)}${extra ? ' · ' + extra : ''}</span>
+    ${exp ? `<span class="exp">
+      <button data-export="${exp}">CSV</button>
+      <button data-act="stampa">Stampa</button></span>` : ''}
+  </div>`;
+}
+
+const vuoto = (ic, tit, txt) =>
+  `<div class="empty"><span class="ic">${ic}</span><strong>${esc(tit)}</strong><p>${txt}</p></div>`;
+
+/* ============================================================
+   7. Cibo — registro del diario e anagrafica degli alimenti
+   ============================================================ */
+
+/* Le righe che passano i filtri. Una funzione sola, usata dalla tabella, dai
+   totali e dall'esportazione. */
+function righeFiltrate() {
+  const f = filtri('cibo'), i = intervallo(f);
+  const q = f.q.trim().toLowerCase();
+  const cat = catalogo();
+  let righe = di('l').filter(r => r.d >= i.da && r.d <= i.a);
+  if (f.slot.length) righe = righe.filter(r => f.slot.includes(r.slot));
+  if (f.cat.length) {
+    const catDi = {};
+    for (const a of cat) catDi[a.n.toLowerCase()] = a.cat;
+    righe = righe.filter(r => f.cat.includes(catDi[r.n.toLowerCase()] || 'Altro'));
+  }
+  if (q) righe = righe.filter(r => r.n.toLowerCase().includes(q));
+
+  const dir = f.ord.endsWith('-') ? -1 : 1;
+  const campo = f.ord.replace('-', '');
+  righe.sort((a, b) => {
+    if (campo === 'data') return a.d === b.d ? (a.updatedAt || 0) - (b.updatedAt || 0) : (a.d < b.d ? -1 : 1) * 1;
+    if (campo === 'nome') return a.n.localeCompare(b.n);
+    if (campo === 'kcal') return macro(a).k - macro(b).k;
+    if (campo === 'prot') return macro(a).p - macro(b).p;
+    return 0;
+  });
+  if (dir === -1) righe.reverse();
+  return righe;
+}
+
+function vistaCibo() {
+  const sub = SUB.cibo;
+  let h = `<div class="seg" data-seg="sub-cibo" style="margin-bottom:14px">
+    <button data-sub="diario" class="${sub === 'diario' ? 'on' : ''}">Diario</button>
+    <button data-sub="piano" class="${sub === 'piano' ? 'on' : ''}">Piano</button>
+    <button data-sub="alimenti" class="${sub === 'alimenti' ? 'on' : ''}">Alimenti</button>
+  </div>`;
+  return h + (sub === 'diario' ? vistaDiario() : sub === 'piano' ? vistaPiano() : vistaAlimenti());
+}
+
+/* ---------- il piano della settimana ---------- */
+
+function vistaPiano() {
+  const gts = giornate();
+
+  let h = `<div class="section-head" style="margin-top:0"><h2>La settimana</h2>
+    <span class="count">${GIORNI_SETT.filter(g => pianoPieno(g.id)).length} su 7 assegnati</span></div>`;
+
+  if (!gts.length) {
+    h += vuoto('📋', 'Nessuna giornata tipo',
+      'Il piano è fatto di <b>giornate</b> — “Giorno 1 off”, “Giorno 2 on” — che poi assegni ' +
+      'ai giorni della settimana. La stessa giornata può stare su più giorni.');
+    h += `<button class="btn" data-act="crea-schema">Crea le giornate del mio piano</button>
+      <button class="btn sec" data-act="nuova-giornata">Aggiungine una sola</button>
+      <button class="btn sec" data-act="importa-piano">Importa il piano da un file</button>`;
+    return h;
+  }
+
+  /* Il menu a tendina per ogni giorno: è il punto di tutta questa schermata.
+     La rotazione si imposta qui in sette tocchi, e cambiarla non tocca il
+     contenuto delle giornate. */
+  h += `<div class="panel" style="margin-top:0">`;
+  for (const g of GIORNI_SETT) {
+    const gt = giornataDi(g.id);
+    const tot = gt ? somma(gt.righe || []) : null;
+    const tu = turnoRec(g.id).turno;
+    h += `<div class="ass">
+      <span class="ass-g">${esc(g.l)}</span>
+      <span class="ass-k">${tot ? r0(tot.k) + ' kcal' : '—'}</span>
+      <select class="ass-t" data-assturno="${g.id}"
+        style="${tu ? 'border-color:' + coloreTurno(turnoInfo(tu)) + ';color:' + coloreTurno(turnoInfo(tu)) : ''}">
+        <option value="">turno?</option>
+        ${turni().map(x => `<option value="${x.id}" ${tu === x.id ? 'selected' : ''}>${x.ic || ''} ${esc(x.n)}</option>`).join('')}
+      </select>
+      <select class="ass-s" data-assegna="${g.id}">
+        <option value="">— nessuna giornata —</option>
+        ${gts.map(x => `<option value="${x.id}" ${gt && gt.id === x.id ? 'selected' : ''}>${esc(x.n)}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+  h += `</div>
+    <p class="set-note">Il turno decide il bersaglio delle calorie: nei giorni <b>OFF</b>
+      scende a ${cfg().target.kcalOff}. Se una settimana i turni si scambiano, lo correggi
+      sul singolo giorno dalla scheda Oggi.</p>`;
+
+  const senza = GIORNI_SETT.filter(g => !giornataDi(g.id));
+  if (senza.length) {
+    h += `<p class="set-note">${senza.length === 7 ? 'Nessun giorno' : senza.length + (senza.length === 1 ? ' giorno' : ' giorni')}
+      ${senza.length === 1 ? 'è ancora senza giornata' : 'sono ancora senza giornata'}:
+      ${esc(senza.map(g => g.l).join(', '))}.</p>`;
+  }
+
+  h += `<div class="section-head"><h2>Le giornate</h2>
+    <button class="act" data-act="nuova-giornata">＋ Nuova</button></div>`;
+
+  for (const gt of gts) {
+    const t = somma(gt.righe || []);
+    const usata = GIORNI_SETT.filter(g => { const x = giornataDi(g.id); return x && x.id === gt.id; });
+    h += `<button class="card-row" data-giornata="${gt.id}">
+      <span class="cbadge ${gt.tipo === 'on' ? 'coral' : ''}">${gt.tipo === 'on' ? 'ON' : gt.tipo === 'off' ? 'OFF' : '📋'}</span>
+      <span class="cb"><h3>${esc(gt.n)}</h3>
+        <span class="meta">${(gt.righe || []).length
+          ? (gt.righe.length + (gt.righe.length === 1 ? ' voce · ' : ' voci · ') + r0(t.k) + ' kcal · ' + r0(t.p) + ' g proteine')
+          : 'ancora vuota'}${usata.length ? ' · ' + usata.map(x => x.b).join(' ') : ''}</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  h += `<button class="btn sec" data-act="importa-piano">Importa il piano da un file</button>`;
+
+  /* La lista della spesa nasce da qui: le sette assegnazioni sanno già cosa serve. */
+  const assegnati = GIORNI_SETT.filter(g => pianoPieno(g.id)).length;
+  if (assegnati) {
+    h += `<button class="card-row" data-act="vai-spesa" style="margin-top:14px">
+      <span class="cbadge coral">🛒</span>
+      <span class="cb"><h3>Lista della spesa</h3>
+        <span class="meta">calcolata dai ${assegnati} ${assegnati === 1 ? 'giorno assegnato' : 'giorni assegnati'}</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  /* Le combinazioni sono l'altro tipo di modello: nascono da una giornata
+     riuscita del diario e si rimettono dentro in un tocco. */
+  const ric = di('r');
+  h += `<div class="section-head"><h2>Combinazioni</h2>
+    <span class="count">${ric.length}</span></div>`;
+  if (!ric.length) {
+    h += `<p class="set-note" style="margin-top:0">Nessuna. Quando una giornata del diario
+      ti viene bene, in fondo alla scheda <b>Oggi</b> c'è “salva questa giornata come
+      combinazione”: la ritrovi qui e quando aggiungi un alimento.</p>`;
+  } else {
+    for (const r of ric) {
+      const t = somma(r.righe || []);
+      h += `<button class="card-row" data-ricapri="${r.id}">
+        <span class="cbadge">📦</span>
+        <span class="cb"><h3>${esc(r.n)}</h3>
+          <span class="meta">${(r.righe || []).length} ${(r.righe || []).length === 1 ? 'voce' : 'voci'} · ${r0(t.k)} kcal · ${r0(t.p)} g proteine</span></span>
+        <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+      </button>`;
+    }
+  }
+  return h;
+}
+
+/* ---------- l'editor di una giornata tipo ---------- */
+
+function vistaGiornata() {
+  const gt = giornataById(view.id);
+  if (!gt) return vuoto('📋', 'Giornata non trovata', 'È stata cancellata su un altro dispositivo.');
+  const t = cfg().target;
+  const tot = somma(gt.righe || []);
+  const bersaglio = gt.tipo === 'off' ? t.kcalOff : t.kcal;
+
+  let h = `<div class="panel" style="margin-top:0">
+    <input class="txtin" data-gtnome="${gt.id}" value="${esc(gt.n)}" placeholder="Nome della giornata">
+    <div class="seg" data-seg="gttipo" style="margin-top:10px">
+      <button data-gttipo="on" class="${gt.tipo === 'on' ? 'on' : ''}">Giorno di turno</button>
+      <button data-gttipo="off" class="${gt.tipo === 'off' ? 'on' : ''}">Giorno di riposo</button>
+      <button data-gttipo="" class="${!gt.tipo ? 'on' : ''}">Non specificato</button>
+    </div>
+    <div class="stat-row" style="margin-top:12px"><span>Calorie</span>
+      <span>${r0(tot.k)} / ${bersaglio} kcal</span></div>
+    <div class="stat-row"><span>Proteine · carboidrati · grassi</span>
+      <span>${r0(tot.p)} · ${r0(tot.c)} · ${r0(tot.g)} g</span></div>
+    <div class="split">
+      <i style="width:${Math.min(100, tot.k / bersaglio * 100)}%;background:${tot.k > bersaglio * 1.05 ? 'var(--evidenza)' : 'var(--secondario)'}"></i></div>
+    ${gt.tipo ? `<p class="set-note">Caricandola nel diario, il giorno diventa
+      ${gt.tipo === 'off' ? 'di riposo' : 'di turno'} e il bersaglio si sposta a ${bersaglio} kcal.</p>` : ''}
+  </div>`;
+
+  for (const pa of PASTI) {
+    const rp = (gt.righe || []).filter(r => r.slot === pa.id);
+    const tp = somma(rp);
+    h += `<div class="meal ${rp.length ? '' : 'vuoto'}">
+      <div class="mtop">
+        <span class="mic">${pa.ic}</span>
+        <span class="mname">${esc(pa.l)}</span>
+        ${rp.length ? `<span class="mkcal">${r0(tp.k)} kcal</span>` : ''}
+        <button class="madd" data-padd="${gt.id}|${pa.id}" aria-label="Aggiungi a ${esc(pa.l)}">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </div>
+      ${rp.length ? `<div class="rows">${rp.map(r => {
+        const m = macro(r);
+        return `<button class="frow" data-priga="${gt.id}|${(gt.righe || []).indexOf(r)}">
+          <span class="fb"><span class="fn">${esc(r.n)}</span>
+            <span class="fm">${r1(r.q)} g · ${r0(m.p)}P ${r0(m.c)}C ${r0(m.g)}G</span></span>
+          <span class="fk">${r0(m.k)}</span></button>`;
+      }).join('')}</div>` : ''}
+    </div>`;
+  }
+
+  const su = GIORNI_SETT.filter(g => { const x = giornataDi(g.id); return x && x.id === gt.id; });
+  h += `<p class="set-note">${su.length
+    ? 'Assegnata a: <b>' + esc(su.map(g => g.l).join(', ')) + '</b>.'
+    : 'Non ancora assegnata a nessun giorno della settimana.'}</p>`;
+
+  h += `<button class="btn sec" data-act="copia-giornata">Copia da un'altra giornata</button>
+    <button class="btn sec" data-act="duplica-giornata">Duplica questa giornata</button>
+    <button class="btn danger" data-act="elimina-giornata">Elimina la giornata</button>`;
+  return h;
+}
+
+/* ============================================================
+   Promemoria
+   ============================================================
+
+   Sul web non esiste un modo di far suonare una notifica quando l'app è
+   chiusa senza un server che la spinga. Le notifiche programmate in locale
+   non sono mai arrivate in nessun browser, e su iPhone il push richiede una
+   chiave VAPID e qualcosa che stia sveglio a mandarla.
+   Quindi qui ci sono le tre cose che funzionano davvero senza infrastruttura:
+
+     1. il pallino sull'icona con quante cose restano — resta anche ad app
+        chiusa, ed è l'unico promemoria passivo che il web concede;
+     2. l'avviso mentre l'app è aperta, per le voci che stanno per iniziare;
+     3. l'esportazione nel calendario, che consegna gli avvisi al sistema:
+        quelli suonano davvero, anche a telefono in tasca.
+*/
+
+/* ---------- notifiche push ----------
+ *
+ * La chiave pubblica VAPID: dice al servizio di Apple chi è autorizzato a
+ * mandare notifiche a questo dispositivo. È pubblica per costruzione, sta
+ * qui dentro senza problemi; quella privata vive solo nei segreti della
+ * funzione su Supabase.
+ */
+const VAPID_PUBBLICA = 'BJx9t_AsQq0fwNzRpH9erbD6hm93D0HXeHLFYxDy0VUn7Vew0MbQAeFoRciKFkcdnJjHq1Ko_2AhwfNABXKkFqc';
+
+/* La chiave va passata al browser come byte, non come testo. */
+function base64UrlABytes(s) {
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const grezzo = atob(b64);
+  return Uint8Array.from(grezzo, c => c.charCodeAt(0));
+}
+
+async function iscrizionePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? await reg.pushManager.getSubscription() : null;
+  } catch (e) { return null; }
+}
+
+const pushPossibile = () =>
+  'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
+
+/* Copiare un blocco di SQL è un gesto che compare in due posti — la
+   sincronizzazione e le notifiche — e in tutti e due il problema è lo stesso:
+   sul telefono gli appunti a volte non sono accessibili, e allora l'unica
+   strada che funziona sempre è mostrare il testo e lasciarlo selezionare. */
+async function copiaOMostraSql(titolo, sql) {
+  try {
+    await navigator.clipboard.writeText(sql);
+    toast('SQL copiato: incollalo in Supabase → SQL Editor');
+  } catch (e) {
+    apriSheet('<h2 class="sheet-title">' + esc(titolo) + '</h2>' +
+      '<p class="set-note">SQL Editor → New query → incolla tutto → Run.</p>' +
+      '<textarea class="txtin" rows="12" readonly ' +
+      'style="font-family:ui-monospace,monospace;font-size:11px">' +
+      esc(sql) + '</textarea>');
+  }
+}
+
+/* Lo stesso contenuto di supabase-push.sql. La tabella delle notifiche è
+   separata da quella dei dati e va creata a parte: chi lancia solo il primo
+   SQL arriva fin qui e trova un 404 che non dice niente. */
+const SQL_PUSH = `create table if not exists public.forma_push (
+  endpoint      text primary key,
+  user_id       uuid not null default auth.uid() references auth.users on delete cascade,
+  p256dh        text not null,
+  auth          text not null,
+  versione      text not null default '',
+  preavviso     int  not null default 15,
+  fuso          text not null default 'Europe/Rome',
+  inviati       jsonb not null default '[]'::jsonb,
+  visto         timestamptz not null default now(),
+  creato        timestamptz not null default now()
+);
+
+alter table public.forma_push enable row level security;
+
+drop policy if exists "solo i propri dispositivi" on public.forma_push;
+create policy "solo i propri dispositivi" on public.forma_push
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists forma_push_user on public.forma_push (user_id);`;
+
+async function attivaPush(bottone) {
+  if (!pushPossibile()) {
+    toast('Questo dispositivo non supporta le notifiche push');
+    return;
+  }
+  if (typeof Sync === 'undefined' || !Sync.signedIn()) {
+    toast('Prima collega Supabase e accedi: le notifiche passano da lì');
+    return;
+  }
+  if (bottone) bottone.textContent = 'Attendo il permesso…';
+
+  try {
+    const p = await Notification.requestPermission();
+    if (p !== 'granted') {
+      toast(p === 'denied'
+        ? 'Permesso negato: Impostazioni → Notifiche → Forma'
+        : 'Permesso non concesso');
+      render(); return;
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlABytes(VAPID_PUBBLICA)
+      });
+    }
+    await salvaIscrizione(sub);
+    toast('Notifiche attive su questo dispositivo');
+  } catch (e) {
+    /* Su iOS il caso più comune è l'app aperta da Safari invece che dalla
+       schermata Home: lì il push non esiste proprio, e il messaggio deve
+       dirlo invece di lasciare un errore generico. */
+    const inStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone;
+    const msg = String(e.message || e);
+    toast(!inStandalone
+      ? 'Su iPhone le notifiche funzionano solo dall’app aggiunta alla schermata Home'
+      : /PGRST205|Could not find the table|does not exist/i.test(msg)
+        ? 'Manca la tabella forma_push: premi “Copia l’SQL delle notifiche” qui sotto e lancialo su Supabase'
+        : 'Non è riuscita: ' + msg.slice(0, 70));
+  }
+  render();
+}
+
+async function salvaIscrizione(sub) {
+  const j = sub.toJSON();
+  const riga = {
+    endpoint: j.endpoint,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+    versione: APP_VERSION,
+    preavviso: num(DB.settings.preavviso, 15),
+    fuso: (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'Europe/Rome',
+    visto: new Date().toISOString()
+  };
+  await Sync.rest('/forma_push', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(riga)
+  });
+}
+
+async function disattivaPush() {
+  const sub = await iscrizionePush();
+  if (!sub) { render(); return; }
+  try {
+    if (typeof Sync !== 'undefined' && Sync.signedIn()) {
+      await Sync.rest('/forma_push?endpoint=eq.' + encodeURIComponent(sub.endpoint),
+        { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    }
+    await sub.unsubscribe();
+    toast('Notifiche spente su questo dispositivo');
+  } catch (e) {
+    toast('Non sono riuscito a spegnerle: ' + String(e.message || e).slice(0, 60));
+  }
+  render();
+}
+
+/* A ogni avvio si dice al server che versione gira su questo telefono: è così
+   che può accorgersi che sei rimasto indietro e ricordartelo. */
+async function allineaIscrizione() {
+  if (typeof Sync === 'undefined' || !Sync.signedIn()) return;
+  const sub = await iscrizionePush();
+  if (!sub) return;
+  try { await salvaIscrizione(sub); } catch (e) { /* si riprova al prossimo avvio */ }
+}
+
+/* ---------- l'aspetto: tema e colonna ----------
+ *
+ * La scelta sta in localStorage e viene applicata dal codice in cima al file,
+ * prima che la pagina si disegni: se la si applicasse qui si vedrebbe il lampo
+ * chiaro a ogni avvio.
+ */
+const TABS_ORDINE = ['oggi', 'agenda', 'cibo', 'allena', 'report', 'settings'];
+
+/* Tre stati e non due: "sistema" è quello che serve davvero, perché il
+   telefono passa da solo allo scuro la sera e l'app deve seguirlo senza che
+   glielo si dica ogni volta. Chiaro e scuro restano per chi vuole decidere. */
+const TEMI = ['auto', 'chiaro', 'scuro'];
+const FONDI = { chiaro: '#F2F1EC', scuro: '#131311' };
+
+const temaSalvato = () => {
+  try { return TEMI.includes(localStorage.getItem('forma.tema')) ? localStorage.getItem('forma.tema') : 'auto'; }
+  catch (e) { return 'auto'; }
+};
+const temaEffettivo = t => (t !== 'auto' ? t
+  : (matchMedia('(prefers-color-scheme: dark)').matches ? 'scuro' : 'chiaro'));
+
+function applicaTema(t) {
+  const vero = temaEffettivo(t);
+  document.documentElement.setAttribute('data-tema', vero);
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', FONDI[vero]);
+  /* Il pulsante nella barra dice cosa succede se lo premi, non dove sei. */
+  const b = $('#btnTemaTop');
+  if (b) b.setAttribute('aria-label', vero === 'scuro' ? 'Passa al tema chiaro' : 'Passa al tema scuro');
+  $$('[data-tema-scelta]').forEach(x => x.classList.toggle('on', x.dataset.temaScelta === t));
+}
+
+function scegliTema(t) {
+  try { localStorage.setItem('forma.tema', t); } catch (e) {}
+  applicaTema(t);
+  haptic();
+}
+
+/* Il tasto nella barra e la scorciatoia T fanno la cosa semplice: passano
+   all'altro tema. La scelta a tre sta nelle impostazioni, dove c'è lo spazio
+   per spiegarla. */
+function cambiaTema() {
+  scegliTema(temaEffettivo(temaSalvato()) === 'scuro' ? 'chiaro' : 'scuro');
+}
+
+/* Se il tema segue il sistema, il sistema può cambiarlo mentre l'app è aperta:
+   di sera succede da solo, e restare chiari a metà serata è un difetto. */
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (temaSalvato() === 'auto') applicaTema('auto');
+});
+
+
+
+/* La pillola che segue la voce accesa. Si sposta di un passo per voce invece
+   di accendersi e spegnersi: è l'unico pezzo di movimento della schermata, e
+   dice da dove a dove sei andato. */
+function muoviPillola() {
+  const ind = $('#sideInd');
+  if (!ind) return;
+  const radice = { scheda: 'allena', sessione: 'allena', spesa: 'cibo', giornata: 'cibo' };
+  const b = $('.side-menu button[data-tab="' + (radice[view.name] || view.name) + '"]');
+  if (!b || !b.offsetParent) { ind.style.opacity = '0'; return; }
+  /* Misurata e non calcolata con un passo fisso: "Allenamento" è larga il
+     doppio di "Cibo", e una riga di larghezza fissa le mancherebbe entrambe. */
+  ind.style.opacity = '1';
+  ind.style.setProperty('--x', b.offsetLeft + 'px');
+  ind.style.setProperty('--w', b.offsetWidth + 'px');
+}
+
+
+/* Il numero sull'icona della schermata Home. */
+function aggiornaPallino() {
+  if (!navigator.setAppBadge) return;
+  const n = agendaRestano(oggiISO());
+  try {
+    if (n > 0) navigator.setAppBadge(n); else navigator.clearAppBadge();
+  } catch (e) { /* su qualche browser esiste ma rifiuta: non è un problema */ }
+}
+
+const minutiDa = ora => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(ora || '');
+  return m ? +m[1] * 60 + +m[2] : null;
+};
+
+let avvisate = {};
+
+/* Controlla se qualcosa sta per iniziare. Funziona solo mentre l'app è
+   aperta: è un limite del web, non una scelta. */
+function controllaPromemoria() {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const oggi = oggiISO();
+  const ora = new Date();
+  const adesso = ora.getHours() * 60 + ora.getMinutes();
+  const anticipo = num(DB.settings.preavviso, 15);
+
+  for (const v of agendaDi(oggi)) {
+    if (v.fatto || !v.ora) continue;
+    const m = minutiDa(v.ora);
+    if (m == null) continue;
+    const manca = m - adesso;
+    if (manca < 0 || manca > anticipo) continue;
+    const chiave = oggi + '|' + v.id;
+    if (avvisate[chiave]) continue;
+    avvisate[chiave] = 1;
+    try {
+      new Notification(v.n, {
+        body: manca <= 0 ? 'Comincia adesso' : 'Fra ' + manca + ' minuti · ' + v.ora,
+        tag: chiave, icon: 'icons/icon-192.png'
+      });
+    } catch (e) { toast(v.n + ' · fra ' + manca + ' minuti'); }
+  }
+}
+
+async function chiediNotifiche(bottone) {
+  if (typeof Notification === 'undefined') {
+    toast('Questo browser non sa mostrare notifiche');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    toast('Permesso negato: Impostazioni → Notifiche → Forma');
+    return;
+  }
+  if (bottone) bottone.textContent = 'Attendo il permesso…';
+  try { await Notification.requestPermission(); } catch (e) {}
+  render();
+}
+
+/* ---------- esportazione nel calendario ---------- */
+
+/* Il calendario di sistema è l'unico posto da cui un avviso suona davvero a
+   telefono chiuso. Si esportano trenta giorni: le voci fisse come eventi
+   singoli, quelle ricorrenti con una regola settimanale che vale per sempre. */
+function icsData(d, ora) {
+  const p = d.replace(/-/g, '');
+  return ora ? p + 'T' + ora.replace(':', '') + '00' : p;
+}
+const icsFuga = t => String(t || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+
+function esportaCalendario() {
+  const anticipo = num(DB.settings.preavviso, 15);
+  const oggi = oggiISO();
+  const righe = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CodeMind.Lab//Forma//IT',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Forma · agenda'
+  ];
+  const bollo = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  let quanti = 0;
+
+  const allarme = t => ['BEGIN:VALARM', 'TRIGGER:-PT' + anticipo + 'M', 'ACTION:DISPLAY',
+                        'DESCRIPTION:' + icsFuga(t), 'END:VALARM'];
+
+  const evento = (uid, inizio, fine, titolo, cat, rrule) => {
+    righe.push('BEGIN:VEVENT', 'UID:' + uid + '@forma.codemind.lab', 'DTSTAMP:' + bollo);
+    if (inizio.length > 8) {
+      righe.push('DTSTART:' + inizio, 'DTEND:' + fine);
+    } else {
+      righe.push('DTSTART;VALUE=DATE:' + inizio, 'DTEND;VALUE=DATE:' + fine);
+    }
+    if (rrule) righe.push(rrule);
+    righe.push('SUMMARY:' + icsFuga(titolo));
+    if (cat) righe.push('CATEGORIES:' + icsFuga(cat));
+    righe.push(...allarme(titolo), 'END:VEVENT');
+    quanti++;
+  };
+
+  /* Le ricorrenti: una sola volta, con la regola settimanale. Ripeterle
+     trenta volte gonfierebbe il calendario e renderebbe impossibile
+     cancellarle in blocco. */
+  const GIORNO_ICS = { lun: 'MO', mar: 'TU', mer: 'WE', gio: 'TH', ven: 'FR', sab: 'SA', dom: 'SU' };
+  for (const r of di('agr')) {
+    if (!r.ora) continue;
+    const lun = lunediDi(oggi);
+    const idx = GIORNI_SETT.findIndex(g => g.id === r.gs);
+    let data = spostaData(lun, idx);
+    if (data < oggi) data = spostaData(data, 7);
+    const fine = r.fine || sommaMinuti(r.ora, 60);
+    evento(r.id, icsData(data, r.ora), icsData(data, fine), r.n,
+           catAgenda(r.cat).l, 'RRULE:FREQ=WEEKLY;BYDAY=' + GIORNO_ICS[r.gs]);
+  }
+
+  for (const v of di('ag')) {
+    if (v.d < oggi || v.d > spostaData(oggi, 30) || v.fatto) continue;
+    if (v.ora) {
+      evento(v.id, icsData(v.d, v.ora), icsData(v.d, v.fine || sommaMinuti(v.ora, 60)),
+             v.n, catAgenda(v.cat).l);
+    } else {
+      evento(v.id, icsData(v.d), icsData(spostaData(v.d, 1)), v.n, catAgenda(v.cat).l);
+    }
+  }
+
+  if (!quanti) { toast('Non c’è niente da esportare'); return; }
+  righe.push('END:VCALENDAR');
+  scarica('forma-agenda-' + oggi + '.ics', righe.join('\r\n'), 'text/calendar');
+}
+
+function sommaMinuti(ora, m) {
+  const t = minutiDa(ora);
+  if (t == null) return ora;
+  const x = (t + m) % 1440;
+  return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0');
+}
+
+/* ============================================================
+   Agenda
+   ============================================================ */
+
+function vistaAgenda() {
+  const d = view.d;
+
+  /* Stessa testata della dashboard: frecce, data e striscia della settimana in
+     un comando solo, e il turno largo sotto. Sono le due cose che inquadrano
+     la giornata, e cambiarle da una scheda all'altra costringeva a ricercarle
+     ogni volta. */
+  let h = `<div class="giorno-bar">` + barraGiorno(d);
+  const lun = lunediDi(d);
+  const settimana = GIORNI_SETT.map((wg, i) => {
+    const data = spostaData(lun, i);
+    return { wg, data, restano: agendaRestano(data) };
+  });
+  h += `<div class="weekstrip">${settimana.map(x =>
+    `<button data-vaidata="${x.data}" class="${x.data === d ? 'on' : ''}">
+      ${x.wg.b}<i class="${x.restano ? 'pieno' : ''}"></i></button>`).join('')}</div></div>`;
+
+  const tn = turnoInfo(turnoDi(d));
+  h += `<button class="turno-bar ${tn ? (tn.riposo ? 'riposo' : '') : 'vuoto'}" data-act="scegli-turno"
+    ${tn ? `style="border-left-color:${coloreTurno(tn)}"` : ''}>
+    <span class="tb-i">${tn ? (tn.ic || '\u{1F553}') : '\u{1F553}'}</span>
+    <span class="tb-t"><b>${tn ? esc(tn.n) : 'Turno non impostato'}</b>
+      <span>${tn ? esc(tn.ore || '') : 'Tocca per dire che turno fai oggi'}</span></span>
+    <span class="tb-c"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+  </button>`;
+
+  const voci = agendaDi(d);
+  const conOra = voci.filter(v => v.ora);
+  const senzaOra = voci.filter(v => !v.ora);
+  const vecchie = arretrati(d);
+  const fatte = voci.filter(v => v.fatto).length;
+  const restano = voci.filter(v => !v.fatto).length;
+
+  h += `<div class="board"><div class="bc-a">`;
+
+  /* Gli orari sono la colonna principale, e l'allenamento previsto ci sta
+     dentro invece che in un riquadro a parte: alle sette di sera vuoi vedere
+     una giornata sola, non due elenchi da incrociare. */
+  const all = allenamentoDi(gsDiData(d));
+  const sess = di('w').filter(w => w.d === d);
+  h += `<div class="section-head"><h2>Orari</h2>
+    <span class="count">${conOra.length ? conOra.filter(v => !v.fatto).length + ' da fare' : 'niente a orario'}</span></div>`;
+
+  const fissi = [];
+  if (sess.length) {
+    for (const w of sess) {
+      fissi.push(`<button class="ag-r fisso" data-sess="${w.id}">
+        <span class="ag-o">${w.dur ? w.dur + "'" : '—'}</span>
+        <span class="ag-c" style="background:${catAgenda('palestra').col}"></span>
+        <span class="ag-b"><span class="ag-n"><i class="em">\u{1F3CB}\uFE0F</i>${esc(w.gn || 'Allenamento')}</span>
+          <span class="ag-m">${w.fine ? 'fatto' : 'in corso'}</span></span>
+      </button>`);
+    }
+  } else if (all) {
+    fissi.push(`<button class="ag-r fisso" data-avvia="${all.sc.id}|${esc(all.g.n)}">
+      <span class="ag-o">—</span>
+      <span class="ag-c" style="background:${catAgenda('palestra').col}"></span>
+      <span class="ag-b"><span class="ag-n"><i class="em">\u{1F3CB}\uFE0F</i>${esc(all.g.n)}</span>
+        <span class="ag-m">${esc(all.sc.n)} · tocca per iniziare</span></span>
+    </button>`);
+  }
+
+  if (conOra.length || fissi.length) {
+    h += `<div class="panel" style="margin-top:0">${conOra.map(rigaAgenda).join('')}${fissi.join('')}</div>`;
+  } else {
+    h += `<button class="card-row" data-act="nuova-agenda">
+      <span class="cbadge coral">\uFF0B</span>
+      <span class="cb"><h3>Niente a orario fisso</h3>
+        <span class="meta">Tocca per mettere in agenda qualcosa con un'ora</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  h += `</div><div class="bc-b">`;
+
+  h += `<div class="section-head"><h2>Da fare</h2>
+    <span class="count">${senzaOra.filter(v => !v.fatto).length || 'niente in sospeso'}</span></div>`;
+  if (senzaOra.length) {
+    h += `<div class="panel" style="margin-top:0">${senzaOra.map(rigaAgenda).join('')}</div>`;
+  } else {
+    h += `<button class="card-row" data-act="nuova-agenda">
+      <span class="cbadge">${voci.length ? '\u2705' : '\u{1F4CB}'}</span>
+      <span class="cb"><h3>${voci.length ? 'Tutto fatto' : 'Niente in sospeso'}</h3>
+        <span class="meta">Tocca per scrivere cosa devi fare</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+
+  /* Gli arretrati stanno in un blocco loro e non in coda a "Da fare": una cosa
+     rimasta indietro di tre giorni non è una voce di oggi, e mescolarle
+     nascondeva proprio quelle che andavano viste. */
+  if (vecchie.length) {
+    h += `<div class="section-head"><h2>In ritardo</h2>
+      <span class="count">${vecchie.length}</span></div>
+      <div class="panel" style="margin-top:0">${vecchie.map(v => rigaAgenda({
+        id: v.id, ric: false, ora: '', n: v.n, cat: v.cat || 'personale',
+        fatto: false, note: v.note || '', da: v.d
+      })).join('')}</div>`;
+  }
+
+  h += `</div><div class="bc-c">`;
+
+  h += `<div class="section-head"><h2>La settimana</h2>
+    <span class="count">${settimana.reduce((n, x) => n + x.restano, 0)} in tutto</span></div>`;
+  const max = Math.max(1, ...settimana.map(x => x.restano));
+  h += `<div class="panel" style="margin-top:0">
+    <div class="wk-bars">${settimana.map(x =>
+      `<button class="wb ${x.data === d ? 'on' : ''}" data-vaidata="${x.data}">
+        <i class="${x.restano ? '' : 'vuoto'}" style="height:${x.restano ? Math.max(10, x.restano / max * 100) : 4}%"></i>
+        <u class="${turnoDi(x.data) && !(turnoInfo(turnoDi(x.data)) || {}).riposo ? 'si' : ''}"></u>
+        <span>${x.wg.b}</span>
+      </button>`).join('')}</div>
+    <div class="legend" style="margin-top:9px">
+      <span><i style="background:var(--accento)"></i>da fare</span>
+      <span><i style="background:var(--secondario);border-radius:50%"></i>giorno di lavoro</span>
+    </div>
+  </div>`;
+
+  h += `<div class="kpis" style="margin-top:12px">
+    <div class="kpi"><div class="kl">Da fare oggi</div>
+      <div class="kv">${restano}</div>
+      <div class="kd ${restano ? 'su' : 'pari'}">${conOra.filter(v => !v.fatto).length} a orario</div></div>
+    <div class="kpi"><div class="kl">Fatte</div>
+      <div class="kv">${fatte}</div>
+      <div class="kd pari">${voci.length ? Math.round(fatte / voci.length * 100) + '% della giornata' : 'niente in agenda'}</div></div>
+    <div class="kpi"><div class="kl">In ritardo</div>
+      <div class="kv">${vecchie.length}</div>
+      <div class="kd ${vecchie.length ? 'su' : 'pari'}">${vecchie.length ? 'dalle due settimane' : 'niente arretrato'}</div></div>
+    <div class="kpi"><div class="kl">Allenamento</div>
+      <div class="kv">${sess.length ? (sess.some(w => w.fine) ? '\u2713' : '\u25B6') : (all ? '\u2014' : '\u2014')}</div>
+      <div class="kd pari">${sess.length ? (sess.some(w => w.fine) ? 'fatto' : 'in corso') : (all ? 'previsto' : 'riposo')}</div></div>
+  </div>`;
+
+  h += `</div></div>`;
+  return h;
+}
+
+function rigaAgenda(v) {
+  const c = catAgenda(v.cat);
+  return `<div class="ag-r ${v.fatto ? 'fatto' : ''}">
+    <button class="ag-t" data-agfatto="${v.id}|${v.ric ? 1 : 0}" aria-label="Fatto">
+      <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg></button>
+    <span class="ag-c" style="background:${c.col}"></span>
+    <button class="ag-b" data-agmod="${v.id}|${v.ric ? 1 : 0}">
+      <span class="ag-n">${v.ora ? '<b>' + esc(v.ora) + (v.fine ? '–' + esc(v.fine) : '') + '</b> ' : ''}${esc(v.n)}</span>
+      <span class="ag-m"><i class="em">${c.ic}</i>${esc(c.l)}${v.ric ? ' · ogni settimana' : ''}${
+        v.da ? ' · da ' + esc(dataCorta(v.da)) : ''}${v.note ? ' · ' + esc(v.note) : ''}</span>
+    </button>
+  </div>`;
+}
+
+/* Creare o modificare un integratore. Stessa forma della scheda del turno:
+   nome, e poi le due cose che decidono quando compare — il momento della
+   giornata e il tipo di giorno. */
+function sheetIntegratore(id) {
+  const x = id ? DB.items.find(i => i.t === 'in' && i.id === id) : null;
+  const nuovo = !x;
+  const m = x ? (x.quando_m || 'colazione') : 'colazione';
+  const q = x ? (x.quando || 'sempre') : 'sempre';
+
+  return `<h2 class="sheet-title">${nuovo ? 'Nuovo integratore' : 'Modifica integratore'}</h2>
+    <div class="fgrid">
+      <div class="fgroup"><label>Nome</label>
+        <input type="text" id="inNome" value="${esc(x ? x.n : '')}" placeholder="Creatina" autofocus></div>
+      <div class="fgroup"><label>Dose</label>
+        <input type="text" id="inDose" value="${esc(x ? (x.dose || '') : '')}" placeholder="5 g"></div>
+      <div class="fgroup full"><label>Quando</label>
+        <div class="fchips">
+          ${MOMENTI.map(o => `<button data-inmom="${o.id}" class="${o.id === m ? 'on' : ''}">${o.ic} ${esc(o.l)}</button>`).join('')}
+        </div></div>
+      <div class="fgroup full"><label>In che giorni</label>
+        <div class="fchips">
+          ${QUANDO_INT.map(o => `<button data-inquando="${o.id}" class="${o.id === q ? 'on' : ''}">${esc(o.l)}</button>`).join('')}
+        </div></div>
+      <div class="fgroup full"><label>Nota</label>
+        <input type="text" id="inNota" value="${esc(x ? (x.note || '') : '')}" placeholder="lontano dai pasti"></div>
+    </div>
+    <button class="btn" data-act="salva-integratore">${nuovo ? 'Aggiungi' : 'Salva'}</button>
+    ${nuovo ? '' : `<button class="btn danger" data-act="elimina-integratore">Elimina</button>`}`;
+}
+
+/* Il pannello per creare o modificare una voce. */
+function sheetAgenda(id, ric) {
+  const v = id ? DB.items.find(x => x.id === id) : null;
+  const cat = v ? (v.cat || 'personale') : (sheetCtx.agCat || 'personale');
+  const ripete = v ? !!ric : !!sheetCtx.agRic;
+
+  return `<h2 class="sheet-title">${v ? 'Modifica' : 'Nuova voce'}</h2>
+    <input class="txtin" id="agNome" value="${esc(v ? v.n : '')}"
+      placeholder="Cosa devi fare" autofocus style="margin-bottom:10px">
+    <div class="fgrid">
+      <div class="fgroup"><label>Inizio</label>
+        <input type="time" id="agOra" value="${esc(v ? (v.ora || '') : '')}"></div>
+      <div class="fgroup"><label>Fine</label>
+        <input type="time" id="agFine" value="${esc(v ? (v.fine || '') : '')}"></div>
+      <div class="fgroup full"><label>Ripeti</label>
+        <div class="fchips"><button data-agric="${ripete ? 0 : 1}" class="${ripete ? 'on' : ''}">
+          ogni ${esc(GIORNI_SETT.find(g => g.id === gsDiData(view.d)).l.toLowerCase())}</button></div></div>
+      <div class="fgroup full"><label>Categoria</label>
+        <div class="fchips">${CAT_AGENDA.map(c => `<button data-agcat="${c.id}"
+          class="${c.id === cat ? 'on' : ''}">${c.ic} ${esc(c.l)}</button>`).join('')}</div></div>
+      <div class="fgroup full"><label>Nota</label>
+        <input type="text" id="agNota" value="${esc(v ? (v.note || '') : '')}" placeholder="facoltativa"></div>
+    </div>
+    <p class="set-note">Senza ora finisce fra le <b>cose da fare</b>, e se non la spunti
+      ti segue nei giorni dopo per due settimane.</p>
+    <button class="btn" data-act="salva-agenda">${v ? 'Salva' : 'Aggiungi'}</button>
+    ${v ? `<button class="btn danger" data-act="elimina-agenda">Elimina</button>` : ''}`;
+}
+
+/* ---------- la lista della spesa ---------- */
+
+function vistaSpesa() {
+  DB.settings.spesaGiorni = DB.settings.spesaGiorni || GIORNI_SETT.map(g => g.id);
+  DB.settings.spesaPresi = DB.settings.spesaPresi || {};
+  const scelti = DB.settings.spesaGiorni;
+  const presi = DB.settings.spesaPresi;
+
+  /* Somma per alimento su tutti i giorni scelti. Se il lunedì e il giovedì
+     vogliono entrambi 60 g di riso, a fare la spesa servono 120 g. */
+  const per = {};
+  for (const gid of scelti) {
+    for (const r of righePiano(gid)) {
+      const k = r.n;
+      if (!per[k]) per[k] = { n: r.n, q: 0, giorni: new Set() };
+      per[k].q += r.q;
+      per[k].giorni.add(gid);
+    }
+  }
+  const voci = Object.values(per);
+  const cat = catalogo();
+  const catDi = {};
+  for (const a of cat) catDi[a.n.toLowerCase()] = a.cat;
+
+  const perCat = {};
+  for (const v of voci) (perCat[catDi[v.n.toLowerCase()] || 'Altro'] = perCat[catDi[v.n.toLowerCase()] || 'Altro'] || []).push(v);
+  const ordine = CATEGORIE.filter(c => perCat[c]);
+  const daPrendere = voci.filter(v => !presi[v.n]).length;
+
+  let h = `<div class="filters">
+    <div class="fhead"><span class="ft">Giorni da coprire</span>
+      <button class="freset" data-act="spesa-tutti" ${scelti.length === 7 ? 'disabled' : ''}>Tutti</button></div>
+    <div class="fgrid"><div class="fgroup full"><div class="fchips">
+      ${GIORNI_SETT.map(g => `<button data-spesag="${g.id}"
+        class="${scelti.includes(g.id) ? 'on' : ''}" ${pianoPieno(g.id) ? '' : 'disabled'}>${g.b}</button>`).join('')}
+    </div></div></div>
+  </div>`;
+
+  h += `<div class="fsummary">
+    <span><b>${daPrendere}</b> da comprare su <b>${voci.length}</b></span>
+    <span class="exp"><button data-export="spesa">CSV</button><button data-act="stampa">Stampa</button></span>
+  </div>`;
+
+  if (!voci.length) {
+    return h + vuoto('🛒', 'Niente da comprare',
+      'Scegli almeno un giorno che abbia un piano, oppure compila il piano della settimana.');
+  }
+
+  for (const c of ordine) {
+    h += `<div class="panel" style="margin-top:10px"><div class="label">${CAT_ICON[c] || ''} ${esc(c)}</div>`;
+    for (const v of perCat[c].sort((a, b) => b.q - a.q)) {
+      const ok = !!presi[v.n];
+      h += `<button class="sp-r ${ok ? 'preso' : ''}" data-preso="${esc(v.n)}">
+        <span class="sp-c"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg></span>
+        <span class="sp-b"><span class="sp-n">${esc(v.n)}</span>
+          <span class="sp-g">${v.giorni.size} ${v.giorni.size === 1 ? 'giorno' : 'giorni'}</span></span>
+        <span class="sp-q">${quantitaSpesa(v.q)}</span>
+      </button>`;
+    }
+    h += `</div>`;
+  }
+
+  h += `<button class="btn sec" data-act="spesa-azzera">Togli tutte le spunte</button>
+    <p class="set-note">Le quantità sono a crudo e senza scarti: per la verdura e la frutta
+      conta un 20% in più, per le confezioni arrotonda alla grandezza che trovi.</p>`;
+  return h;
+}
+
+/* Sotto il chilo si ragiona in grammi, sopra in chili: "1.4 kg" si legge, "1400 g" si conta. */
+function quantitaSpesa(g) {
+  return g >= 1000 ? r1(g / 1000) + ' kg' : r0(g) + ' g';
+}
+
+/* Quali giorni e quali categorie sono aperti. Sta in memoria e non nel
+   localStorage: è il punto in cui ti trovi adesso, non una preferenza. */
+const aperti = { giorni: new Set(), cat: new Set(), inizializzato: false };
+
+function vistaDiario() {
+  const f = filtri('cibo');
+  const righe = righeFiltrate();
+  const tot = somma(righe);
+  const perGiorno = raggruppaPerGiorno(righe);
+  const gg = perGiorno.length || 1;
+
+  let h = scatolaFiltri('cibo',
+    campoPeriodo('cibo') +
+    campoRicerca('cibo', 'nome dell’alimento…') +
+    campoMulti('cibo', 'slot', 'Pasto', PASTI.map(p => p.id), PASTI.map(p => p.l)) +
+    campoMulti('cibo', 'cat', 'Categoria', CATEGORIE, CATEGORIE)
+  );
+
+  h += `<div class="kpis" style="margin-bottom:12px">
+    <div class="kpi"><div class="kl">Media kcal / giorno</div>
+      <div class="kv">${r0(tot.k / gg)}</div>
+      ${scostamento(tot.k / gg, cfg().target.kcal, 'kcal')}</div>
+    <div class="kpi"><div class="kl">Media proteine</div>
+      <div class="kv">${r0(tot.p / gg)}<small> g</small></div>
+      ${scostamento(tot.p / gg, cfg().target.prot, 'g')}</div>
+  </div>`;
+
+  h += rigaRisultati(righe.length, righe.length === 1 ? 'voce' : 'voci',
+    `<b>${perGiorno.length}</b> ${perGiorno.length === 1 ? 'giorno' : 'giorni'} · <b>${r0(tot.k)}</b> kcal totali`, 'cibo');
+
+  if (!righe.length) {
+    return h + vuoto('🍽️', 'Nessuna voce nel periodo',
+      'Cambia i filtri, oppure registra un pasto dalla scheda <b>Oggi</b>.');
+  }
+
+  /* Alla prima apertura si spalanca solo il giorno più recente: gli altri li
+     apri tu. Prima erano tutte le righe di tutti i giorni una dietro l'altra,
+     con la data ripetuta su ognuna. */
+  if (!aperti.inizializzato) {
+    aperti.inizializzato = true;
+    if (perGiorno.length) aperti.giorni.add(perGiorno[0].d);
+  }
+  /* Con una ricerca in corso non ha senso tenere chiuso: quello che cerchi
+     potrebbe essere in un giorno che non apriresti mai. */
+  const tuttiAperti = !!f.q.trim();
+
+  for (const g of perGiorno) {
+    const apri = tuttiAperti || aperti.giorni.has(g.d);
+    const kt = kcalTarget(g.d);
+    const scarto = r0(g.tot.k - kt);
+    const stato = Math.abs(scarto) <= kt * 0.10 ? 'ok' : (scarto > 0 ? 'no' : 'neutro');
+    h += `<div class="acc ${apri ? 'aperto' : ''}">
+      <button class="acc-h fitta" data-giorno="${g.d}">
+        <span class="acc-d">${esc(dataCorta(g.d))}<small>${esc(nomeGiorno(g.d))}</small></span>
+        <span class="acc-n">${g.righe.length} ${g.righe.length === 1 ? 'voce' : 'voci'}</span>
+        <span class="acc-k">${r0(g.tot.k)}<i> kcal</i></span>
+        <span class="badge ${stato}">${scarto > 0 ? '+' : ''}${scarto}</span>
+        <span class="acc-c"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+      </button>
+      ${apri ? tabellaGiorno(g, f) : ''}
+    </div>`;
+  }
+  return h;
+}
+
+/* Le righe filtrate, divise per giorno e già ordinate. Il verso del giorno
+   segue l'ordinamento scelto sulla colonna Data. */
+function raggruppaPerGiorno(righe) {
+  const mappa = {};
+  for (const r of righe) (mappa[r.d] = mappa[r.d] || []).push(r);
+  const f = filtri('cibo');
+  const giu = f.ord === 'data-' || !f.ord.startsWith('data');
+  return Object.keys(mappa).sort((a, b) => giu ? (a < b ? 1 : -1) : (a < b ? -1 : 1))
+    .map(d => ({ d, righe: mappa[d], tot: somma(mappa[d]) }));
+}
+
+function tabellaGiorno(g, f) {
+  const ord = (c, l, cls) =>
+    `<th class="${cls || ''}" data-ord="cibo" data-campo="${c}">${l}${f.ord.startsWith(c) ? `<i>${f.ord.endsWith('-') ? '↓' : '↑'}</i>` : ''}</th>`;
+
+  let h = `<div class="acc-b"><div class="tablewrap"><table class="dt">
+    <thead><tr>
+      ${ord('nome', 'Alimento', 'nome')}<th class="opt">Pasto</th>
+      <th class="n">g</th>${ord('kcal', 'Kcal', 'n')}${ord('prot', 'Prot', 'n')}
+      <th class="n opt">Carb</th><th class="n opt">Gras</th>
+    </tr></thead><tbody>`;
+  for (const r of g.righe) {
+    const m = macro(r);
+    const p = PASTI.find(p => p.id === r.slot);
+    h += `<tr data-riga="${r.id}">
+      <td class="nome">${esc(r.n)}<span class="sub opt-inv">${esc(p ? p.l : r.slot)}</span></td>
+      <td class="opt"><span class="badge neutro">${esc(p ? p.l : r.slot)}</span></td>
+      <td class="n">${r1(r.q)}</td><td class="n">${r0(m.k)}</td>
+      <td class="n">${r0(m.p)}</td><td class="n opt">${r0(m.c)}</td><td class="n opt">${r0(m.g)}</td>
+    </tr>`;
+  }
+  return h + `</tbody><tfoot><tr>
+      <td class="nome">Totale del giorno</td>
+      <td class="opt"></td>
+      <td class="n">${r1(g.righe.reduce((a, r) => a + r.q, 0))}</td>
+      <td class="n">${r0(g.tot.k)}</td>
+      <td class="n">${r0(g.tot.p)}</td>
+      <td class="n opt">${r0(g.tot.c)}</td>
+      <td class="n opt">${r0(g.tot.g)}</td>
+    </tr></tfoot></table></div></div>`;
+}
+
+/* Lo scostamento dal target, con il segno e il colore giusti: il verde non è
+   "di più", è "in linea". */
+function scostamento(valore, target, unita) {
+  if (!target) return '';
+  const d = valore - target;
+  const q = Math.abs(d) / target;
+  const cls = q < 0.05 ? 'pari' : (d > 0 ? 'su' : 'giu');
+  const segno = d > 0 ? '+' : '−';
+  return `<div class="kd ${cls}">${q < 0.05 ? 'in linea' : segno + r0(Math.abs(d)) + ' ' + unita} · target ${target}</div>`;
+}
+
+function alimentiFiltrati() {
+  const f = filtri('alim');
+  const q = f.q.trim().toLowerCase();
+  let l = catalogo();
+  if (f.soloMiei) l = l.filter(a => a.mio);
+  if (f.cat.length) l = l.filter(a => f.cat.includes(a.cat));
+  if (q) l = l.filter(a => a.n.toLowerCase().includes(q) || (a.nt || '').toLowerCase().includes(q));
+  const c = f.ord.replace('-', ''), dir = f.ord.endsWith('-') ? -1 : 1;
+  l.sort((a, b) => c === 'nome' ? a.n.localeCompare(b.n) :
+    c === 'prot' ? a.p - b.p : c === 'kcal' ? a.k - b.k : 0);
+  if (dir === -1) l.reverse();
+  return l;
+}
+
+function vistaAlimenti() {
+  const f = filtri('alim');
+  const lista = alimentiFiltrati();
+  const miei = di('a').length;
+
+  let h = scatolaFiltri('alim',
+    campoRicerca('alim', 'cerca fra ' + catalogo().length + ' alimenti…') +
+    campoMulti('alim', 'cat', 'Categoria', CATEGORIE, CATEGORIE) +
+    `<div class="fgroup full"><label>Origine</label><div class="fchips">
+       <button data-f="alim" data-flag="soloMiei" class="${f.soloMiei ? 'on' : ''}">Solo i miei (${miei})</button>
+     </div></div>`
+  );
+
+  h += rigaRisultati(lista.length, lista.length === 1 ? 'alimento' : 'alimenti',
+    'valori per <b>100 g</b>', 'alimenti');
+
+  if (!lista.length) return h + vuoto('🔍', 'Nessun alimento', 'Cambia i filtri o aggiungine uno con <b>+</b>.');
+
+  /* Settantuno righe di seguito non si scorrono: si aprono per categoria.
+     Quando c'è una ricerca in corso invece si spalancano tutte, perché quello
+     che cerchi potrebbe stare in una categoria che non apriresti mai. */
+  const tuttiAperti = !!f.q.trim() || f.soloMiei;
+
+  const perCat = {};
+  for (const a of lista) (perCat[a.cat] = perCat[a.cat] || []).push(a);
+  const ordine = CATEGORIE.filter(c => perCat[c]).concat(Object.keys(perCat).filter(c => !CATEGORIE.includes(c)));
+
+  for (const c of ordine) {
+    const l = perCat[c];
+    const apri = tuttiAperti || aperti.cat.has(c);
+    h += `<div class="acc ${apri ? 'aperto' : ''}">
+      <button class="acc-h" data-catapri="${esc(c)}">
+        <span class="acc-i">${CAT_ICON[c] || '🍽️'}</span>
+        <span class="acc-d">${esc(c)}</span>
+        <span class="acc-n">${l.length} ${l.length === 1 ? 'alimento' : 'alimenti'}</span>
+        <span class="acc-c"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+      </button>
+      ${apri ? tabellaAlimenti(l, f) : ''}
+    </div>`;
+  }
+  return h;
+}
+
+function tabellaAlimenti(lista, f) {
+  const ord = (c, l) =>
+    `<th class="n" data-ord="alim" data-campo="${c}">${l}${f.ord.startsWith(c) ? `<i>${f.ord.endsWith('-') ? '↓' : '↑'}</i>` : ''}</th>`;
+
+  let h = `<div class="acc-b"><div class="tablewrap"><table class="dt"><thead><tr>
+      <th class="nome" data-ord="alim" data-campo="nome">Alimento${f.ord.startsWith('nome') ? `<i>${f.ord.endsWith('-') ? '↓' : '↑'}</i>` : ''}</th>
+      ${ord('kcal', 'Kcal')}${ord('prot', 'Prot')}
+      <th class="n opt">Carb</th><th class="n opt">Gras</th>
+    </tr></thead><tbody>`;
+  for (const a of lista) {
+    h += `<tr data-alim="${esc(a.n)}">
+      <td class="nome">${esc(a.n)}${a.mio ? ' <span class="badge coral">mio</span>' : ''}${a.nt ? `<span class="sub">${esc(a.nt)}</span>` : ''}</td>
+      <td class="n">${a.k}</td><td class="n">${a.p}</td><td class="n opt">${a.c}</td><td class="n opt">${a.g}</td>
+    </tr>`;
+  }
+  return h + `</tbody></table></div></div>`;
+}
+
+/* ============================================================
+   8. Allenamento — registro delle sessioni e schede
+   ============================================================ */
+
+const GRUPPI = Object.keys(ESERCIZI);
+
+/* A quale gruppo appartiene un esercizio. Se l'hai scritto tu e non è in
+   elenco finisce in "Altro": meglio una riga in più nei report che una
+   sessione che sparisce dai filtri. */
+const gruppoDi = (() => {
+  const mappa = {};
+  for (const g of GRUPPI) for (const e of ESERCIZI[g]) mappa[e.toLowerCase()] = g;
+  return nome => mappa[String(nome || '').toLowerCase()] || 'Altro';
+})();
+
+/* Una scheda importata ha sezioni come "Riscaldamento" o "Petto", non "Cardio":
+   il gruppo da solo non basta a capire che il tapis roulant si misura in minuti
+   e non in serie. Il nome invece lo dice sempre. */
+const RX_CARDIO = /corsa|cammin|tapis|treadmill|cyclette|\bbike\b|ellittic|vogator|nuoto|salto con la corda|cardio/i;
+const isCardio = e => !!e.cardio || GRUPPI_CARDIO.includes(e.gruppo || gruppoDi(e.n)) || RX_CARDIO.test(e.n || '');
+
+/* I numeri di una sessione, calcolati una volta sola perché servono nella
+   tabella, nei totali e nei report. */
+function statSessione(w) {
+  const eser = w.eser || [];
+  let serie = 0, volume = 0, ripetizioni = 0, min = 0, km = 0;
+  for (const e of eser) {
+    for (const s of (e.sets || [])) {
+      if (!s.ok) continue;
+      serie++; ripetizioni += num(s.r); volume += num(s.r) * num(s.w);
+    }
+    min += num(e.min); km += num(e.km);
+  }
+  return { serie, volume, ripetizioni, min, km, esercizi: eser.length, dur: num(w.dur, 0) };
+}
+
+function sessioniFiltrate() {
+  const f = filtri('allena'), i = intervallo(f);
+  const q = f.q.trim().toLowerCase();
+  let l = di('w').filter(w => w.d >= i.da && w.d <= i.a);
+  if (f.gruppo.length) {
+    l = l.filter(w => (w.eser || []).some(e => f.gruppo.includes(e.gruppo || gruppoDi(e.n))));
+  }
+  if (q) {
+    l = l.filter(w => (w.gn || '').toLowerCase().includes(q) || (w.sn || '').toLowerCase().includes(q) ||
+      (w.eser || []).some(e => e.n.toLowerCase().includes(q)));
+  }
+  const dir = f.ord.endsWith('-') ? -1 : 1, c = f.ord.replace('-', '');
+  l.sort((a, b) => c === 'data' ? (a.d < b.d ? -1 : a.d > b.d ? 1 : 0)
+    : c === 'volume' ? statSessione(a).volume - statSessione(b).volume
+    : c === 'serie' ? statSessione(a).serie - statSessione(b).serie : 0);
+  if (dir === -1) l.reverse();
+  return l;
+}
+
+function vistaAllena() {
+  const sub = SUB.allena;
+  let h = `<div class="seg" data-seg="sub-allena" style="margin-bottom:14px">
+    <button data-sub="sessioni" class="${sub === 'sessioni' ? 'on' : ''}">Sessioni</button>
+    <button data-sub="schede" class="${sub === 'schede' ? 'on' : ''}">Schede</button>
+  </div>`;
+  return h + (sub === 'sessioni' ? vistaSessioni() : vistaSchede());
+}
+
+function vistaSessioni() {
+  const f = filtri('allena');
+  const l = sessioniFiltrate();
+  const tot = l.reduce((a, w) => {
+    const s = statSessione(w);
+    return { serie: a.serie + s.serie, volume: a.volume + s.volume,
+             min: a.min + s.min, km: a.km + s.km, dur: a.dur + s.dur };
+  }, { serie: 0, volume: 0, min: 0, km: 0, dur: 0 });
+  const i = intervallo(f);
+  const settimane = Math.max(1, Math.round((new Date(i.a) - new Date(i.da)) / 6048e5) || 1);
+
+  let h = scatolaFiltri('allena',
+    campoPeriodo('allena') +
+    campoRicerca('allena', 'esercizio, scheda, giornata…') +
+    campoMulti('allena', 'gruppo', 'Gruppo muscolare', GRUPPI, GRUPPI)
+  );
+
+  h += `<div class="kpis" style="margin-bottom:12px">
+    <div class="kpi"><div class="kl">Sessioni</div><div class="kv">${l.length}</div>
+      <div class="kd pari">${r1(l.length / settimane)} a settimana</div></div>
+    <div class="kpi"><div class="kl">Volume totale</div>
+      <div class="kv">${r0(tot.volume).toLocaleString('it-IT')}<small> kg</small></div>
+      <div class="kd pari">${tot.serie} serie svolte</div></div>
+  </div>`;
+
+  h += rigaRisultati(l.length, l.length === 1 ? 'sessione' : 'sessioni',
+    tot.min ? `<b>${r0(tot.min)}</b> min di cardio` : '', 'sessioni');
+
+  if (!l.length) {
+    return h + vuoto('🏋️', 'Nessuna sessione nel periodo',
+      'Cambia i filtri, oppure parti da una scheda con <b>+</b>.');
+  }
+
+  const ord = (c, lb, cls) =>
+    `<th class="${cls || ''}" data-ord="allena" data-campo="${c}">${lb}${f.ord.startsWith(c) ? `<i>${f.ord.endsWith('-') ? '↓' : '↑'}</i>` : ''}</th>`;
+
+  h += `<div class="tablewrap"><table class="dt"><thead><tr>
+      ${ord('data', 'Data')}<th class="nome">Allenamento</th><th class="opt">Gruppi</th>
+      <th class="n opt">Durata</th>${ord('serie', 'Serie', 'n')}${ord('volume', 'Volume', 'n')}
+      <th class="n opt">Cardio</th><th class="opt">Stato</th>
+    </tr></thead><tbody>`;
+  for (const w of l) {
+    const s = statSessione(w);
+    const gr = Array.from(new Set((w.eser || []).map(e => e.gruppo || gruppoDi(e.n))));
+    h += `<tr data-sess="${w.id}">
+      <td>${esc(dataCorta(w.d))}<span class="sub">${esc(nomeGiorno(w.d))}</span></td>
+      <td class="nome">${esc(w.gn || 'Allenamento')}${w.sn ? `<span class="sub">${esc(w.sn)}</span>` : ''}</td>
+      <td class="opt">${gr.slice(0, 2).map(g => `<span class="badge sky">${esc(g.replace(/ \(.*/, ''))}</span>`).join(' ')}${gr.length > 2 ? ' +' + (gr.length - 2) : ''}</td>
+      <td class="n opt">${s.dur ? s.dur + "'" : '—'}</td><td class="n">${s.serie}</td>
+      <td class="n">${s.volume ? r0(s.volume).toLocaleString('it-IT') : '—'}</td>
+      <td class="n opt">${s.min ? s.min + "'" : '—'}${s.km ? ' · ' + r1(s.km) + ' km' : ''}</td>
+      <td class="opt"><span class="badge ${w.fine ? 'ok' : 'coral'}">${w.fine ? 'chiusa' : 'in corso'}</span></td>
+    </tr>`;
+  }
+  return h + `</tbody><tfoot><tr>
+      <td colspan="2">Totale</td><td class="opt"></td>
+      <td class="n opt">${tot.dur ? tot.dur + "'" : '—'}</td><td class="n">${tot.serie}</td>
+      <td class="n">${r0(tot.volume).toLocaleString('it-IT')}</td>
+      <td class="n opt">${tot.min ? r0(tot.min) + "'" : '—'}</td><td class="opt"></td>
+    </tr></tfoot></table></div>`;
+}
+
+function vistaSchede() {
+  const l = schede();
+  let h = '';
+
+  /* Gli stessi sette menu a tendina del piano alimentare: qui dicono quale
+     giornata di quale scheda tocca in quale giorno. */
+  const coppie = coppieAllenamento();
+  if (coppie.length) {
+    h += `<div class="section-head" style="margin-top:0"><h2>La settimana</h2>
+      <span class="count">${GIORNI_SETT.filter(g => allenamentoDi(g.id)).length} ${GIORNI_SETT.filter(g => allenamentoDi(g.id)).length === 1 ? 'seduta' : 'sedute'}</span></div>
+      <div class="panel" style="margin-top:0">`;
+    for (const g of GIORNI_SETT) {
+      const a = allenamentoDi(g.id);
+      const p = pianoAllRec(g.id);
+      h += `<div class="ass">
+        <span class="ass-g">${esc(g.l)}</span>
+        <select class="ass-s" data-assall="${g.id}">
+          <option value="">— riposo —</option>
+          ${coppie.map(c => `<option value="${esc(c.v)}" ${p.sid + '|' + p.gn === c.v ? 'selected' : ''}>${esc(c.l)}</option>`).join('')}
+        </select>
+        <span class="ass-k">${a ? (a.g.eser || []).length + ' es.' : '—'}</span>
+      </div>`;
+    }
+    h += `</div>
+      <p class="set-note">Nei giorni lasciati su “riposo” la scheda Oggi te lo dice,
+        invece di lasciarti davanti a una casella vuota.</p>`;
+  }
+
+  if (!l.length) {
+    return h + vuoto('📋', 'Nessuna scheda',
+      'Una scheda è il tuo programma: i giorni 1, 2, 3… ognuno con i suoi esercizi. ' +
+      'Creane una con <b>+</b>, oppure caricane una che hai già in un file.') +
+      `<button class="btn sec" data-act="importa-scheda">Importa una scheda da un file</button>`;
+  }
+
+  h += `<div class="section-head"><h2>Le schede</h2><span class="count">${l.length}</span></div>`;
+  for (const s of l) {
+    const ng = (s.giorni || []).length;
+    const ne = (s.giorni || []).reduce((n, g) => n + (g.eser || []).length, 0);
+    const usata = di('w').filter(w => w.sid === s.id).length;
+    h += `<button class="card-row" data-scheda="${s.id}">
+      <span class="cbadge">${ng}<br>gg</span>
+      <span class="cb"><h3>${esc(s.n)}</h3>
+        <span class="meta">${ne} esercizi · usata ${usata} ${usata === 1 ? 'volta' : 'volte'}</span></span>
+      <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+    </button>`;
+  }
+  return h + `<button class="btn sec" data-act="importa-scheda">Importa una scheda da un file</button>`;
+}
+
+/* ---------- editor della scheda ---------- */
+
+function vistaScheda() {
+  const sc = DB.items.find(i => i.id === view.id);
+  if (!sc) return vuoto('📋', 'Scheda non trovata', 'È stata cancellata su un altro dispositivo.');
+  sc.giorni = sc.giorni || [];
+
+  /* Un giorno alla volta. Impilarli tutti sembrava comodo finché i giorni erano
+     due; con quattro giorni da quindici esercizi diventa un rotolo in cui non
+     trovi più niente. */
+  const gi = Math.min(view.gi || 0, Math.max(0, sc.giorni.length - 1));
+  const g = sc.giorni[gi];
+
+  let h = `<div class="panel" style="margin-top:0">
+    <div class="label">Scheda</div>
+    <input class="txtin" data-sn="${sc.id}" value="${esc(sc.n)}" placeholder="Nome della scheda">
+  </div>`;
+
+  h += `<div class="weekstrip giorni">${sc.giorni.map((x, i) => `
+    <button data-gsel="${i}" class="${i === gi ? 'on' : ''}">
+      <b>${i + 1}</b><span>${esc((x.n || '').replace(/^giorno\s*\d+\s*[·\-–—]?\s*/i, '').slice(0, 12) || 'giorno')}</span>
+    </button>`).join('')}
+    <button data-act="add-giorno" class="piu">＋</button></div>`;
+
+  if (!g) {
+    return h + vuoto('🏋️', 'Nessun giorno',
+      'Aggiungi il primo giorno con <b>＋</b>, oppure importa la scheda da un file.') +
+      `<button class="btn sec" data-act="importa-scheda">Importa da un file</button>
+       <button class="btn danger" data-act="del-scheda">Elimina la scheda</button>`;
+  }
+
+  h += `<div class="panel">
+    <div class="rep-h">
+      <input class="txtin" style="font-weight:700;padding:7px 10px" data-gn="${gi}"
+        value="${esc(g.n)}" placeholder="Nome del giorno">
+      <button class="freset" data-delg="${gi}">Elimina</button>
+    </div>`;
+
+  if (!(g.eser || []).length) {
+    h += `<p class="set-note" style="margin:4px 0 0">Nessun esercizio. Aggiungine uno qui sotto.</p>`;
+  }
+
+  let sezione = null;
+  (g.eser || []).forEach((e, ei) => {
+    /* Le sezioni della scheda (riscaldamento, petto, bicipiti…) si vedono solo
+       quando cambiano: ripeterle su ogni riga sarebbe rumore. */
+    if (e.gruppo && e.gruppo !== sezione) {
+      sezione = e.gruppo;
+      h += `<p class="set-note" style="margin:14px 0 2px;font-weight:800;color:var(--secondario);
+        text-transform:uppercase;font-size:10px;letter-spacing:.06em">${esc(sezione)}</p>`;
+    }
+    const card = isCardio(e);
+    h += `<div class="ex"><div class="eh">
+        <span class="en">${esc(e.n)}</span>
+        <button class="del" data-dele="${gi}.${ei}" aria-label="Togli">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="sethead"><span class="sn"></span><span>Serie</span><span>Ripetizioni</span>
+        <span>Peso kg</span><span>Rec. s</span></div>
+      <div class="setrow">
+        <span class="sn">×</span>
+        <input type="number" inputmode="numeric" data-es="${gi}.${ei}.serie" value="${e.serie || 3}">
+        <input type="text" inputmode="text" data-es="${gi}.${ei}.rip" value="${esc(e.rip == null ? 10 : e.rip)}" placeholder="8–10">
+        <input type="number" inputmode="decimal" step="0.5" data-es="${gi}.${ei}.peso" value="${e.peso || ''}" placeholder="—">
+        <input type="number" inputmode="numeric" step="15" data-es="${gi}.${ei}.rec" value="${e.rec || ''}" placeholder="${DB.settings.recDefault}">
+      </div>
+      ${e.note ? `<p class="set-note" style="margin:6px 0 0">${esc(e.note)}</p>` : ''}
+    </div>`;
+  });
+
+  h += `<button class="addset" data-adde="${gi}">＋ Aggiungi esercizio</button></div>`;
+
+  h += `<button class="btn" data-avvia="${sc.id}|${esc(g.n)}">Allena questo giorno</button>
+    <button class="btn sec" data-act="importa-scheda">Importa da un file (sostituisce i giorni)</button>
+    <button class="btn danger" data-act="del-scheda">Elimina la scheda</button>`;
+  return h;
+}
+
+/* ---------- sessione in corso ---------- */
+
+function vistaSessione() {
+  const w = DB.items.find(i => i.id === view.id);
+  if (!w) return vuoto('🏋️', 'Sessione non trovata', 'È stata cancellata su un altro dispositivo.');
+  const s = statSessione(w);
+
+  let h = `<div class="kcal-card">
+    <div class="rep-h" style="margin:0">
+      <h3 style="color:#fff;font-size:17px">${esc(w.gn || 'Allenamento')}</h3>
+      <span class="hint" style="color:rgba(255,255,255,.6)">${esc(dataCorta(w.d))}</span>
+    </div>
+    <div class="macros" style="margin-top:12px;padding-top:12px">
+      <div class="macro"><div class="mh"><span class="mn">Serie</span><span class="mv">${s.serie}</span></div></div>
+      <div class="macro"><div class="mh"><span class="mn">Volume</span><span class="mv">${r0(s.volume).toLocaleString('it-IT')}<i> kg</i></span></div></div>
+      <div class="macro"><div class="mh"><span class="mn">Durata</span><span class="mv">${w.dur ? w.dur : '—'}<i> min</i></span></div></div>
+    </div>
+  </div>`;
+
+  if (w.fine) {
+    h += `<div class="panel"><div class="field" style="padding:2px 0">
+      <label>Durata dell'allenamento</label>
+      <input type="number" inputmode="numeric" data-wdur value="${w.dur || ''}"><span class="unit">min</span>
+    </div>
+    <p class="set-note">La conta l'app da quando parti a quando chiudi. Se avevi
+      dimenticato di chiudere, correggila qui.</p></div>`;
+  }
+
+  let sezione = null;
+  (w.eser || []).forEach((e, ei) => {
+    const card = isCardio(e);
+    const prec = ultimaVolta(e.n, w.d);
+    /* Le sezioni della scheda si vedono anche qui: sapere che sei nel
+       riscaldamento o nel circuito cambia come affronti la serie. */
+    if (e.gruppo && e.gruppo !== sezione) {
+      sezione = e.gruppo;
+      h += `<p class="sez-es">${esc(sezione)}</p>`;
+    }
+    h += `<div class="panel"><div class="eh">
+      <span class="en">${esc(e.n)}</span>
+      <span class="ed">${esc(e.gruppo || gruppoDi(e.n))}</span>
+      <button class="del" data-delwe="${ei}" aria-label="Togli esercizio">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>`;
+    /* La nota del preparatore va letta mentre ti alleni, non quando compili la
+       scheda: "carico leggero, controlla la discesa" serve col bilanciere in
+       mano. Sta sopra il confronto con l'ultima volta perché dice come si fa,
+       non come è andata. */
+    if (e.note) h += `<p class="nota-es">${esc(e.note)}</p>`;
+    if (prec) h += `<p class="set-note" style="margin:0 0 9px">Ultima volta il ${esc(dataCorta(prec.d))}: <b>${esc(prec.testo)}</b></p>`;
+
+    if (card) {
+      h += `<div class="setrow">
+        <span class="sn">min</span><input type="number" inputmode="numeric" data-ws="${ei}.min" value="${e.min || ''}" placeholder="0">
+        <span class="sn">km</span><input type="number" inputmode="decimal" step="0.1" data-ws="${ei}.km" value="${e.km || ''}" placeholder="0">
+      </div>`;
+    } else {
+      h += `<div class="sethead"><span class="sn"></span><span>Ripetizioni</span><span>Peso kg</span><span class="tick"></span></div>
+        <div class="sets">`;
+      (e.sets || []).forEach((st, si) => {
+        h += `<div class="setrow ${st.ok ? 'on' : ''}">
+          <span class="sn">${si + 1}</span>
+          <input type="number" inputmode="numeric" data-ws="${ei}.${si}.r" value="${st.r != null ? st.r : ''}" placeholder="${esc(e.rip || '')}">
+          <input type="number" inputmode="decimal" step="0.5" data-ws="${ei}.${si}.w" value="${st.w != null ? st.w : ''}" placeholder="${e.peso || ''}">
+          <button class="tick" data-tick="${ei}.${si}" aria-label="Serie completata">
+            <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg></button>
+        </div>`;
+      });
+      h += `</div><button class="addset" data-addset="${ei}">＋ Serie</button>`;
+    }
+    h += `</div>`;
+  });
+
+  h += `<button class="btn sec" data-act="add-eser-sess">＋ Aggiungi esercizio</button>
+    <div class="panel"><div class="label">Note</div>
+      <textarea class="notes" data-wnote placeholder="Come è andata, dolori, sensazioni…">${esc(w.note || '')}</textarea></div>`;
+  h += w.fine
+    ? `<button class="btn sec" data-act="riapri-sess">Riapri la sessione</button>`
+    : `<button class="btn" data-act="chiudi-sess">Chiudi l’allenamento</button>`;
+  h += `<button class="btn danger" data-act="del-sess">Elimina la sessione</button>`;
+  return h;
+}
+
+/* Il confronto con l'ultima volta è la sola informazione che serve davvero
+   mentre sei sotto il bilanciere: dice se stai progredendo o ripetendo. */
+function ultimaVolta(nome, primaDi) {
+  const l = di('w').filter(w => w.d < primaDi).sort((a, b) => a.d < b.d ? 1 : -1);
+  for (const w of l) {
+    const e = (w.eser || []).find(x => x.n.toLowerCase() === nome.toLowerCase());
+    if (!e) continue;
+    const fatte = (e.sets || []).filter(s => s.ok);
+    if (fatte.length) {
+      const top = fatte.reduce((a, b) => num(b.w) > num(a.w) ? b : a);
+      return { d: w.d, testo: fatte.length + '×' + top.r + ' con ' + top.w + ' kg' };
+    }
+    if (e.min) return { d: w.d, testo: e.min + ' min' + (e.km ? ' · ' + e.km + ' km' : '') };
+  }
+  return null;
+}
+
+/* ============================================================
+   9. Report
+   ============================================================ */
+
+/* Un grafico a linea in SVG puro: i valori arrivano già in coppie [x, y] e
+   qui diventano coordinate. Nessuna libreria da tenere aggiornata e nessun
+   file in più da scaricare la prima volta. */
+function grafico(punti, opt) {
+  opt = opt || {};
+  if (punti.length < 2) return `<p class="set-note">Servono almeno due rilevazioni per disegnare l’andamento.</p>`;
+  const W = 320, H = 150, ml = 30, mr = 8, mt = 10, mb = 20;
+  const ys = punti.map(p => p.y);
+  let min = Math.min(...ys), max = Math.max(...ys);
+  if (opt.goal != null) { min = Math.min(min, opt.goal); max = Math.max(max, opt.goal); }
+  const pad = (max - min) * 0.15 || 1;
+  min -= pad; max += pad;
+  const X = i => ml + (W - ml - mr) * (punti.length === 1 ? 0.5 : i / (punti.length - 1));
+  const Y = v => mt + (H - mt - mb) * (1 - (v - min) / (max - min));
+
+  const linea = punti.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join(' ');
+  const area = linea + ` L${X(punti.length - 1).toFixed(1)} ${(H - mb).toFixed(1)} L${X(0).toFixed(1)} ${(H - mb).toFixed(1)} Z`;
+  const tacche = [max - pad * 0.6, (max + min) / 2, min + pad * 0.6];
+
+  /* La media mobile, se c'è, diventa la linea che conta: il peso grezzo
+     oscilla di un chilo per il sale o l'intestino, e guardare i puntini uno
+     per uno porta a decisioni sbagliate. */
+  const mm = opt.media && opt.media.length === punti.length
+    ? opt.media.map((y, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(y).toFixed(1)).join(' ')
+    : null;
+
+  return `<svg class="chart ${mm ? 'con-media' : ''}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${tacche.map(v => `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>
+      <text class="lbl" x="2" y="${(Y(v) + 3).toFixed(1)}">${r1(v)}</text>`).join('')}
+    ${opt.goal != null ? `<line class="goal" x1="${ml}" x2="${W - mr}" y1="${Y(opt.goal).toFixed(1)}" y2="${Y(opt.goal).toFixed(1)}"/>` : ''}
+    ${mm ? '' : `<path class="area" d="${area}"/>`}
+    <path class="lin" d="${linea}"/>
+    ${mm ? `<path class="media" d="${mm}"/>` : ''}
+    ${punti.map((p, i) => `<circle class="dot ${i === punti.length - 1 ? 'last' : ''}" cx="${X(i).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${mm ? 2.4 : 3.2}"/>`).join('')}
+    <text class="lbl" x="${ml}" y="${H - 4}">${esc(punti[0].l)}</text>
+    <text class="lbl" x="${W - mr}" y="${H - 4}" text-anchor="end">${esc(punti[punti.length - 1].l)}</text>
+  </svg>`;
+}
+
+/* Media mobile su una finestra di GIORNI, non di rilevazioni: funziona sia se
+   ti pesi ogni giorno sia se lo fai una volta a settimana, mentre "media delle
+   ultime 7 misure" con la pesata settimanale coprirebbe due mesi. */
+function mediaMobile(punti, giorni) {
+  return punti.map((p, i) => {
+    const limite = new Date(p.d + 'T12:00:00').getTime() - giorni * 864e5;
+    let somma = 0, n = 0;
+    for (let j = i; j >= 0; j--) {
+      if (new Date(punti[j].d + 'T12:00:00').getTime() < limite) break;
+      somma += punti[j].y; n++;
+    }
+    return n ? somma / n : p.y;
+  });
+}
+
+/* La domanda del piano: "il peso medio è sceso nelle ultime tre settimane?".
+   Confronta la media delle ultime tre settimane con quella delle tre prima —
+   il singolo numero dell'ultima pesata non risponde. */
+function andamentoPeso(ms) {
+  const con = ms.filter(m => m.peso);
+  if (con.length < 2) return null;
+  const oggi = new Date(ms[ms.length - 1].d + 'T12:00:00').getTime();
+  const fascia = (da, a) => {
+    const v = con.filter(m => {
+      const t = new Date(m.d + 'T12:00:00').getTime();
+      return t > oggi - a * 864e5 && t <= oggi - da * 864e5;
+    }).map(m => num(m.peso));
+    return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null;
+  };
+  const recente = fascia(0, 21), prima = fascia(21, 42);
+  if (recente == null || prima == null) return null;
+  return { recente, prima, delta: recente - prima };
+}
+
+/* Una riga "media + quanti giorni a bersaglio". La barra non va oltre il 100%:
+   bere il doppio dell'acqua non è due volte meglio. */
+function rigaAbitudine(ic, nome, valore, quota, ok, su, cosa) {
+  return `<div class="abit">
+    <span class="ab-i">${ic}</span>
+    <span class="ab-b">
+      <span class="ab-t"><span>${esc(nome)}</span><b>${esc(valore)}</b></span>
+      <span class="rt"><i style="width:${Math.min(100, Math.max(3, quota * 100))}%"></i></span>
+      <span class="ab-n">${ok} ${ok === 1 ? 'giorno' : 'giorni'} su ${su} ${esc(cosa)}</span>
+    </span>
+  </div>`;
+}
+
+function classifica(voci, colore, unita) {
+  if (!voci.length) return `<p class="set-note">Niente da mostrare nel periodo.</p>`;
+  const max = voci[0].v || 1;
+  return voci.map((v, i) => `<div class="rank">
+    <span class="rn">${i + 1}</span>
+    <span class="rb">
+      <span class="rl"><span>${esc(v.n)}</span><span>${typeof v.t === 'string' ? esc(v.t) : r0(v.v).toLocaleString('it-IT') + ' ' + unita}</span></span>
+      <span class="rt"><i class="${colore || ''}" style="width:${Math.max(3, v.v / max * 100)}%"></i></span>
+    </span>
+  </div>`).join('');
+}
+
+function vistaReport() {
+  const f = filtri('report'), i = intervallo(f);
+  const t = cfg().target;
+  const righe = di('l').filter(r => r.d >= i.da && r.d <= i.a);
+  const sess = di('w').filter(w => w.d >= i.da && w.d <= i.a);
+  const cat = catalogo();
+
+  /* Un giorno conta solo se ci hai scritto qualcosa: includere i giorni vuoti
+     abbasserebbe la media e ti direbbe che mangi meno di quanto mangi. */
+  const perGiorno = {};
+  for (const r of righe) {
+    const m = macro(r);
+    const g = perGiorno[r.d] = perGiorno[r.d] || { k: 0, p: 0, c: 0, g: 0 };
+    g.k += m.k; g.p += m.p; g.c += m.c; g.g += m.g;
+  }
+  const giorni = Object.keys(perGiorno).sort();
+  const nG = giorni.length || 1;
+  const tot = somma(righe);
+  const media = { k: tot.k / nG, p: tot.p / nG, c: tot.c / nG, g: tot.g / nG };
+
+  /* Aderenza: quanti giorni sono finiti entro il 10% del bersaglio di calorie.
+     È la misura che conta davvero, più della media: due giorni sbagliati in
+     direzioni opposte danno una media perfetta e una settimana disastrosa. */
+  const inTarget = giorni.filter(d => {
+    const kt = kcalTarget(d);
+    return Math.abs(perGiorno[d].k - kt) <= kt * 0.10;
+  }).length;
+
+  const ms = misure().filter(m => m.d >= i.da && m.d <= i.a);
+  const tutteMs = misure();
+  const dPeso = ms.length > 1 ? ms[ms.length - 1].peso - ms[0].peso : null;
+
+  const statTot = sess.reduce((a, w) => {
+    const s = statSessione(w);
+    return { serie: a.serie + s.serie, volume: a.volume + s.volume, min: a.min + s.min, km: a.km + s.km };
+  }, { serie: 0, volume: 0, min: 0, km: 0 });
+
+  let h = scatolaFiltri('report', campoPeriodo('report'));
+
+  h += `<div class="fsummary">
+    <span>Periodo: <b>${esc(etichettaPeriodo(f))}</b> · <b>${nG}</b> ${nG === 1 ? 'giorno' : 'giorni'} con registrazioni</span>
+    <span class="exp"><button data-export="report">CSV</button><button data-act="stampa">Stampa</button></span>
+  </div>`;
+
+  /* Senza nemmeno un giorno registrato una media è zero solo per finta: meglio
+     un trattino, che dice "non lo so" invece di "hai mangiato zero". */
+  const vuotoPer = !giorni.length;
+
+  h += `<div class="kpis">
+    <div class="kpi"><div class="kl">Media kcal</div><div class="kv">${vuotoPer ? '—' : r0(media.k)}</div>
+      ${vuotoPer ? '<div class="kd pari">nessun giorno registrato</div>' : scostamento(media.k, t.kcal, 'kcal')}</div>
+    <div class="kpi"><div class="kl">Media proteine</div><div class="kv">${vuotoPer ? '—' : r0(media.p) + '<small> g</small>'}</div>
+      ${vuotoPer ? '<div class="kd pari">nessun giorno registrato</div>' : scostamento(media.p, t.prot, 'g')}</div>
+    <div class="kpi"><div class="kl">Aderenza</div><div class="kv">${vuotoPer ? '—' : r0(inTarget / nG * 100) + '<small>%</small>'}</div>
+      <div class="kd pari">${vuotoPer ? 'niente da confrontare' : inTarget + ' giorni su ' + nG + ' entro il 10%'}</div></div>
+    <div class="kpi"><div class="kl">Variazione peso</div>
+      <div class="kv">${dPeso == null ? '—' : (dPeso > 0 ? '+' : '') + r1(dPeso)}<small> kg</small></div>
+      <div class="kd ${dPeso == null ? 'pari' : dPeso < 0 ? 'giu' : 'su'}">${ms.length ? ms.length + ' rilevazioni' : 'nessuna misura'}</div></div>
+  </div>`;
+
+  /* ---------- andamento calorie ---------- */
+  h += `<div class="panel"><div class="rep-h"><h3>Calorie giorno per giorno</h3>
+      <span class="hint">colonna arancione = oltre il bersaglio</span></div>`;
+  if (giorni.length) {
+    const ultimi = giorni.slice(-21);
+    const maxK = Math.max(...ultimi.map(d => perGiorno[d].k), t.kcal) * 1.05;
+    h += `<div class="bars">${ultimi.map(d => {
+      const k = perGiorno[d].k, kt = kcalTarget(d);
+      return `<div class="b" title="${esc(dataCorta(d))}: ${r0(k)} kcal">
+        <i class="${k > kt * 1.05 ? 'over' : ''}" style="height:${Math.max(3, k / maxK * 100)}%"></i>
+        <span>${new Date(d + 'T12:00:00').getDate()}</span></div>`;
+    }).join('')}</div>
+    <div class="legend"><span><i style="background:var(--accento)"></i>entro il bersaglio</span>
+      <span><i style="background:var(--evidenza)"></i>oltre</span>
+      <span>ultimi ${ultimi.length} giorni registrati</span></div>`;
+  } else {
+    h += `<p class="set-note">Nessuna registrazione nel periodo.</p>`;
+  }
+  h += `</div>`;
+
+  /* ---------- ripartizione macro ---------- */
+  const kp = media.p * 4, kc = media.c * 4, kg = media.g * 9, ks = kp + kc + kg || 1;
+  const tp = t.prot * 4, tc = t.carb * 4, tg = t.gras * 9, ts = tp + tc + tg || 1;
+  h += `<div class="panel"><div class="rep-h"><h3>Ripartizione dei macronutrienti</h3>
+      <span class="hint">media del periodo, a confronto con il piano</span></div>`;
+
+  /* Senza registrazioni la ripartizione è 0/0/0 e la barra piatta: sembra un
+     dato, invece è l'assenza di dati. */
+  if (vuotoPer) {
+    h += `<p class="set-note" style="margin:0">Nessuna registrazione nel periodo: non c'è
+      niente da confrontare con il piano.</p></div>`;
+  } else {
+  h += `
+    <div class="stat-row"><span>Come mangi</span><span>${r0(kp / ks * 100)} / ${r0(kc / ks * 100)} / ${r0(kg / ks * 100)}%</span></div>
+    <div class="split">
+      <i style="width:${kp / ks * 100}%;background:var(--prot)"></i>
+      <i style="width:${kc / ks * 100}%;background:var(--carb)"></i>
+      <i style="width:${kg / ks * 100}%;background:var(--gras)"></i></div>
+    <div class="stat-row" style="margin-top:10px"><span>Come dovresti</span><span>${r0(tp / ts * 100)} / ${r0(tc / ts * 100)} / ${r0(tg / ts * 100)}%</span></div>
+    <div class="split">
+      <i style="width:${tp / ts * 100}%;background:var(--prot);opacity:.45"></i>
+      <i style="width:${tc / ts * 100}%;background:var(--carb);opacity:.45"></i>
+      <i style="width:${tg / ts * 100}%;background:var(--gras);opacity:.45"></i></div>
+    <div class="legend">
+      <span><i style="background:var(--prot)"></i>proteine ${r0(media.p)} g</span>
+      <span><i style="background:var(--carb)"></i>carboidrati ${r0(media.c)} g</span>
+      <span><i style="background:var(--gras)"></i>grassi ${r0(media.g)} g</span></div>
+  </div>`;
+  }
+
+  /* ---------- cosa mangio ---------- */
+  const perAlimento = {};
+  for (const r of righe) {
+    const m = macro(r);
+    const a = perAlimento[r.n] = perAlimento[r.n] || { k: 0, p: 0, q: 0, n: 0 };
+    a.k += m.k; a.p += m.p; a.q += r.q; a.n++;
+  }
+  const topK = Object.entries(perAlimento).map(([n, v]) => ({ n, v: v.k })).sort((a, b) => b.v - a.v).slice(0, 8);
+  const topP = Object.entries(perAlimento).map(([n, v]) => ({ n, v: v.p })).sort((a, b) => b.v - a.v).slice(0, 6);
+
+  const perCat = {}, catDi = {};
+  for (const a of cat) catDi[a.n.toLowerCase()] = a.cat;
+  for (const r of righe) {
+    const c = catDi[r.n.toLowerCase()] || 'Altro';
+    perCat[c] = (perCat[c] || 0) + macro(r).k;
+  }
+  const catOrd = Object.entries(perCat).map(([n, v]) => ({ n, v })).sort((a, b) => b.v - a.v);
+
+  const perSlot = {};
+  for (const r of righe) perSlot[r.slot] = (perSlot[r.slot] || 0) + macro(r).k;
+
+  h += `<div class="cols2">
+    <div class="panel"><div class="rep-h"><h3>Cosa mangio davvero</h3>
+      <span class="hint">calorie nel periodo</span></div>
+      ${classifica(topK, '', 'kcal')}</div>
+    <div class="panel"><div class="rep-h"><h3>Da dove arrivano le proteine</h3>
+      <span class="hint">grammi nel periodo</span></div>
+      ${classifica(topP, 'coral', 'g')}</div>
+  </div>`;
+
+  h += `<div class="cols2">
+    <div class="panel"><div class="rep-h"><h3>Calorie per categoria</h3></div>
+      ${classifica(catOrd, 'sky', 'kcal')}</div>
+    <div class="panel"><div class="rep-h"><h3>Calorie per pasto</h3>
+      <span class="hint">media al giorno</span></div>
+      ${classifica(PASTI.filter(p => perSlot[p.id]).map(p => ({ n: p.l, v: perSlot[p.id] / nG }))
+        .sort((a, b) => b.v - a.v), '', 'kcal')}</div>
+  </div>`;
+
+  /* ---------- le abitudini che non sono calorie ---------- */
+  const gg = di('g').filter(x => x.d >= i.da && x.d <= i.a);
+  const conAcqua = gg.filter(x => x.acqua > 0);
+  const conPassi = gg.filter(x => x.passi > 0);
+  const giorniOlio = giorni.map(d => olioDi(d)).filter(v => v > 0);
+
+  if (conAcqua.length || conPassi.length || giorniOlio.length) {
+    const mAcqua = conAcqua.length ? conAcqua.reduce((a, x) => a + x.acqua, 0) / conAcqua.length : 0;
+    const mPassi = conPassi.length ? conPassi.reduce((a, x) => a + x.passi, 0) / conPassi.length : 0;
+    const mOlio = giorniOlio.length ? giorniOlio.reduce((a, v) => a + v, 0) / giorniOlio.length : 0;
+    const okAcqua = conAcqua.filter(x => x.acqua >= t.acqua).length;
+    const okPassi = conPassi.filter(x => x.passi >= t.passi).length;
+    const okOlio = giorniOlio.filter(v => v <= t.olio).length;
+
+    h += `<div class="panel"><div class="rep-h"><h3>Acqua, passi e olio</h3>
+        <span class="hint">media dei giorni in cui hai registrato</span></div>
+      ${conAcqua.length ? rigaAbitudine('💧', 'Acqua', r1(mAcqua / 1000) + ' L', mAcqua / t.acqua, okAcqua, conAcqua.length, 'sopra il bersaglio') : ''}
+      ${conPassi.length ? rigaAbitudine('👟', 'Passi', r0(mPassi).toLocaleString('it-IT'), mPassi / t.passi, okPassi, conPassi.length, 'sopra il bersaglio') : ''}
+      ${giorniOlio.length ? rigaAbitudine('🫒', 'Olio EVO', r1(mOlio) + ' g', mOlio / t.olio, okOlio, giorniOlio.length, 'entro il massimo') : ''}
+    </div>`;
+  }
+
+  /* ---------- allenamento ---------- */
+  h += `<div class="section-head"><h2>Allenamento</h2>
+    <span class="count">${sess.length} ${sess.length === 1 ? 'sessione' : 'sessioni'}</span></div>`;
+
+  h += `<div class="kpis">
+    <div class="kpi"><div class="kl">Serie svolte</div><div class="kv">${statTot.serie}</div>
+      <div class="kd pari">${sess.length ? r1(statTot.serie / sess.length) : 0} a sessione</div></div>
+    <div class="kpi"><div class="kl">Volume</div>
+      <div class="kv">${r0(statTot.volume / 1000)}<small> t</small></div>
+      <div class="kd pari">${r0(statTot.volume).toLocaleString('it-IT')} kg sollevati</div></div>
+    <div class="kpi"><div class="kl">Cardio</div><div class="kv">${r0(statTot.min)}<small> min</small></div>
+      <div class="kd pari">${r1(statTot.km)} km</div></div>
+    <div class="kpi"><div class="kl">Giorni allenati</div>
+      <div class="kv">${new Set(sess.map(w => w.d)).size}</div>
+      <div class="kd pari">su ${Math.max(1, Math.round((new Date(i.a === '9999-12-31' ? oggiISO() : i.a) - new Date(i.da === '0000-01-01' ? (giorni[0] || oggiISO()) : i.da)) / 864e5) + 1)} giorni</div></div>
+  </div>`;
+
+  const perGruppo = {}, perEser = {};
+  for (const w of sess) {
+    for (const e of (w.eser || [])) {
+      const g = e.gruppo || gruppoDi(e.n);
+      const v = (e.sets || []).filter(s => s.ok).reduce((x, s) => x + num(s.r) * num(s.w), 0);
+      const ns = (e.sets || []).filter(s => s.ok).length;
+      perGruppo[g] = (perGruppo[g] || 0) + v;
+      const pe = perEser[e.n] = perEser[e.n] || { v: 0, serie: 0, max: 0, maxD: '' };
+      pe.v += v; pe.serie += ns;
+      for (const s of (e.sets || [])) {
+        if (s.ok && num(s.w) > pe.max) { pe.max = num(s.w); pe.maxD = w.d; }
+      }
+    }
+  }
+  /* Il cardio non ha volume: comparirebbe come una riga a zero, che non dice
+     niente e sposta in basso quelle che contano. */
+  const gruppoOrd = Object.entries(perGruppo).filter(([, v]) => v > 0)
+    .map(([n, v]) => ({ n, v })).sort((a, b) => b.v - a.v);
+  const eserOrd = Object.entries(perEser).map(([n, v]) => ({ n, v: v.serie, t: v.serie + ' serie · max ' + r1(v.max) + ' kg' }))
+    .sort((a, b) => b.v - a.v).slice(0, 8);
+
+  h += `<div class="cols2">
+    <div class="panel"><div class="rep-h"><h3>Volume per gruppo</h3>
+      <span class="hint">kg sollevati</span></div>
+      ${classifica(gruppoOrd, 'sky', 'kg')}</div>
+    <div class="panel"><div class="rep-h"><h3>Esercizi più frequenti</h3></div>
+      ${classifica(eserOrd, 'coral', '')}</div>
+  </div>`;
+
+  /* ---------- progressione dei carichi ---------- */
+  const prog = Object.entries(perEser)
+    .filter(([n, v]) => v.max > 0)
+    .map(([n, v]) => {
+      const stor = progressione(n);
+      const delta = stor.length > 1 ? stor[stor.length - 1].y - stor[0].y : 0;
+      return { n, max: v.max, delta, punti: stor.length };
+    })
+    .sort((a, b) => b.delta - a.delta).slice(0, 10);
+
+  if (prog.length) {
+    h += `<div class="panel"><div class="rep-h"><h3>Progressione dei carichi</h3>
+      <span class="hint">massimale di serie nel periodo, contro la prima volta registrata</span></div>
+      <div class="tablewrap" style="box-shadow:none;border:0"><table class="dt"><thead><tr>
+        <th class="nome">Esercizio</th><th class="n">Massimo</th><th class="n">Variazione</th><th>Andamento</th>
+      </tr></thead><tbody>`;
+    for (const p of prog) {
+      h += `<tr data-eser="${esc(p.n)}"><td class="nome">${esc(p.n)}</td>
+        <td class="n">${r1(p.max)} kg</td>
+        <td class="n">${p.delta > 0 ? '+' : ''}${r1(p.delta)} kg</td>
+        <td><span class="badge ${p.delta > 0 ? 'ok' : p.delta < 0 ? 'no' : 'neutro'}">${p.delta > 0 ? 'in salita' : p.delta < 0 ? 'in calo' : 'fermo'}</span></td></tr>`;
+    }
+    h += `</tbody></table></div></div>`;
+  }
+
+  /* ---------- corpo ---------- */
+  h += `<div class="section-head"><h2>Corpo</h2>
+    <button class="act" data-act="nuova-misura">＋ Registra misura</button></div>`;
+
+  if (tutteMs.length > 1) {
+    const pesi = tutteMs.filter(m => m.peso).map(m => ({ y: num(m.peso), l: dataCorta(m.d), d: m.d }));
+    const giri = tutteMs.filter(m => m.giro).map(m => ({ y: num(m.giro), l: dataCorta(m.d), d: m.d }));
+    const and = andamentoPeso(tutteMs);
+
+    h += `<div class="panel"><div class="rep-h"><h3>Peso</h3>
+        <span class="hint">obiettivo ${cfg().profilo.pesoObiettivo} kg</span></div>
+      ${grafico(pesi, { goal: cfg().profilo.pesoObiettivo, media: mediaMobile(pesi, 7) })}
+      <div class="legend">
+        <span><i style="background:var(--secondario);opacity:.45"></i>ogni pesata</span>
+        <span><i style="background:var(--evidenza)"></i>media a 7 giorni</span>
+        <span><i style="background:var(--evidenza);height:2px;border-radius:0"></i>obiettivo</span>
+      </div>`;
+
+    /* Il verdetto che il piano chiede: tre settimane contro le tre precedenti. */
+    if (and) {
+      const fermo = Math.abs(and.delta) < 0.3;
+      h += `<div class="verdetto ${and.delta < -0.3 ? 'bene' : fermo ? 'fermo' : 'male'}">
+        <b>${and.delta > 0 ? '+' : ''}${r1(and.delta)} kg</b>
+        <span>${and.delta < -0.3
+          ? 'nelle ultime tre settimane rispetto alle tre prima. Il piano sta funzionando: non toccare niente.'
+          : fermo
+            ? 'nelle ultime tre settimane. Il piano dice: se il peso medio non scende per tre settimane, togli 150 kcal dai <b>carboidrati</b> — mai dalle proteine.'
+            : 'nelle ultime tre settimane. Prima di cambiare i bersagli, controlla l’aderenza qui sopra: spesso il problema è quella, non il piano.'}</span>
+      </div>`;
+    } else {
+      h += `<p class="set-note">Con almeno sei settimane di pesate qui compare il confronto
+        fra le ultime tre e le tre precedenti, che è il numero su cui il piano ti chiede di decidere.</p>`;
+    }
+    h += `</div>`;
+
+    if (giri.length > 1) {
+      h += `<div class="panel"><div class="rep-h"><h3>Girovita</h3>
+          <span class="hint">obiettivo ${cfg().profilo.giroObiettivo} cm</span></div>
+        ${grafico(giri, { goal: cfg().profilo.giroObiettivo, media: mediaMobile(giri, 7) })}</div>`;
+    }
+  }
+
+  if (tutteMs.length) {
+    h += `<div class="tablewrap" style="margin-top:12px"><table class="dt"><thead><tr>
+      <th>Data</th><th class="n">Peso</th><th class="n">Girovita</th><th class="n">Massa grassa</th><th class="n">Δ peso</th>
+    </tr></thead><tbody>`;
+    const ord = tutteMs.slice().reverse();
+    ord.forEach((m, idx) => {
+      const prec = ord[idx + 1];
+      const d = prec && m.peso && prec.peso ? num(m.peso) - num(prec.peso) : null;
+      h += `<tr data-misura="${m.id}">
+        <td>${esc(dataCorta(m.d))}<span class="sub">${esc(String(m.d).slice(0, 4))}</span></td>
+        <td class="n">${m.peso ? r1(m.peso) + ' kg' : '—'}</td>
+        <td class="n">${m.giro ? r1(m.giro) + ' cm' : '—'}</td>
+        <td class="n">${m.mg ? r1(m.mg) + ' %' : '—'}</td>
+        <td class="n">${d == null ? '—' : `<span class="badge ${d < 0 ? 'ok' : d > 0 ? 'no' : 'neutro'}">${d > 0 ? '+' : ''}${r1(d)}</span>`}</td>
+      </tr>`;
+    });
+    h += `</tbody></table></div>`;
+  } else {
+    h += vuoto('⚖️', 'Nessuna misura',
+      'Peso e girovita ogni settimana, bioimpedenza ogni otto: è la regola del tuo piano.');
+  }
+
+  return h;
+}
+
+/* La serie storica del carico massimo di un esercizio, una data per sessione. */
+function progressione(nome) {
+  return di('w').sort((a, b) => a.d < b.d ? -1 : 1).map(w => {
+    const e = (w.eser || []).find(x => x.n.toLowerCase() === nome.toLowerCase());
+    if (!e) return null;
+    const fatte = (e.sets || []).filter(s => s.ok && num(s.w) > 0);
+    if (!fatte.length) return null;
+    return { y: Math.max(...fatte.map(s => num(s.w))), l: dataCorta(w.d) };
+  }).filter(Boolean);
+}
+
+/* ============================================================
+   10. Impostazioni
+   ============================================================ */
+
+function vistaSettings() {
+  const c = cfg(), t = c.target, p = c.profilo;
+  const nRighe = di('l').length, nSess = di('w').length, nMis = di('m').length;
+
+  const campo = (chiave, etichetta, unita, gruppo) =>
+    `<div class="field"><label>${esc(etichetta)}</label>
+      <input type="number" inputmode="decimal" data-cfg="${gruppo}.${chiave}"
+        value="${(gruppo === 'target' ? t : p)[chiave]}"><span class="unit">${unita}</span></div>`;
+
+  let h = `<div class="panel" style="margin-top:0"><div class="label">Bersagli giornalieri</div>
+    ${campo('kcal', 'Kcal nei giorni di turno', 'kcal', 'target')}
+    ${campo('kcalOff', 'Kcal nei giorni di riposo', 'kcal', 'target')}
+    ${campo('prot', 'Proteine', 'g', 'target')}
+    ${campo('carb', 'Carboidrati', 'g', 'target')}
+    ${campo('gras', 'Grassi', 'g', 'target')}
+    ${campo('acqua', 'Acqua', 'ml', 'target')}
+    ${campo('passi', 'Passi', '', 'target')}
+    ${campo('olio', 'Olio EVO al massimo', 'g', 'target')}
+    <p class="set-note">Questi numeri sono solo un punto di partenza: metti i tuoi, presi dal
+      piano che stai seguendo. Se il peso medio non scende per tre settimane, la correzione
+      si fa togliendo calorie dai carboidrati — mai dalle proteine, che in deficit servono a
+      non perdere massa magra.</p>
+  </div>`;
+
+  h += `<div class="panel"><div class="label">Obiettivi</div>
+    ${campo('pesoObiettivo', 'Peso da raggiungere', 'kg', 'profilo')}
+    ${campo('giroObiettivo', 'Girovita da raggiungere', 'cm', 'profilo')}
+    ${campo('altezza', 'Altezza', 'cm', 'profilo')}
+    <p class="set-note">Le due righe tratteggiate nei grafici del report sono questi numeri.
+      Il rapporto girovita/altezza è l'indice che i nutrizionisti guardano più del peso:
+      sotto 0,50 è considerato il livello di riferimento.</p>
+  </div>`;
+
+  const ts = turni();
+  h += `<div class="panel"><div class="label">Turni di lavoro</div>`;
+  if (!ts.length) {
+    h += `<p class="set-note" style="margin:0">Nessun turno. Senza, la barra in cima alla
+      scheda Oggi resta vuota.</p>`;
+  } else {
+    for (const x of ts) {
+      const usato = GIORNI_SETT.filter(g => turnoRec(g.id).turno === x.id);
+      h += `<button class="tn-r" data-turnomod="${x.id}">
+        <span class="tn-c" style="background:${coloreTurno(x)}"></span>
+        <span class="tn-i">${x.ic || '\u{1F553}'}</span>
+        <span class="tn-b"><span class="tn-n">${esc(x.n)}</span>
+          <span class="tn-o">${esc(x.ore || 'nessun orario')}${x.riposo ? ' · riposo' : ''}${usato.length ? ' · ' + usato.map(g => g.b).join(' ') : ''}</span></span>
+        <span class="go"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></span>
+      </button>`;
+    }
+  }
+  h += `<button class="btn sec" data-act="nuovo-turno">Aggiungi un turno</button>
+    <p class="set-note">Un turno segnato <b>riposo</b> abbassa il bersaglio a
+      ${t.kcalOff} kcal. È l'unica cosa che il turno decide.</p>
+  </div>`;
+
+  const permesso = typeof Notification !== 'undefined' ? Notification.permission : 'assente';
+  h += `<div class="panel"><div class="label">Promemoria</div>
+    <div class="field"><label>Avvisami prima</label>
+      <input type="number" inputmode="numeric" data-preav value="${num(DB.settings.preavviso, 15)}"><span class="unit">min</span></div>
+    <div class="stat-row"><span>Avvisi nel telefono</span><span>${
+      permesso === 'granted' ? 'attivi' : permesso === 'denied' ? 'negati' : 'da attivare'}</span></div>
+    ${permesso === 'granted' ? '' :
+      `<button class="btn sec" data-act="chiedi-notifiche">Attiva gli avvisi</button>`}
+    <p class="set-note">Un'app web può avvisarti <b>solo mentre è aperta</b>: far suonare
+      una notifica a telefono chiuso richiede un server che la spinga, e questa app non ne
+      ha uno. Quello che resta e funziona davvero:</p>
+    <div class="stat-row"><span>Pallino sull'icona</span><span>${
+      navigator.setAppBadge ? 'sì' : 'non supportato'}</span></div>
+    <p class="set-note" style="margin-top:6px">Il numero delle cose da fare compare
+      sull'icona nella schermata Home, e resta anche ad app chiusa.</p>
+    <button class="btn" data-act="esporta-calendario">Manda l'agenda al calendario</button>
+    <p class="set-note">Questa è la strada che non chiede niente a nessuno. Se invece
+      vuoi che gli avvisi arrivino da soli, c'è il riquadro qui sotto.</p>
+  </div>`;
+
+  h += `<div class="panel"><div class="label">Recupero fra le serie</div>
+    <div class="field"><label>Durata predefinita</label>
+      <input type="number" inputmode="numeric" data-rec value="${DB.settings.recDefault}"><span class="unit">sec</span></div>
+    <p class="set-note">Il cronometro parte da solo quando spunti una serie.</p>
+  </div>`;
+
+  h += typeof Sync !== 'undefined' ? Sync.panel() : '';
+
+  h += `<div class="panel"><div class="label">Backup</div>
+    <div class="stat-row"><span>Voci del diario</span><span>${nRighe}</span></div>
+    <div class="stat-row"><span>Sessioni di allenamento</span><span>${nSess}</span></div>
+    <div class="stat-row"><span>Misure</span><span>${nMis}</span></div>
+    <div class="stat-row"><span>Alimenti tuoi</span><span>${di('a').length}</span></div>
+    <div class="stat-row"><span>Schede</span><span>${schede().length}</span></div>
+    <button class="btn sec" data-act="backup">Esporta tutto (file JSON)</button>
+    <button class="btn sec" data-act="ripristina">Ripristina da un backup</button>
+    <p class="set-note">Il backup contiene tutto: diario, allenamenti, misure, bersagli.
+      Senza sincronizzazione è l'unica copia che esiste oltre a questo dispositivo.</p>
+  </div>`;
+
+  /* L'aspetto sta prima delle cose tecniche: è la sola voce di questa pagina
+     che si cambia più di una volta nella vita dell'app. */
+  const tSalv = temaSalvato();
+  h += `<div class="panel"><div class="label">Profilo</div>
+    <div class="field"><label>Come ti chiami</label>
+      <input type="text" data-nome value="${esc(cfg().profilo.nome || '')}" placeholder="Il tuo nome"></div>
+    <p class="set-note">Serve solo per il saluto in cima alla dashboard. Lascialo
+      vuoto e l'app saluta e basta.</p>
+  </div>`;
+
+  h += `<div class="panel"><div class="label">Aspetto</div>
+    <div class="seg" role="group" aria-label="Tema">
+      ${[['auto', 'Sistema'], ['chiaro', 'Chiaro'], ['scuro', 'Scuro']].map(([id, l]) =>
+        `<button data-tema-scelta="${id}" class="${tSalv === id ? 'on' : ''}">${l}</button>`).join('')}
+    </div>
+    <p class="set-note"><b>Sistema</b> segue l'iPhone: chiaro di giorno e scuro
+      la sera, senza toccare niente. Il tondo in alto a destra passa da uno
+      all'altro al volo, e sul Mac c'è il tasto <b>Tema</b> in fondo alla colonna.</p>
+  </div>`;
+
+  h += `<div class="panel"><div class="label">Questa app</div>
+    <div class="stat-row"><span>Versione in uso</span><span>${APP_VERSION}</span></div>
+    <div class="stat-row"><span>Alimenti nel database</span><span>${ALIMENTI.length}</span></div>
+    <div class="stat-row"><span>Funziona senza rete</span><span>${'serviceWorker' in navigator ? 'sì' : 'no'}</span></div>
+    <button class="btn" data-act="aggiorna">Aggiorna l'app adesso</button>
+    <p class="set-note">Sul telefono l'app tiene i file in memoria per funzionare senza
+      rete, e dopo una modifica può restare indietro di qualche ora. Questo pulsante
+      riscarica tutto subito. <b>I tuoi dati non si toccano</b>: diario, piani e
+      allenamenti restano dove sono.</p>
+  </div>`;
+
+  h += `<div class="panel"><div class="label">Zona pericolosa</div>
+    <button class="btn danger" data-act="azzera">Cancella tutti i dati di questo dispositivo</button>
+    <p class="set-note">Questo sì che cancella tutto. Prima fai un backup.</p>
+  </div>`;
+
+  h += `<div class="brand-foot"><div class="wm">CodeMind<span>.Lab</span></div>
+    <p>Forma · alimentazione e allenamento</p></div>`;
+  return h;
+}
+
+/* Lo stato delle notifiche si può sapere solo chiedendolo al browser, che
+   risponde con comodo: la riga si riempie dopo che la pagina è già disegnata. */
+async function mostraStatoPush() {
+  const el = $('#statoPush');
+  if (!el) return;
+  if (!pushPossibile()) { el.textContent = 'non supportate'; return; }
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+    el.textContent = 'permesso negato'; return;
+  }
+  const sub = await iscrizionePush();
+  const el2 = $('#statoPush');
+  if (!el2) return;
+  el2.textContent = sub
+    ? (typeof Sync !== 'undefined' && Sync.signedIn() ? 'attive' : 'attive, ma manca l’accesso')
+    : 'spente';
+}
+
+/* ============================================================
+   11. Pannelli dal basso
+   ============================================================ */
+
+let sheetCtx = {};
+
+function apriSheet(html, ctx) {
+  sheetCtx = ctx || {};
+  $('#sheetContent').innerHTML = html;
+  $('#sheet').hidden = false;
+  const f = $('#sheetContent input[autofocus]');
+  if (f) setTimeout(() => f.focus(), 120);
+}
+function chiudiSheet() { $('#sheet').hidden = true; sheetCtx = {}; }
+
+/* ---------- scelta dell'alimento ---------- */
+
+function sheetCerca(slot, q) {
+  const query = (q || '').trim().toLowerCase();
+  const lista = query
+    ? catalogo().filter(a => a.n.toLowerCase().includes(query)).slice(0, 40)
+    : recenti(10);
+  const ric = di('r');
+
+  let h = `<h2 class="sheet-title">Aggiungi a ${esc((PASTI.find(p => p.id === slot) || {}).l || 'pasto')}</h2>
+    <div class="searchbar">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="cercaCibo" type="search" placeholder="Cerca fra ${catalogo().length} alimenti"
+        value="${esc(q || '')}" autocapitalize="off" spellcheck="false" ${q ? '' : 'autofocus'}>
+      <button class="scan-btn" data-act="scansiona" aria-label="Scansiona il codice a barre">
+        <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10.5 8v8M14 8v8M17 8v8"/></svg>
+      </button>
+    </div>`;
+
+  if (!query && ric.length) {
+    h += `<div class="fchips" style="margin-bottom:10px">
+      ${ric.slice(0, 6).map(r => `<button data-ric="${r.id}">📦 ${esc(r.n)}</button>`).join('')}
+    </div>`;
+  }
+  if (!query) {
+    h += `<p class="set-note" style="margin:0 0 6px">${lista.length ? 'Usati di recente' : 'Scrivi per cercare nel database'}</p>`;
+  }
+
+  h += lista.map(a => `<button class="res" data-cibo="${esc(a.n)}">
+      <span class="ic">${CAT_ICON[a.cat] || '🍽️'}</span>
+      <span class="body"><h3>${esc(a.n)}</h3>
+        <span class="meta"><b>${a.k}</b> kcal · ${a.p}P ${a.c}C ${a.g}G per 100 g${a.mio ? ' · <span class="mine">mio</span>' : ''}</span></span>
+      <span class="add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+    </button>`).join('');
+
+  if (query && !lista.length) {
+    h += `<p class="set-note">Nessun alimento con questo nome.</p>
+      <button class="btn sec" data-act="nuovo-alimento">Crea “${esc(q)}”</button>`;
+  }
+  return h;
+}
+
+/* ---------- quantità ---------- */
+
+function sheetQuantita() {
+  const a = sheetCtx.alim, q = num(sheetCtx.q, 0);
+  const f = q / 100;
+  const porz = PORZIONI[a.n] || [];
+  const slot = sheetCtx.slot;
+  return `<h2 class="sheet-title">${esc(a.n)}</h2>
+    <div class="qty">
+      <div class="qn">${a.k} kcal · ${a.p}P ${a.c}C ${a.g}G per 100 g</div>
+      <div class="qbig">${sheetCtx.q === '' ? '0' : esc(sheetCtx.q)}<span> g</span></div>
+      <div class="qmac"><b>${r0(a.k * f)}</b> kcal · <b>${r1(a.p * f)}</b> P ·
+        <b>${r1(a.c * f)}</b> C · <b>${r1(a.g * f)}</b> G</div>
+    </div>
+    ${porz.length ? `<div class="porz">${porz.map(p =>
+      `<button data-pq="${p.q}">${esc(p.l)} · ${p.q} g</button>`).join('')}</div>` : ''}
+    <div class="fgroup" style="margin-top:14px"><label>Pasto</label>
+      <select id="slotSel">${PASTI.map(p =>
+        `<option value="${p.id}" ${p.id === slot ? 'selected' : ''}>${esc(p.l)}</option>`).join('')}</select></div>
+    <div class="pads">
+      ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-k="${n}">${n}</button>`).join('')}
+      <button data-k="canc" class="op">←</button>
+      <button data-k="0">0</button>
+      <button data-k="c" class="op">C</button>
+    </div>
+    <button class="btn" data-act="conferma-cibo">${(sheetCtx.rigaId || sheetCtx.pIdx != null) ? 'Salva' : 'Aggiungi'} ${q ? r0(a.k * f) + ' kcal' : ''}</button>
+    ${q > 0 ? `<button class="btn sec" data-act="sostituisci">Sostituisci con un altro alimento</button>` : ''}
+    ${(sheetCtx.rigaId || sheetCtx.pIdx != null) ? `<button class="btn danger" data-act="elimina-riga">Elimina la voce</button>` : ''}`;
+}
+
+/* ---------- altri pannelli ---------- */
+
+function sheetMisura(m) {
+  return `<h2 class="sheet-title">${m ? 'Modifica misura' : 'Nuova misura'}</h2>
+    <div class="field"><label>Data</label><input type="date" id="misD" value="${esc(m ? m.d : oggiISO())}"><span class="unit"></span></div>
+    <div class="field"><label>Peso</label><input type="number" inputmode="decimal" step="0.1" id="misP" value="${m && m.peso ? m.peso : ''}"><span class="unit">kg</span></div>
+    <div class="field"><label>Girovita</label><input type="number" inputmode="decimal" step="0.5" id="misG" value="${m && m.giro ? m.giro : ''}"><span class="unit">cm</span></div>
+    <div class="field"><label>Massa grassa</label><input type="number" inputmode="decimal" step="0.1" id="misMg" value="${m && m.mg ? m.mg : ''}"><span class="unit">%</span></div>
+    <p class="set-note">Peso e girovita ogni settimana, la bioimpedenza ogni otto.
+      Pesati sempre nelle stesse condizioni: appena sveglio, a digiuno, dopo il bagno.</p>
+    <button class="btn" data-act="salva-misura">Salva</button>
+    ${m ? `<button class="btn danger" data-act="elimina-misura">Elimina</button>` : ''}`;
+}
+
+function sheetNuovoAlimento(nome, a) {
+  /* Il titolo dipende dall'id, non dal fatto che ci siano dei valori: quando
+     arriva dal codice a barre o da una copia i campi sono già pieni, ma
+     l'alimento non esiste ancora. */
+  return `<h2 class="sheet-title">${a && a.id ? 'Modifica alimento' : 'Nuovo alimento'}</h2>
+    <p class="set-note" style="margin:0 0 12px">Valori per <b>100 g</b>, come sul database del piano.
+      Se li copi da un'etichetta, controlla che non siano riferiti a una porzione.</p>
+    <input class="txtin" id="alN" placeholder="Nome" value="${esc(a ? a.n : (nome || ''))}" style="margin-bottom:9px">
+    <div class="fgrid">
+      <div class="fgroup"><label>Kcal</label><input type="number" inputmode="decimal" id="alK" value="${a ? a.k : ''}"></div>
+      <div class="fgroup"><label>Proteine g</label><input type="number" inputmode="decimal" id="alP" value="${a ? a.p : ''}"></div>
+      <div class="fgroup"><label>Carboidrati g</label><input type="number" inputmode="decimal" id="alC" value="${a ? a.c : ''}"></div>
+      <div class="fgroup"><label>Grassi g</label><input type="number" inputmode="decimal" id="alG" value="${a ? a.g : ''}"></div>
+      <div class="fgroup full"><label>Categoria</label><select id="alCat">
+        ${CATEGORIE.map(c => `<option ${a && a.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+      </select></div>
+      <div class="fgroup full"><label>Nota</label><input type="text" id="alNt" value="${esc(a ? a.nt || '' : '')}" placeholder="es. 1 vasetto = 150 g"></div>
+    </div>
+    <button class="btn" data-act="salva-alimento">Salva</button>
+    ${a && a.id ? `<button class="btn danger" data-act="elimina-alimento">Elimina</button>` : ''}`;
+}
+
+/* prompt() non è affidabile dentro un'app installata — su alcune versioni di iOS
+   viene semplicemente ignorato — e comunque stona con il resto dell'interfaccia,
+   che chiede tutto dal basso. */
+/* Il calendario del mese. Le frecce spostano di un giorno, la striscia della
+   settimana di sette: per andare al mese scorso o alla settimana prossima
+   servirebbero venti tocchi. Qui ci si arriva in uno. */
+/* La scelta del turno per una data. Ha anche la via d'uscita: tornare a
+   seguire la settimana, che è il caso normale. */
+/* Modifica di un turno. Il colore si sceglie da una tavolozza invece che
+   scrivendolo: sei tinte che si vedono sul pannello scuro della barra, e
+   nessun modo di finire con un giallo su chiaro che non si legge. */
+function sheetModTurno(id) {
+  const x = id ? turnoInfo(id) : null;
+  const nuovo = !x;
+  const col = x ? (x.col || 'grigio') : 'azzurro';
+
+  return `<h2 class="sheet-title">${nuovo ? 'Nuovo turno' : 'Modifica turno'}</h2>
+    <div class="fgrid">
+      <div class="fgroup"><label>Nome</label>
+        <input type="text" id="tnNome" value="${esc(x ? x.n : '')}" placeholder="Apertura" autofocus></div>
+      <div class="fgroup"><label>Icona</label>
+        <input type="text" id="tnIcona" value="${esc(x ? (x.ic || '') : '')}" placeholder="🌅" maxlength="4"></div>
+      <div class="fgroup full"><label>Orario</label>
+        <input type="text" id="tnOre" value="${esc(x ? (x.ore || '') : '')}" placeholder="07:30 – 15:30"></div>
+      <div class="fgroup full"><label>Colore</label>
+        <div class="fchips tn-col">
+          ${COLORI_TURNO.map(c => `<button data-tncol="${c.id}" class="${c.id === col ? 'on' : ''}"
+            style="--c:${c.v}">${esc(c.n)}</button>`).join('')}
+        </div></div>
+      <div class="fgroup full"><label>Tipo di giornata</label>
+        <div class="fchips">
+          <button data-tnriposo="0" class="${x && x.riposo ? '' : 'on'}">Si lavora</button>
+          <button data-tnriposo="1" class="${x && x.riposo ? 'on' : ''}">È un riposo</button>
+        </div></div>
+    </div>
+    <button class="btn" data-act="salva-turno">${nuovo ? 'Crea' : 'Salva'}</button>
+    ${nuovo ? '' : `<button class="btn danger" data-act="elimina-turno">Elimina il turno</button>`}`;
+}
+
+function sheetTurno(d) {
+  const attuale = turnoDi(d);
+  const dallaSettimana = turnoRec(gsDiData(d)).turno;
+  const info = turnoInfo(dallaSettimana);
+
+  return `<h2 class="sheet-title">Turno di ${esc(nomeGiorno(d).toLowerCase())}</h2>
+    <p class="set-note" style="margin:0 0 12px">${esc(dataLunga(d))}</p>
+    ${turni().map(x => `<button class="sheet-row ${x.id === attuale ? 'sel' : ''}" data-turno="${x.id}">
+      <span class="ic">${x.ic || '\u{1F553}'}</span>
+      <span>${esc(x.n)}<span class="hint">${esc(x.ore || '')}</span></span>
+      ${x.id === attuale ? '<svg viewBox="0 0 24 24" style="color:var(--secondario)"><path d="M5 12l5 5L20 7"/></svg>' : ''}
+    </button>`).join('')}
+    ${turni().length ? '' : '<p class="set-note">Non hai nessun turno. Creane uno in Impostazioni.</p>'}
+    ${turnoScritto(d)
+      ? `<button class="btn sec" data-turno="">Segui la settimana${info ? ' (' + esc(info.n) + ')' : ''}</button>`
+      : ''}
+    <p class="set-note">Il turno di questo giorno vale solo per oggi. Per cambiarlo
+      tutte le settimane, usa i menu a tendina in <b>Cibo → Piano</b>.</p>`;
+}
+
+function sheetCalendario(sel) {
+  const mese = sheetCtx.mese || sel.slice(0, 7);
+  const [anno, mm] = mese.split('-').map(Number);
+  const primo = new Date(anno, mm - 1, 1);
+  const giorniNelMese = new Date(anno, mm, 0).getDate();
+  const vuoti = (primo.getDay() + 6) % 7;          // lunedì come primo giorno
+  const oggi = oggiISO();
+
+  const nomeMese = primo.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+    .replace(/^./, c => c.toUpperCase());
+
+  let celle = '';
+  for (let i = 0; i < vuoti; i++) celle += `<span class="cal-v"></span>`;
+  for (let g = 1; g <= giorniNelMese; g++) {
+    const data = mese + '-' + String(g).padStart(2, '0');
+    const righe = righeDi(data).length;
+    const allenato = di('w').some(w => w.d === data);
+    const haPiano = pianoPieno(gsDiData(data));
+    const cls = [
+      data === sel ? 'sel' : '',
+      data === oggi ? 'oggi' : '',
+      data > oggi ? 'futuro' : ''
+    ].filter(Boolean).join(' ');
+    celle += `<button class="cal-g ${cls}" data-vaidata="${data}">
+      <b>${g}</b>
+      <span class="cal-p">
+        <i class="${righe ? 'cibo' : (haPiano ? 'piano' : '')}"></i>
+        <i class="${allenato ? 'pesi' : ''}"></i>
+      </span>
+    </button>`;
+  }
+
+  return `<h2 class="sheet-title">Vai a una data</h2>
+    <div class="cal-top">
+      <button class="arw" data-mese="-1" aria-label="Mese precedente">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="cal-m">${esc(nomeMese)}</span>
+      <button class="arw" data-mese="1" aria-label="Mese successivo">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div class="cal-h">${GIORNI_SETT.map(g => `<span>${g.b}</span>`).join('')}</div>
+    <div class="cal-griglia">${celle}</div>
+    <div class="legend" style="justify-content:center">
+      <span><i style="background:var(--evidenza)"></i>registrato</span>
+      <span><i style="background:var(--accento)"></i>solo piano</span>
+      <span><i style="background:var(--secondario)"></i>allenamento</span>
+    </div>
+    <button class="btn sec" data-vaidata="${oggi}">Torna a oggi</button>`;
+}
+
+function sheetPassi(d) {
+  const g = giorno(d);
+  const t = cfg().target.passi;
+  return `<h2 class="sheet-title">Passi di ${esc(nomeGiorno(d).toLowerCase())}</h2>
+    <input class="txtin" id="passiVal" type="number" inputmode="numeric"
+      value="${g.passi || ''}" placeholder="${t}" autofocus>
+    <div class="fchips" style="margin-top:11px">
+      ${[5000, 7500, 10000, 12000, 15000].map(n =>
+        `<button data-passi="${n}">${n.toLocaleString('it-IT')}</button>`).join('')}
+    </div>
+    <p class="set-note">Il bersaglio del piano è ${t.toLocaleString('it-IT')} passi:
+      finché la palestra non è a regime è l'unica leva sul dispendio.</p>
+    <button class="btn" data-act="salva-passi">Salva</button>`;
+}
+
+function sheetRicetta(d) {
+  const righe = righeDi(d);
+  const t = somma(righe);
+  return `<h2 class="sheet-title">Salva come combinazione</h2>
+    <p class="set-note" style="margin:0 0 11px">${righe.length} voci · ${r0(t.k)} kcal ·
+      ${r0(t.p)} g proteine. La ritrovi come pulsante quando aggiungi un alimento.</p>
+    <input class="txtin" id="ricNome" value="Giornata ${esc(dataCorta(d))}"
+      placeholder="Nome della combinazione" autofocus>
+    <button class="btn" data-act="salva-ricetta-ok">Salva</button>`;
+}
+
+function sheetAvvioAllenamento() {
+  const l = schede();
+  let h = `<h2 class="sheet-title">Nuovo allenamento</h2>`;
+  if (!l.length) {
+    h += `<p class="set-note" style="margin:0 0 12px">Non hai ancora schede. Puoi partire da zero
+      e aggiungere gli esercizi mentre ti alleni, oppure creare prima una scheda.</p>`;
+  }
+  for (const s of l) {
+    for (const g of (s.giorni || [])) {
+      h += `<button class="sheet-row" data-avvia="${s.id}|${esc(g.n)}">
+        <span class="ic">🏋️</span>
+        <span>${esc(g.n)}<span class="hint">${esc(s.n)} · ${(g.eser || []).length} esercizi</span></span>
+      </button>`;
+    }
+  }
+  h += `<button class="sheet-row" data-avvia="|Allenamento libero">
+      <span class="ic">✏️</span><span>Allenamento libero</span></button>`;
+  return h;
+}
+
+function sheetEsercizio() {
+  const q = (sheetCtx.q || '').toLowerCase();
+  let h = `<h2 class="sheet-title">Aggiungi esercizio</h2>
+    <div class="searchbar">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="cercaEser" type="search" placeholder="Cerca o scrivi un nome nuovo"
+        value="${esc(sheetCtx.q || '')}" autocapitalize="off" spellcheck="false" autofocus>
+    </div>`;
+  let trovati = 0;
+  for (const g of GRUPPI) {
+    const l = ESERCIZI[g].filter(e => !q || e.toLowerCase().includes(q));
+    if (!l.length) continue;
+    trovati += l.length;
+    h += `<p class="set-note" style="margin:12px 0 2px;font-weight:800;color:var(--secondario);text-transform:uppercase;font-size:10px;letter-spacing:.06em">${esc(g)}</p>`;
+    h += l.map(e => `<button class="sheet-row" data-eserpick="${esc(e)}"><span>${esc(e)}</span></button>`).join('');
+  }
+  if (!trovati && sheetCtx.q) {
+    h += `<button class="btn" data-eserpick="${esc(sheetCtx.q)}">Aggiungi “${esc(sheetCtx.q)}”</button>`;
+  }
+  return h;
+}
+
+function sheetAzioniAlimento(nome) {
+  const a = catalogo().find(x => x.n === nome);
+  if (!a) return '';
+  return `<h2 class="sheet-title">${esc(a.n)}</h2>
+    <p class="set-note" style="margin:0 0 10px"><b>${a.k}</b> kcal · ${a.p} g proteine ·
+      ${a.c} g carboidrati · ${a.g} g grassi per 100 g${a.nt ? ' · ' + esc(a.nt) : ''}</p>
+    <button class="sheet-row" data-cibo="${esc(a.n)}"><span class="ic">➕</span>
+      <span>Aggiungi al diario di oggi</span></button>
+    ${a.mio
+      ? `<button class="sheet-row" data-modal="${esc(a.n)}"><span class="ic">✏️</span><span>Modifica i valori</span></button>`
+      : `<button class="sheet-row" data-copia="${esc(a.n)}"><span class="ic">📄</span>
+          <span>Crea una copia mia<span class="hint">per correggere i valori</span></span></button>`}`;
+}
+
+/* ============================================================
+   Codice a barre
+   ============================================================
+
+   Il codice si cerca prima fra i tuoi alimenti: un prodotto già scansionato
+   una volta si ritrova senza rete. Solo se non c'è si chiede a Open Food
+   Facts, che è gratuito, non vuole chiavi ed è pieno di prodotti italiani.
+*/
+
+const OFF = 'https://world.openfoodfacts.org/api/v2/product/';
+
+function alimentoDaCodice(codice) {
+  return di('a').find(a => a.ean === codice) || null;
+}
+
+/* Le categorie di Open Food Facts sono migliaia: qui si tenta solo di
+   indovinare quella giusta fra le nostre otto, e in caso di dubbio si mette
+   "Altro" — tanto la si può cambiare prima di salvare. */
+function categoriaDaOFF(tags) {
+  const t = (tags || []).join(' ');
+  if (/dairy|milk|yogurt|cheese|egg|latt|formagg|uov/i.test(t)) return 'Latticini/Uova';
+  if (/meat|poultry|chicken|beef|pork|ham|salumi|carn/i.test(t)) return 'Carne';
+  if (/fish|seafood|tuna|salmon|pesc|tonn/i.test(t)) return 'Pesce';
+  if (/cereal|bread|pasta|rice|flour|pane|pasta|ris|farin|biscot/i.test(t)) return 'Cereali';
+  if (/legume|bean|lentil|chickpea|fagiol|lentic|cec/i.test(t)) return 'Legumi';
+  if (/fruit|vegetable|frutt|verdur|ortagg/i.test(t)) return 'Frutta/Verdura';
+  if (/oil|nut|seed|olio|frutta-secca|semi/i.test(t)) return 'Grassi';
+  return 'Altro';
+}
+
+async function cercaCodice(codice) {
+  const campi = 'product_name,product_name_it,brands,quantity,nutriments,categories_tags';
+  const r = await fetch(OFF + encodeURIComponent(codice) + '?fields=' + campi);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  if (d.status !== 1 || !d.product) return null;
+
+  const pr = d.product, nut = pr.nutriments || {};
+  /* Le calorie a volte ci sono già in kcal, a volte solo in kJ. */
+  let kcal = num(nut['energy-kcal_100g'], 0);
+  if (!kcal) kcal = num(nut['energy_100g'], 0) / 4.184;
+
+  const marca = (pr.brands || '').split(',')[0].trim();
+  const nome = (pr.product_name_it || pr.product_name || '').trim();
+  if (!nome) return null;
+
+  return {
+    n: nome + (marca && !nome.toLowerCase().includes(marca.toLowerCase()) ? ' · ' + marca : ''),
+    k: r1(kcal), p: r1(num(nut.proteins_100g, 0)),
+    c: r1(num(nut.carbohydrates_100g, 0)), g: r1(num(nut.fat_100g, 0)),
+    cat: categoriaDaOFF(pr.categories_tags), nt: pr.quantity || '', ean: codice
+  };
+}
+
+function avviaScansione() {
+  if (!Scanner.disponibile()) { sheetCodiceManuale('La fotocamera non è disponibile qui.'); return; }
+  const ctx = Object.assign({}, sheetCtx);      // il pasto scelto non va perso
+  chiudiSheet();
+  Scanner.apri(codice => { sheetCtx = ctx; gestisciCodice(codice); });
+}
+
+async function gestisciCodice(codice) {
+  /* Prima in casa: se l'hai già scansionato una volta salti la rete e vai
+     dritto alla quantità. */
+  const mio = alimentoDaCodice(codice);
+  if (mio) {
+    sheetCtx = Object.assign({}, sheetCtx, { alim: mio, q: '', slot: sheetCtx.slot || slotOra(), rigaId: null, pIdx: null });
+    apriSheet('', sheetCtx);
+    $('#sheetContent').innerHTML = sheetQuantita();
+    return;
+  }
+
+  if (!navigator.onLine) {
+    apriSheet(sheetNuovoAlimento('', { n: '', k: '', p: '', c: '', g: '', cat: 'Altro', nt: '', ean: codice }), { ean: codice });
+    toast('Sei offline: i valori mettili tu');
+    return;
+  }
+
+  apriSheet(`<h2 class="sheet-title">Cerco il prodotto…</h2>
+    <p class="set-note" style="margin:0 0 10px">Codice <b>${esc(codice)}</b></p>
+    <div class="spinner"></div>`, { ean: codice });
+
+  try {
+    const p = await cercaCodice(codice);
+    if (!p) {
+      apriSheet(sheetNuovoAlimento('', { n: '', k: '', p: '', c: '', g: '', cat: 'Altro', nt: '', ean: codice }), { ean: codice });
+      toast('Prodotto non in archivio: aggiungilo tu');
+      return;
+    }
+    apriSheet(sheetProdotto(p), { prodotto: p });
+  } catch (e) {
+    apriSheet(sheetNuovoAlimento('', { n: '', k: '', p: '', c: '', g: '', cat: 'Altro', nt: '', ean: codice }), { ean: codice });
+    toast('Non raggiungo Open Food Facts');
+  }
+}
+
+function sheetProdotto(p) {
+  const dubbio = !p.k || (!p.p && !p.c && !p.g);
+  return `<h2 class="sheet-title">Prodotto trovato</h2>
+    <div class="trovato">
+      <span class="ic" style="font-size:22px">${CAT_ICON[p.cat] || '🍽️'}</span>
+      <span class="tb">
+        <h3>${esc(p.n)}</h3>
+        <span class="meta"><b>${p.k}</b> kcal · ${p.p}P ${p.c}C ${p.g}G per 100 g</span>
+        <span class="ean">${esc(p.ean)}${p.nt ? ' · ' + esc(p.nt) : ''}</span>
+      </span>
+    </div>
+    <p class="set-note">${dubbio
+      ? 'Su questo prodotto Open Food Facts ha dati incompleti: controllali sull’etichetta prima di salvare.'
+      : 'I dati vengono da Open Food Facts, dove li inseriscono gli utenti. Un’occhiata all’etichetta non fa male.'}</p>
+    <button class="btn" data-act="salva-prodotto">Aggiungi ai miei alimenti</button>
+    <button class="btn sec" data-act="correggi-prodotto">Correggi i valori</button>`;
+}
+
+/* Quante giornate di riposo e quante di turno. Sono i due numeri che
+   descrivono un piano a turni, e da lì escono i nomi: "Giorno 1 off",
+   "Giorno 2 on". Rinominarle poi costa un tocco per ognuna. */
+function sheetSchema() {
+  return `<h2 class="sheet-title">Crea le giornate</h2>
+    <p class="set-note" style="margin:0 0 12px">Quante giornate tipo diverse ha il tuo piano?
+      Le crea vuote, con i nomi già a posto, e le assegna ai sette giorni della settimana.
+      Il contenuto lo metti tu, una giornata alla volta.</p>
+    <div class="field"><label>Giornate di riposo</label>
+      <input type="number" inputmode="numeric" id="schemaOff" value="4"><span class="unit">off</span></div>
+    <div class="field"><label>Giornate di turno</label>
+      <input type="number" inputmode="numeric" id="schemaOn" value="3"><span class="unit">on</span></div>
+    <p class="set-note">Con 4 e 3 escono: Giorno 1 off, Giorno 2 off, Giorno 3 off,
+      Giorno 4 off, Giorno 1 on, Giorno 2 on, Giorno 3 on.</p>
+    <button class="btn" data-act="crea-schema-ok">Crea</button>`;
+}
+
+function sheetCombinazione(id) {
+  const r = DB.items.find(i => i.id === id);
+  if (!r) return '';
+  const t = somma(r.righe || []);
+  const perSlot = {};
+  for (const x of (r.righe || [])) (perSlot[x.slot] = perSlot[x.slot] || []).push(x);
+
+  return `<h2 class="sheet-title">Combinazione</h2>
+    <input class="txtin" id="ricNuovoNome" value="${esc(r.n)}" placeholder="Nome">
+    <p class="set-note" style="margin:9px 0 12px">${(r.righe || []).length} ${(r.righe || []).length === 1 ? 'voce' : 'voci'} ·
+      <b>${r0(t.k)}</b> kcal · ${r0(t.p)} P · ${r0(t.c)} C · ${r0(t.g)} G</p>
+    ${PASTI.filter(p => perSlot[p.id]).map(p => `<div class="pm">
+      <span class="pmh"><span class="pmn"><i class="pmi">${p.ic}</i>${esc(p.l)}</span>
+        <b>${r0(somma(perSlot[p.id]).k)} kcal</b></span>
+      <span class="pml">${perSlot[p.id].map(x => esc(x.n) + ' <b>' + r1(x.q) + ' g</b>').join(' · ')}</span>
+    </div>`).join('')}
+    <button class="btn" data-act="usa-combinazione">Aggiungi al diario di oggi</button>
+    <button class="btn sec" data-act="salva-combinazione">Salva il nome</button>
+    <button class="btn danger" data-act="elimina-combinazione">Elimina</button>`;
+}
+
+/* Sostituzioni a parità di calorie.
+ *
+ * Con tre macronutrienti e un solo numero da regolare — i grammi — non si può
+ * far tornare tutto. Si tengono uguali le calorie, che è il vincolo del piano,
+ * e si ordinano i candidati per quanto restano vicini sui macro. Le proteine
+ * pesano il doppio: sono la cosa che il piano dice di non toccare mai.
+ */
+function sostituti(a, q, tuttaLaLista) {
+  const miei = a.k;
+  if (!miei) return [];
+  const rif = { p: a.p * q / 100, c: a.c * q / 100, g: a.g * q / 100 };
+
+  return catalogo()
+    .filter(b => b.n !== a.n && b.k >= 5)
+    .filter(b => tuttaLaLista || b.cat === a.cat)
+    .map(b => {
+      const qb = q * miei / b.k;
+      const d = Math.abs(b.p * qb / 100 - rif.p) * 2
+              + Math.abs(b.c * qb / 100 - rif.c)
+              + Math.abs(b.g * qb / 100 - rif.g);
+      return { b, qb, d };
+    })
+    /* Fuori chi richiederebbe una quantità irreale: 400 kcal di zucchine sono
+       tre chili e mezzo, tecnicamente equivalenti e praticamente inutili. */
+    .filter(x => x.qb <= q * 4 && x.qb >= q / 4)
+    .sort((x, y) => x.d - y.d)
+    .slice(0, 12);
+}
+
+function sheetSostituzioni() {
+  const a = sheetCtx.alim, q = num(sheetCtx.q);
+  const tutta = !!sheetCtx.sostTutti;
+  const l = sostituti(a, q, tutta);
+  const rif = { k: a.k * q / 100, p: a.p * q / 100, c: a.c * q / 100, g: a.g * q / 100 };
+
+  let h = `<h2 class="sheet-title">Al posto di ${esc(a.n)}</h2>
+    <p class="set-note" style="margin:0 0 11px">${r1(q)} g · <b>${r0(rif.k)}</b> kcal ·
+      ${r1(rif.p)} P · ${r1(rif.c)} C · ${r1(rif.g)} G.
+      Le calorie restano queste, cambiano i grammi.</p>
+    <div class="fchips" style="margin-bottom:10px">
+      <button data-sostcat="0" class="${tutta ? '' : 'on'}">Stessa categoria</button>
+      <button data-sostcat="1" class="${tutta ? 'on' : ''}">Tutti gli alimenti</button>
+    </div>`;
+
+  if (!l.length) {
+    return h + `<p class="set-note">Nessun sostituto sensato${tutta ? '' : ' in questa categoria'}:
+      prova ad allargare a tutti gli alimenti.</p>`;
+  }
+
+  h += l.map(x => {
+    const dp = x.b.p * x.qb / 100 - rif.p;
+    const vicino = Math.abs(dp) < rif.p * 0.15 || Math.abs(dp) < 2;
+    return `<button class="res" data-sost="${esc(x.b.n)}|${r1(x.qb)}">
+      <span class="ic">${CAT_ICON[x.b.cat] || '🍽️'}</span>
+      <span class="body"><h3>${esc(x.b.n)}</h3>
+        <span class="meta"><b>${r1(x.qb)} g</b> · ${r1(x.b.p * x.qb / 100)} P ·
+          ${r1(x.b.c * x.qb / 100)} C · ${r1(x.b.g * x.qb / 100)} G</span></span>
+      <span class="badge ${vicino ? 'ok' : 'neutro'}">${dp > 0 ? '+' : ''}${r1(dp)} P</span>
+    </button>`;
+  }).join('');
+
+  return h + `<p class="set-note">Il segno verde vuol dire che le proteine restano quelle:
+    è la cosa che il piano chiede di non perdere.</p>`;
+}
+
+function sheetCodiceManuale(avviso) {
+  return apriSheet(`<h2 class="sheet-title">Codice a barre</h2>
+    ${avviso ? `<p class="set-note" style="margin:0 0 10px">${esc(avviso)}</p>` : ''}
+    <p class="set-note" style="margin:0 0 10px">Le tredici cifre stampate sotto alle barre.</p>
+    <input class="txtin" id="eanVal" type="text" inputmode="numeric" autocomplete="off"
+      placeholder="8076809513692" autofocus>
+    <button class="btn" data-act="cerca-ean">Cerca</button>`, Object.assign({}, sheetCtx));
+}
+
+/* ============================================================
+   12. Esportazione
+   ============================================================
+
+   Il CSV nasce dagli stessi filtri della tabella: quello che vedi è quello che
+   esce. Il punto e virgola come separatore è ciò che Excel italiano si aspetta;
+   con la virgola metterebbe tutta la riga in una colonna sola.
+*/
+
+function csv(righe) {
+  return righe.map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(';')).join('\r\n');
+}
+
+async function scarica(nomeFile, testo, tipo) {
+  const blob = new Blob(['﻿' + testo], { type: (tipo || 'text/csv') + ';charset=utf-8' });
+  const file = new File([blob], nomeFile, { type: blob.type });
+
+  /* Su iPhone un collegamento con "download" spesso non fa nulla dentro l'app
+     installata: il foglio di condivisione è l'unico modo affidabile per far
+     uscire un file dal telefono. Sul Mac vince il salvataggio diretto. */
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nomeFile }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeFile;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function esporta(cosa) {
+  const oggi = oggiISO();
+  if (cosa === 'cibo') {
+    const righe = righeFiltrate();
+    const out = [['Data', 'Giorno', 'Pasto', 'Alimento', 'Grammi', 'Kcal', 'Proteine', 'Carboidrati', 'Grassi']];
+    for (const r of righe) {
+      const m = macro(r);
+      const p = PASTI.find(p => p.id === r.slot);
+      out.push([r.d, nomeGiorno(r.d), p ? p.l : r.slot, r.n, r1(r.q), r0(m.k), r1(m.p), r1(m.c), r1(m.g)]);
+    }
+    const t = somma(righe);
+    out.push([]);
+    out.push(['Totale', '', '', '', '', r0(t.k), r1(t.p), r1(t.c), r1(t.g)]);
+    scarica('forma-diario-' + oggi + '.csv', csv(out));
+
+  } else if (cosa === 'alimenti') {
+    const out = [['Alimento', 'Categoria', 'Kcal/100g', 'Proteine', 'Carboidrati', 'Grassi', 'Origine', 'Nota']];
+    for (const a of alimentiFiltrati()) out.push([a.n, a.cat, a.k, a.p, a.c, a.g, a.mio ? 'mio' : 'piano', a.nt || '']);
+    scarica('forma-alimenti-' + oggi + '.csv', csv(out));
+
+  } else if (cosa === 'sessioni') {
+    const out = [['Data', 'Allenamento', 'Scheda', 'Durata min', 'Esercizio', 'Gruppo', 'Serie', 'Ripetizioni', 'Peso kg', 'Minuti', 'Km']];
+    for (const w of sessioniFiltrate()) {
+      for (const e of (w.eser || [])) {
+        const fatte = (e.sets || []).filter(s => s.ok);
+        if (fatte.length) {
+          fatte.forEach((s, i) => out.push([w.d, w.gn || '', w.sn || '', w.dur || '', e.n,
+            e.gruppo || gruppoDi(e.n), i + 1, s.r, s.w, '', '']));
+        } else {
+          out.push([w.d, w.gn || '', w.sn || '', w.dur || '', e.n, e.gruppo || gruppoDi(e.n), '', '', '', e.min || '', e.km || '']);
+        }
+      }
+    }
+    scarica('forma-allenamenti-' + oggi + '.csv', csv(out));
+
+  } else if (cosa === 'spesa') {
+    const scelti = DB.settings.spesaGiorni || [];
+    const per = {};
+    for (const gid of scelti) {
+      for (const r of righePiano(gid)) {
+        per[r.n] = (per[r.n] || 0) + r.q;
+      }
+    }
+    const cat = catalogo(), catDi = {};
+    for (const a of cat) catDi[a.n.toLowerCase()] = a.cat;
+    const out = [['Categoria', 'Alimento', 'Quantita g', 'In pratica', 'Preso']];
+    Object.keys(per).sort().forEach(n => out.push([
+      catDi[n.toLowerCase()] || 'Altro', n, r0(per[n]), quantitaSpesa(per[n]),
+      (DB.settings.spesaPresi || {})[n] ? 'si' : ''
+    ]));
+    scarica('forma-spesa-' + oggi + '.csv', csv(out));
+
+  } else if (cosa === 'report') {
+    const f = filtri('report'), i = intervallo(f);
+    const righe = di('l').filter(r => r.d >= i.da && r.d <= i.a);
+    const perGiorno = {};
+    for (const r of righe) {
+      const m = macro(r);
+      const g = perGiorno[r.d] = perGiorno[r.d] || { k: 0, p: 0, c: 0, g: 0 };
+      g.k += m.k; g.p += m.p; g.c += m.c; g.g += m.g;
+    }
+    const out = [['Data', 'Turno', 'Kcal', 'Bersaglio', 'Scarto', 'Proteine', 'Carboidrati', 'Grassi', 'Olio g', 'Acqua ml', 'Passi', 'Allenamenti', 'Durata min', 'Volume kg']];
+    for (const d of Object.keys(perGiorno).sort()) {
+      const g = perGiorno[d], kt = kcalTarget(d), gg = giorno(d);
+      const s = di('w').filter(w => w.d === d);
+      const vol = s.reduce((v, w) => v + statSessione(w).volume, 0);
+      const dur = s.reduce((v, w) => v + num(w.dur), 0);
+      const tn = turnoInfo(turnoDi(d));
+      out.push([d, tn ? tn.l : '', r0(g.k), kt, r0(g.k - kt),
+        r1(g.p), r1(g.c), r1(g.g), r1(olioDi(d)), gg.acqua || 0, gg.passi || 0, s.length, dur, r0(vol)]);
+    }
+    scarica('forma-report-' + oggi + '.csv', csv(out));
+  }
+}
+
+/* ============================================================
+   Aggiornamento dell'app
+   ============================================================
+
+   Il service worker serve i file dalla sua cache, ed è quello che permette di
+   aprire l'app in aereo. Il rovescio è che dopo una pubblicazione il telefono
+   può restare sulla versione vecchia finché non ricontrolla — e iOS lo fa con
+   molto comodo. Questo pulsante salta la coda: riscarica i file ignorando ogni
+   cache, butta quella del service worker e ricarica.
+
+   I dati non si toccano: stanno in localStorage, che non c'entra niente con
+   le cache dei file.
+*/
+
+const FILE_APP = ['./', 'index.html', 'app.css', 'data.js', 'importa.js',
+                  'scanner.js', 'app.js', 'sync.js', 'codemind-bridge.js', 'forma-model.js', 'codemind-workspace.js', 'manifest.webmanifest'];
+
+async function aggiornaApp(bottone) {
+  if (!navigator.onLine) {
+    toast('Sei offline: per aggiornare serve la rete');
+    return;
+  }
+  if (bottone) bottone.textContent = 'Scarico i file nuovi…';
+
+  try {
+    /* Prima si riscaricano i file: se la rete cadesse a metà, la cache del
+       service worker è ancora al suo posto e l'app continua a funzionare.
+       Svuotarla per prima lascerebbe il telefono con niente in mano. */
+    await Promise.all(FILE_APP.map(f => fetch(f, { cache: 'reload' }).catch(() => {})));
+
+    if (window.caches) {
+      for (const k of await caches.keys()) await caches.delete(k);
+    }
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
+    }
+  } catch (e) {
+    /* Anche se qualcosa va storto si ricarica lo stesso: peggio di così non
+       può andare, e spesso basta. */
+  }
+  location.reload();
+}
+
+/* Il controllo automatico: a ogni ritorno sull'app si chiede al service worker
+   se c'è una versione nuova. Senza, su iOS può passare più di un giorno. */
+function controllaAggiornamenti() {
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => rs.forEach(r => r.update().catch(() => {})))
+    .catch(() => {});
+}
+
+/* ============================================================
+   13. Cronometro del recupero
+   ============================================================ */
+
+let recT = null, recFine = 0;
+
+function avviaRecupero(sec) {
+  recFine = Date.now() + sec * 1000;
+  $('#rest').hidden = false;
+  clearInterval(recT);
+  recT = setInterval(tickRecupero, 250);
+  tickRecupero();
+}
+function tickRecupero() {
+  const resta = Math.max(0, Math.round((recFine - Date.now()) / 1000));
+  $('#restTime').textContent = durata(resta);
+  if (resta <= 0) {
+    clearInterval(recT); recT = null;
+    $('#rest').hidden = true;
+    haptic();
+    toast('Recupero finito');
+  }
+}
+function fermaRecupero() {
+  clearInterval(recT); recT = null;
+  $('#rest').hidden = true;
+}
+
+/* ============================================================
+   14. Comandi
+   ============================================================ */
+
+/* Ridisegna senza far perdere il punto in cui stavi scrivendo: la ricerca
+   filtra a ogni lettera, e se il cursore saltasse via il campo diventerebbe
+   inutilizzabile. */
+function renderConFuoco() {
+  const el = document.activeElement;
+  const sel = el && el.dataset && (el.dataset.set || el.id);
+  const pos = el && el.selectionStart;
+  render();
+  if (!sel) return;
+  const n = document.querySelector(el.id ? '#' + el.id : `[data-set="${sel}"]`);
+  if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+}
+
+let cercaT = null;
+
+document.addEventListener('click', e => {
+  /* Il fondo scuro dietro al pannello va gestito per primo e da solo: è un
+     <div>, quindi non verrebbe mai raccolto dal closest() qui sotto, ed era il
+     motivo per cui da un pannello aperto non si poteva più uscire. */
+  if (e.target.id === 'sheetBackdrop' || e.target.closest('#sheetClose')) { chiudiSheet(); return; }
+
+  /* [data-act] va incluso: senza, le due righe che non sono <button> — la data
+     in cima a Oggi e l'intestazione del piano — non rispondevano al tocco. */
+  const b = e.target.closest('button, [data-act], [data-apri], [data-riga], [data-sess], [data-alim], [data-misura], [data-eser], [data-scheda], th[data-ord]');
+  if (!b) return;
+  const d = b.dataset;
+
+  /* ---------- navigazione ---------- */
+  if (d.tab) { vai({ name: d.tab }); return; }
+  if (b.id === 'settingsBtn') { vai({ name: 'settings' }); return; }
+  if (b.id === 'backBtn') { history.back(); return; }
+  if (b.id === 'fab') { fab(); return; }
+  if (d.sub) { SUB[view.name] = d.sub; render(); return; }
+
+  /* ---------- barra del recupero ---------- */
+  if (b.id === 'btnTema' || b.id === 'btnTemaTop') { cambiaTema(); return; }
+  if (b.dataset.temaScelta) { scegliTema(b.dataset.temaScelta); return; }
+
+  if (b.id === 'scanChiudi') { Scanner.chiudi(); return; }
+  if (b.id === 'scanManuale') { Scanner.chiudi(); sheetCodiceManuale(''); return; }
+
+  if (b.id === 'restPlus') { recFine += 30000; tickRecupero(); return; }
+  if (b.id === 'restStop') { fermaRecupero(); return; }
+
+  /* ---------- pannello dal basso ---------- */
+  if (d.chiudi) { chiudiSheet(); return; }
+
+  /* ---------- filtri ---------- */
+  if (d.f) {
+    const f = filtri(d.f);
+    if (d.per) f.per = d.per;
+    else if (d.multi) {
+      const a = f[d.multi] = f[d.multi] || [];
+      const i = a.indexOf(d.val);
+      if (i < 0) a.push(d.val); else a.splice(i, 1);
+    } else if (d.flag) f[d.flag] = !f[d.flag];
+    else if (d.set) f[d.set] = d.val || '';
+    save(); render(); return;
+  }
+  if (d.reset) { azzeraFiltro(d.reset); return; }
+  if (d.apri) {
+    DB.settings.fAperti = DB.settings.fAperti || {};
+    DB.settings.fAperti[d.apri] = !filtriAperti(d.apri);
+    save(); render(); return;
+  }
+  if (d.ord) {
+    const f = filtri(d.ord);
+    f.ord = f.ord === d.campo ? d.campo + '-' : d.campo;
+    save(); render(); return;
+  }
+  if (d.export) { esporta(d.export); return; }
+
+  /* ---------- Oggi ---------- */
+  if (d.day) { view.d = spostaData(view.d, num(d.day)); render(); return; }
+
+  if (d.acqua) {
+    const g = giorno(view.d, true);
+    g.acqua = Math.max(0, (g.acqua || 0) + num(d.acqua));
+    tocca(g); haptic(); render(); return;
+  }
+  if (d.addSlot) { apriSheet(sheetCerca(d.addSlot, ''), { slot: d.addSlot }); return; }
+  if (d.riga) {
+    const r = DB.items.find(i => i.id === d.riga);
+    if (!r) return;
+    const a = catalogo().find(x => x.n.toLowerCase() === r.n.toLowerCase()) || { n: r.n, k: r.k, p: r.p, c: r.c, g: r.g, cat: 'Altro' };
+    apriSheet('', {});
+    sheetCtx = { alim: a, q: String(r1(r.q)), slot: r.slot, rigaId: r.id, d: r.d };
+    $('#sheetContent').innerHTML = sheetQuantita();
+    $('#sheet').hidden = false;
+    return;
+  }
+
+  /* ---------- alimenti ---------- */
+  if (d.alim) { apriSheet(sheetAzioniAlimento(d.alim), {}); return; }
+  if (d.cibo) {
+    const a = catalogo().find(x => x.n === d.cibo);
+    if (!a) return;
+    sheetCtx = Object.assign({}, sheetCtx, { alim: a, q: '', slot: sheetCtx.slot || slotOra(), rigaId: null });
+    $('#sheetContent').innerHTML = sheetQuantita();
+    $('#sheet').hidden = false;
+    return;
+  }
+  if (d.pq) { sheetCtx.q = String(d.pq); $('#sheetContent').innerHTML = sheetQuantita(); return; }
+  if (d.k) {
+    if (d.k === 'canc') sheetCtx.q = String(sheetCtx.q || '').slice(0, -1);
+    else if (d.k === 'c') sheetCtx.q = '';
+    else if (String(sheetCtx.q || '').length < 5) sheetCtx.q = String(sheetCtx.q || '') + d.k;
+    $('#sheetContent').innerHTML = sheetQuantita();
+    return;
+  }
+  if (d.modal) {
+    const a = di('a').find(x => x.n === d.modal);
+    apriSheet(sheetNuovoAlimento('', a), { alimId: a && a.id });
+    return;
+  }
+  if (d.passi) { $('#passiVal').value = d.passi; return; }
+  if (d.creaal) { apriSheet(sheetNuovoAlimento(d.creaal, null), {}); return; }
+  if (d.copia) {
+    const a = catalogo().find(x => x.n === d.copia);
+    apriSheet(sheetNuovoAlimento('', { n: a.n + ' (mio)', k: a.k, p: a.p, c: a.c, g: a.g, cat: a.cat, nt: a.nt }), {});
+    return;
+  }
+  if (d.ric) {
+    const r = DB.items.find(i => i.id === d.ric);
+    if (!r) return;
+    for (const x of (r.righe || [])) {
+      aggiungi({ t: 'l', d: view.d || oggiISO(), slot: sheetCtx.slot || x.slot || slotOra(), n: x.n, q: x.q, k: x.k, p: x.p, c: x.c, g: x.g });
+    }
+    chiudiSheet(); haptic(); toast(r.n + ' aggiunta'); render();
+    return;
+  }
+
+  /* ---------- piano della settimana ---------- */
+  if (d.giorno) {
+    if (aperti.giorni.has(d.giorno)) aperti.giorni.delete(d.giorno);
+    else aperti.giorni.add(d.giorno);
+    render(); return;
+  }
+  if (d.catapri) {
+    if (aperti.cat.has(d.catapri)) aperti.cat.delete(d.catapri);
+    else aperti.cat.add(d.catapri);
+    render(); return;
+  }
+  if (d.giornata) { vai({ name: 'giornata', id: d.giornata }); return; }
+  if (d.gttipo !== undefined) {
+    const gt = giornataById(view.id);
+    gt.tipo = d.gttipo; tocca(gt); render(); return;
+  }
+  if (d.pastofatto) { segnaPasto(view.d, d.pastofatto); haptic(); render(); return; }
+  if (d.intfatto) {
+    const x = DB.items.find(i => i.t === 'in' && i.id === d.intfatto);
+    if (!x) return;
+    /* Come le voci ricorrenti dell'agenda: si segna la data, non un booleano.
+       E l'elenco non deve crescere all'infinito. */
+    x.fatti = x.fatti || [];
+    const i = x.fatti.indexOf(view.d);
+    if (i < 0) x.fatti.push(view.d); else x.fatti.splice(i, 1);
+    x.fatti = x.fatti.filter(v => v >= spostaData(oggiISO(), -120));
+    tocca(x); haptic(); render(); return;
+  }
+  if (d.intmod) {
+    const x = DB.items.find(i => i.t === 'in' && i.id === d.intmod);
+    if (!x) return;
+    apriSheet(sheetIntegratore(x.id),
+      { inId: x.id, inMom: x.quando_m || 'colazione', inQuando: x.quando || 'sempre' });
+    return;
+  }
+  if (d.agfatto) {
+    const [id, ric] = d.agfatto.split('|');
+    const it = DB.items.find(x => x.id === id);
+    if (!it) return;
+    if (ric === '1') {
+      /* Sulle ricorrenti si segna la data, non una bandierina: altrimenti
+         spuntarla oggi la darebbe per fatta anche la settimana prossima. */
+      it.fatti = it.fatti || [];
+      const i = it.fatti.indexOf(view.d);
+      if (i < 0) it.fatti.push(view.d); else it.fatti.splice(i, 1);
+      // l'elenco non deve crescere all'infinito
+      const limite = spostaData(oggiISO(), -120);
+      it.fatti = it.fatti.filter(x => x >= limite);
+    } else {
+      it.fatto = !it.fatto;
+    }
+    tocca(it); haptic(); render(); return;
+  }
+  if (d.agmod) {
+    const [id, ric] = d.agmod.split('|');
+    const it = DB.items.find(x => x.id === id);
+    apriSheet(sheetAgenda(id, ric === '1'), {
+      agId: id, agRic: ric === '1', agCat: it ? (it.cat || 'personale') : 'personale'
+    });
+    return;
+  }
+  if (d.agcat) {
+    sheetCtx.agCat = d.agcat;
+    $$('#sheetContent [data-agcat]').forEach(b => b.classList.toggle('on', b.dataset.agcat === d.agcat));
+    return;
+  }
+  if (d.agric !== undefined) {
+    sheetCtx.agRic = d.agric === '1';
+    const b = $('#sheetContent [data-agric]');
+    if (b) { b.classList.toggle('on', sheetCtx.agRic); b.dataset.agric = sheetCtx.agRic ? '0' : '1'; }
+    return;
+  }
+  if (d.turnomod) {
+    const x = turnoInfo(d.turnomod);
+    apriSheet(sheetModTurno(d.turnomod), { tnId: d.turnomod, tnCol: x.col || 'grigio', tnRiposo: !!x.riposo });
+    return;
+  }
+  if (d.inmom) {
+    sheetCtx.inMom = d.inmom;
+    $$('#sheetContent [data-inmom]').forEach(b => b.classList.toggle('on', b.dataset.inmom === d.inmom));
+    return;
+  }
+  if (d.inquando) {
+    sheetCtx.inQuando = d.inquando;
+    $$('#sheetContent [data-inquando]').forEach(b => b.classList.toggle('on', b.dataset.inquando === d.inquando));
+    return;
+  }
+  if (d.tncol) {
+    sheetCtx.tnCol = d.tncol;
+    $$('#sheetContent [data-tncol]').forEach(b => b.classList.toggle('on', b.dataset.tncol === d.tncol));
+    return;
+  }
+  if (d.tnriposo !== undefined) {
+    sheetCtx.tnRiposo = d.tnriposo === '1';
+    $$('#sheetContent [data-tnriposo]').forEach(b => b.classList.toggle('on', b.dataset.tnriposo === d.tnriposo));
+    return;
+  }
+  if (d.turno !== undefined) {
+    const g = giorno(sheetCtx.d || view.d, true);
+    g.turno = d.turno;
+    tocca(g); haptic(); chiudiSheet(); render(); return;
+  }
+  if (d.vaidata) {
+    view.d = d.vaidata;
+    if (!$('#sheet').hidden) chiudiSheet();
+    render(); return;
+  }
+  if (d.mese) {
+    const [a, m] = (sheetCtx.mese || view.d.slice(0, 7)).split('-').map(Number);
+    const nuovo = new Date(a, m - 1 + num(d.mese), 1);
+    sheetCtx.mese = nuovo.getFullYear() + '-' + String(nuovo.getMonth() + 1).padStart(2, '0');
+    $('#sheetContent').innerHTML = sheetCalendario(view.d);
+    return;
+  }
+  if (d.applica) { applicaPiano(d.applica, d.data || oggiISO()); return; }
+  if (d.pasto) {
+    const [gs, slot] = d.pasto.split('|');
+    applicaPasto(gs, d.data || oggiISO(), slot); return;
+  }
+  if (d.padd) {
+    const [gtId, slot] = d.padd.split('|');
+    apriSheet(sheetCerca(slot, ''), { slot, giornata: gtId });
+    return;
+  }
+  if (d.priga) {
+    const [gtId, idx] = d.priga.split('|');
+    const gt = giornataById(gtId);
+    const r = gt && (gt.righe || [])[+idx];
+    if (!r) return;
+    const a = catalogo().find(x => x.n.toLowerCase() === r.n.toLowerCase()) ||
+      { n: r.n, k: r.k, p: r.p, c: r.c, g: r.g, cat: 'Altro' };
+    sheetCtx = { alim: a, q: String(r1(r.q)), slot: r.slot, giornata: gtId, pIdx: +idx };
+    $('#sheetContent').innerHTML = sheetQuantita();
+    $('#sheet').hidden = false;
+    return;
+  }
+  if (d.spesag) {
+    const l = DB.settings.spesaGiorni;
+    const i = l.indexOf(d.spesag);
+    if (i < 0) l.push(d.spesag); else l.splice(i, 1);
+    save(); render(); return;
+  }
+  if (d.preso) {
+    const p = DB.settings.spesaPresi;
+    if (p[d.preso]) delete p[d.preso]; else p[d.preso] = 1;
+    save(); haptic(); render(); return;
+  }
+  if (d.ricapri) { apriSheet(sheetCombinazione(d.ricapri), { ricId: d.ricapri }); return; }
+  if (d.sostcat) { sheetCtx.sostTutti = d.sostcat === '1'; $('#sheetContent').innerHTML = sheetSostituzioni(); return; }
+  if (d.sost) {
+    const [nome, q] = d.sost.split('|');
+    const nuovo = catalogo().find(x => x.n === nome);
+    if (!nuovo) return;
+    sheetCtx.alim = nuovo;
+    sheetCtx.q = String(r0(num(q)));
+    $('#sheetContent').innerHTML = sheetQuantita();
+    haptic();
+    return;
+  }
+  if (d.copiada) {
+    const da = giornataById(d.copiada);
+    const gt = giornataById(view.id);
+    if (!da || !gt) return;
+    gt.righe = (da.righe || []).map(r => Object.assign({}, r));
+    tocca(gt); chiudiSheet(); toast('Copiata da ' + da.n); render();
+    return;
+  }
+
+  /* ---------- allenamento ---------- */
+  if (d.gsel !== undefined) { view.gi = num(d.gsel); render(); return; }
+  if (d.scheda) { vai({ name: 'scheda', id: d.scheda, gi: 0 }); return; }
+  if (d.sess) { vai({ name: 'sessione', id: d.sess }); return; }
+  if (d.avvia) {
+    const [sid, gn] = d.avvia.split('|');
+    avviaAllenamento(sid, gn);
+    return;
+  }
+  if (d.adde !== undefined) { apriSheet(sheetEsercizio(), { gi: num(d.adde), dove: 'scheda' }); return; }
+  if (d.eserpick) { scegliEsercizio(d.eserpick); return; }
+  if (d.delg !== undefined) {
+    const s = DB.items.find(i => i.id === view.id);
+    s.giorni.splice(num(d.delg), 1); tocca(s); render(); return;
+  }
+  if (d.dele !== undefined) {
+    const [gi, ei] = d.dele.split('.').map(Number);
+    const s = DB.items.find(i => i.id === view.id);
+    s.giorni[gi].eser.splice(ei, 1); tocca(s); render(); return;
+  }
+  if (d.delwe !== undefined) {
+    const w = DB.items.find(i => i.id === view.id);
+    w.eser.splice(num(d.delwe), 1); tocca(w); render(); return;
+  }
+  if (d.addset !== undefined) {
+    const w = DB.items.find(i => i.id === view.id);
+    const e = w.eser[num(d.addset)];
+    const ult = (e.sets || [])[e.sets.length - 1] || {};
+    e.sets.push({ r: ult.r != null ? ult.r : (e.rip || ''), w: ult.w != null ? ult.w : (e.peso || ''), ok: false });
+    tocca(w); render(); return;
+  }
+  if (d.tick) {
+    const [ei, si] = d.tick.split('.').map(Number);
+    const w = DB.items.find(i => i.id === view.id);
+    const s = w.eser[ei].sets[si];
+    s.ok = !s.ok;
+    tocca(w); haptic();
+    if (s.ok) avviaRecupero(num(w.eser[ei].rec, DB.settings.recDefault));
+    render(); return;
+  }
+  if (d.eser) { apriSheet(sheetProgressione(d.eser), {}); return; }
+
+  /* ---------- misure ---------- */
+  if (d.misura) {
+    const m = DB.items.find(i => i.id === d.misura);
+    apriSheet(sheetMisura(m), { misId: m.id }); return;
+  }
+
+  /* ---------- azioni con nome ---------- */
+  if (d.act) azione(d.act, b);
+});
+
+function azione(a, b) {
+  const W = () => DB.items.find(i => i.id === view.id);
+
+  if (a === 'calendario') { apriSheet(sheetCalendario(view.d), { mese: view.d.slice(0, 7) }); return; }
+
+  if (a === 'scegli-turno') { apriSheet(sheetTurno(view.d), { d: view.d }); return; }
+
+  if (a === 'salva-agenda') {
+    const nome = $('#agNome').value.trim();
+    if (!nome) { toast('Serve almeno un nome'); return; }
+    const dati = {
+      n: nome, ora: $('#agOra').value || '', fine: $('#agFine').value || '',
+      cat: sheetCtx.agCat || 'personale', note: $('#agNota').value.trim()
+    };
+    // una fine prima dell'inizio è quasi sempre un dito storto, non una notte
+    if (dati.fine && dati.ora && dati.fine <= dati.ora) dati.fine = '';
+    const eraRic = sheetCtx.agRic;
+    const vecchia = sheetCtx.agId ? DB.items.find(x => x.id === sheetCtx.agId) : null;
+
+    /* Passare da "una volta" a "ogni settimana" cambia il tipo di riga: la
+       vecchia si butta e se ne fa una nuova, invece di lasciare un ibrido. */
+    const eraRicPrima = vecchia && vecchia.t === 'agr';
+    if (vecchia && eraRicPrima === !!eraRic) {
+      Object.assign(vecchia, dati); tocca(vecchia);
+    } else {
+      if (vecchia) elimina(vecchia.id);
+      if (eraRic) aggiungi(Object.assign({ t: 'agr', gs: gsDiData(view.d), fatti: [] }, dati));
+      else aggiungi(Object.assign({ t: 'ag', d: view.d, fatto: false }, dati));
+    }
+    chiudiSheet(); haptic(); render(); return;
+  }
+  if (a === 'elimina-agenda') {
+    const it = DB.items.find(x => x.id === sheetCtx.agId);
+    if (it && it.t === 'agr' &&
+        !confirm('Questa si ripete ogni settimana: eliminandola sparisce da tutti i giorni.')) return;
+    elimina(sheetCtx.agId); chiudiSheet(); render(); return;
+  }
+  if (a === 'vai-agenda') { vai({ name: 'agenda' }); return; }
+  if (a === 'chiedi-notifiche') { chiediNotifiche(b); return; }
+  if (a === 'esporta-calendario') { esportaCalendario(); return; }
+  if (a === 'attiva-push') { attivaPush(b); return; }
+  if (a === 'disattiva-push') { disattivaPush(); return; }
+
+  if (a === 'nuovo-turno') {
+    apriSheet(sheetModTurno(null), { tnId: null, tnCol: 'azzurro', tnRiposo: false });
+    return;
+  }
+
+  if (a === 'salva-turno') {
+    const nome = $('#tnNome').value.trim();
+    if (!nome) { toast('Serve un nome'); return; }
+    const dati = {
+      n: nome,
+      ic: $('#tnIcona').value.trim().slice(0, 4),
+      ore: $('#tnOre').value.trim(),
+      col: sheetCtx.tnCol || 'grigio',
+      riposo: !!sheetCtx.tnRiposo
+    };
+    if (sheetCtx.tnId) {
+      const x = turnoInfo(sheetCtx.tnId);
+      Object.assign(x, dati); tocca(x);
+    } else {
+      aggiungi(Object.assign({ t: 'tn', ord: turni().length }, dati));
+    }
+    chiudiSheet(); render(); return;
+  }
+
+  if (a === 'elimina-turno') {
+    const x = turnoInfo(sheetCtx.tnId);
+    if (!x) return;
+    const giorniSett = GIORNI_SETT.filter(g => turnoRec(g.id).turno === x.id);
+    const date = di('g').filter(g => g.turno === x.id);
+    if (!confirm('Eliminare il turno “' + x.n + '”?' +
+      (giorniSett.length || date.length
+        ? ' Resteranno senza turno ' + giorniSett.length + ' giorni della settimana e ' +
+          date.length + ' date già registrate.'
+        : ''))) return;
+    /* Chi lo puntava va liberato: un turno cancellato che resta scritto sui
+       giorni è un riferimento a niente, e la barra mostrerebbe il vuoto senza
+       spiegare perché. */
+    for (const g of giorniSett) { const p = turnoRec(g.id, true); p.turno = ''; tocca(p); }
+    for (const g of date) { g.turno = ''; tocca(g); }
+    elimina(x.id);
+    chiudiSheet(); render(); return;
+  }
+
+  /* Dal riepilogo al dettaglio senza passare dai filtri: il Diario si apre
+     già ristretto al giorno che stavi guardando. */
+  if (a === 'vai-diario') {
+    const f = filtri('cibo');
+    f.per = 'custom'; f.da = view.d; f.a = view.d;
+    save();
+    SUB.cibo = 'diario';
+    vai({ name: 'cibo', d: view.d });
+    return;
+  }
+  if (a === 'vai-report') { vai({ name: 'report', d: view.d }); return; }
+  if (a === 'stampa') { window.print(); return; }
+  if (a === 'allena-vai') { apriSheet(sheetAvvioAllenamento(), {}); return; }
+  if (a === 'allena-settimana') { SUB.allena = 'schede'; vai({ name: 'allena' }); return; }
+  if (a === 'nuova-misura') { apriSheet(sheetMisura(null), {}); return; }
+  if (a === 'nuovo-alimento') {
+    apriSheet(sheetNuovoAlimento($('#cercaCibo') ? $('#cercaCibo').value : '', null), {});
+    return;
+  }
+
+  if (a === 'passi') { apriSheet(sheetPassi(view.d), { d: view.d }); return; }
+  if (a === 'salva-passi') {
+    const g = giorno(sheetCtx.d || view.d, true);
+    g.passi = Math.max(0, r0(num($('#passiVal').value)));
+    tocca(g); chiudiSheet(); render(); return;
+  }
+
+  if (a === 'conferma-cibo') {
+    const q = num(sheetCtx.q);
+    if (q <= 0) { toast('Metti una quantità'); return; }
+    const slot = $('#slotSel') ? $('#slotSel').value : sheetCtx.slot;
+    const al = sheetCtx.alim;
+    const riga = { slot, n: al.n, q, k: al.k, p: al.p, c: al.c, g: al.g };
+
+    if (sheetCtx.giornata) {
+      const gt = giornataById(sheetCtx.giornata);
+      gt.righe = gt.righe || [];
+      if (sheetCtx.pIdx != null) gt.righe[sheetCtx.pIdx] = riga; else gt.righe.push(riga);
+      tocca(gt);
+    } else if (sheetCtx.rigaId) {
+      const r = DB.items.find(i => i.id === sheetCtx.rigaId);
+      r.q = q; r.slot = slot; tocca(r);
+    } else {
+      aggiungi(Object.assign({ t: 'l', d: view.d || oggiISO() }, riga));
+    }
+    chiudiSheet(); haptic(); render(); return;
+  }
+  if (a === 'elimina-riga') {
+    if (sheetCtx.giornata) {
+      const gt = giornataById(sheetCtx.giornata);
+      gt.righe.splice(sheetCtx.pIdx, 1); tocca(gt);
+    } else {
+      elimina(sheetCtx.rigaId);
+    }
+    chiudiSheet(); render(); return;
+  }
+
+  if (a === 'salva-misura') {
+    const d = $('#misD').value || oggiISO();
+    const peso = num($('#misP').value), giro = num($('#misG').value), mg = num($('#misMg').value);
+    if (!peso && !giro && !mg) { toast('Metti almeno un valore'); return; }
+    if (sheetCtx.misId) {
+      const m = DB.items.find(i => i.id === sheetCtx.misId);
+      m.d = d; m.peso = peso; m.giro = giro; m.mg = mg; tocca(m);
+    } else {
+      aggiungi({ t: 'm', d, peso, giro, mg });
+    }
+    chiudiSheet(); toast('Misura salvata'); render(); return;
+  }
+  if (a === 'elimina-misura') { elimina(sheetCtx.misId); chiudiSheet(); render(); return; }
+
+  if (a === 'salva-alimento') {
+    const n = $('#alN').value.trim();
+    if (!n) { toast('Serve un nome'); return; }
+    const dati = {
+      n, k: num($('#alK').value), p: num($('#alP').value), c: num($('#alC').value),
+      g: num($('#alG').value), cat: $('#alCat').value, nt: $('#alNt').value.trim()
+    };
+    // il codice resta attaccato all'alimento: la prossima scansione lo trova
+    // qui e non serve più la rete
+    if (sheetCtx.ean) dati.ean = sheetCtx.ean;
+    if (sheetCtx.alimId) {
+      const it = DB.items.find(i => i.id === sheetCtx.alimId);
+      Object.assign(it, dati); tocca(it);
+    } else {
+      aggiungi(Object.assign({ t: 'a' }, dati));
+    }
+    chiudiSheet(); toast('Alimento salvato'); render(); return;
+  }
+  if (a === 'elimina-alimento') { elimina(sheetCtx.alimId); chiudiSheet(); render(); return; }
+
+  if (a === 'salva-ricetta') {
+    if (!righeDi(view.d).length) return;
+    apriSheet(sheetRicetta(view.d), { d: view.d });
+    return;
+  }
+  if (a === 'salva-ricetta-ok') {
+    const d = sheetCtx.d || view.d;
+    const nome = $('#ricNome').value.trim();
+    if (!nome) { toast('Serve un nome'); return; }
+    aggiungi({
+      t: 'r', n: nome,
+      righe: righeDi(d).map(r => ({ n: r.n, q: r.q, k: r.k, p: r.p, c: r.c, g: r.g, slot: r.slot }))
+    });
+    chiudiSheet();
+    toast('Salvata: la ritrovi quando aggiungi un alimento');
+    return;
+  }
+
+  if (a === 'add-giorno') {
+    const s = W();
+    s.giorni = s.giorni || [];
+    s.giorni.push({ n: 'Giorno ' + (s.giorni.length + 1), eser: [] });
+    view.gi = s.giorni.length - 1;
+    tocca(s); render(); return;
+  }
+
+  if (a === 'piega-piano') {
+    DB.settings.pianoAperto = DB.settings.pianoAperto === false;
+    save(); render(); return;
+  }
+  if (a === 'vai-piano') { SUB.cibo = 'piano'; vai({ name: 'cibo' }); return; }
+
+  if (a === 'copia-giornata') {
+    const gt = giornataById(view.id);
+    const altre = giornate().filter(x => x.id !== view.id && (x.righe || []).length);
+    if (!altre.length) { toast('Non c\'è nessun\'altra giornata da cui copiare'); return; }
+    apriSheet(`<h2 class="sheet-title">Copia da…</h2>
+      ${altre.map(x => {
+        const t = somma(x.righe || []);
+        return `<button class="sheet-row" data-copiada="${x.id}">
+          <span class="ic">${x.tipo === 'on' ? '\u{1F4BC}' : x.tipo === 'off' ? '\u{1F3E0}' : '\u{1F4CB}'}</span>
+          <span>${esc(x.n)}<span class="hint">${x.righe.length} ${x.righe.length === 1 ? 'voce' : 'voci'} · ${r0(t.k)} kcal</span></span></button>`;
+      }).join('')}
+      <p class="set-note">Sostituisce quello che c'è ora in <b>${esc(gt.n)}</b>.
+        Se invece vuoi tenerle tutte e due, usa “Duplica”.</p>`, {});
+    return;
+  }
+
+  if (a === 'duplica-giornata') {
+    const gt = giornataById(view.id);
+    const copia = aggiungi({
+      t: 'gt', n: gt.n + ' (copia)', tipo: gt.tipo || '',
+      righe: (gt.righe || []).map(r => Object.assign({}, r))
+    });
+    vai({ name: 'giornata', id: copia.id });
+    toast('Duplicata');
+    return;
+  }
+
+  if (a === 'elimina-giornata') {
+    const gt = giornataById(view.id);
+    const su = GIORNI_SETT.filter(g => { const x = giornataDi(g.id); return x && x.id === gt.id; });
+    if (!confirm('Eliminare “' + gt.n + '”?' +
+      (su.length ? ' È assegnata a ' + su.map(g => g.l).join(', ') + ', che resteranno senza giornata.' : '') +
+      ' Il diario già registrato non cambia.')) return;
+    /* I giorni che la puntavano vanno liberati, altrimenti resterebbero
+       agganciati a una riga che non esiste più. */
+    for (const g of su) { const p = pianoRec(g.id, true); p.gt = ''; tocca(p); }
+    elimina(gt.id);
+    history.back();
+    return;
+  }
+
+  if (a === 'nuova-giornata') {
+    const n = giornate().length + 1;
+    const gt = aggiungi({ t: 'gt', n: 'Giornata ' + n, tipo: '', righe: [] });
+    vai({ name: 'giornata', id: gt.id });
+    return;
+  }
+
+  if (a === 'crea-schema') { apriSheet(sheetSchema(), {}); return; }
+
+  if (a === 'crea-schema-ok') {
+    const off = Math.max(0, Math.min(14, r0(num($('#schemaOff').value))));
+    const on = Math.max(0, Math.min(14, r0(num($('#schemaOn').value))));
+    if (!off && !on) { toast('Metti almeno una giornata'); return; }
+    const create = [];
+    for (let i = 1; i <= off; i++) create.push(aggiungi({ t: 'gt', n: 'Giorno ' + i + ' off', tipo: 'off', righe: [] }));
+    for (let i = 1; i <= on; i++) create.push(aggiungi({ t: 'gt', n: 'Giorno ' + i + ' on', tipo: 'on', righe: [] }));
+    /* Assegnate subito ai sette giorni nell'ordine in cui sono state create:
+       la rotazione la sistemi coi menu a tendina, ma partire da sette caselle
+       vuote sarebbe partire da zero due volte. */
+    GIORNI_SETT.forEach((g, i) => {
+      if (!create.length) return;
+      const p = pianoRec(g.id, true);
+      p.gt = create[i % create.length].id;
+      tocca(p);
+    });
+    chiudiSheet();
+    toast(create.length + ' giornate create e assegnate');
+    render();
+    return;
+  }
+
+  if (a === 'scansiona') { avviaScansione(); return; }
+  if (a === 'cerca-ean') {
+    const c = ($('#eanVal').value || '').replace(/\D/g, '');
+    if (c.length < 8) { toast('Servono almeno otto cifre'); return; }
+    gestisciCodice(c); return;
+  }
+  if (a === 'salva-prodotto') {
+    const p = sheetCtx.prodotto;
+    const it = aggiungi({ t: 'a', n: p.n, k: p.k, p: p.p, c: p.c, g: p.g, cat: p.cat, nt: p.nt, ean: p.ean });
+    sheetCtx = Object.assign({}, sheetCtx, { alim: it, q: '', slot: sheetCtx.slot || slotOra(), rigaId: null, pIdx: null });
+    $('#sheetContent').innerHTML = sheetQuantita();
+    toast('Salvato fra i tuoi alimenti');
+    return;
+  }
+  if (a === 'correggi-prodotto') {
+    const p = sheetCtx.prodotto;
+    apriSheet(sheetNuovoAlimento('', p), { ean: p.ean, slot: sheetCtx.slot });
+    return;
+  }
+  if (a === 'sostituisci') {
+    sheetCtx.sostTutti = false;
+    $('#sheetContent').innerHTML = sheetSostituzioni();
+    return;
+  }
+
+  if (a === 'vai-spesa') { vai({ name: 'spesa' }); return; }
+  if (a === 'spesa-tutti') { DB.settings.spesaGiorni = GIORNI_SETT.map(g => g.id); save(); render(); return; }
+  if (a === 'spesa-azzera') { DB.settings.spesaPresi = {}; save(); render(); return; }
+
+  if (a === 'salva-combinazione') {
+    const r = DB.items.find(i => i.id === sheetCtx.ricId);
+    const nome = $('#ricNuovoNome').value.trim();
+    if (!nome) { toast('Serve un nome'); return; }
+    r.n = nome; tocca(r); chiudiSheet(); render(); return;
+  }
+  if (a === 'elimina-combinazione') {
+    if (!confirm('Eliminare questa combinazione? Il diario già registrato non cambia.')) return;
+    elimina(sheetCtx.ricId); chiudiSheet(); render(); return;
+  }
+  if (a === 'usa-combinazione') {
+    const r = DB.items.find(i => i.id === sheetCtx.ricId);
+    for (const x of (r.righe || [])) {
+      aggiungi({ t: 'l', d: view.d || oggiISO(), slot: x.slot || slotOra(), n: x.n, q: x.q, k: x.k, p: x.p, c: x.c, g: x.g });
+    }
+    chiudiSheet(); haptic(); toast(r.n + ' aggiunta al diario di oggi'); render(); return;
+  }
+
+  if (a === 'importa-piano') { scegliFile('piano'); return; }
+  if (a === 'importa-scheda') { scegliFile('scheda'); return; }
+  if (a === 'conferma-piano') { confermaPiano(); return; }
+  if (a === 'conferma-scheda') { confermaScheda(); return; }
+  if (a === 'del-scheda') {
+    if (!confirm('Eliminare la scheda? Le sessioni già svolte restano.')) return;
+    elimina(view.id); history.back(); return;
+  }
+  if (a === 'add-eser-sess') { apriSheet(sheetEsercizio(), { dove: 'sessione' }); return; }
+  if (a === 'chiudi-sess') {
+    const w = W();
+    w.fine = true;
+    /* La durata la sa già l'orologio. Ma se hai dimenticato di chiudere la
+       sessione, l'orologio direbbe nove ore: sopra le cinque il numero non è
+       una durata, è una dimenticanza, e meglio nessun dato che uno falso. */
+    if (w.inizio && !w.dur) {
+      const min = Math.round((Date.now() - w.inizio) / 60000);
+      if (min > 0 && min <= 300) w.dur = min;
+    }
+    tocca(w); fermaRecupero(); toast('Allenamento chiuso'); render(); return;
+  }
+  if (a === 'riapri-sess') { const w = W(); w.fine = false; tocca(w); render(); return; }
+  if (a === 'del-sess') {
+    if (!confirm('Eliminare questa sessione?')) return;
+    elimina(view.id); history.back(); return;
+  }
+
+  if (a === 'aggiorna') { aggiornaApp(b); return; }
+
+  if (a === 'int-nuovo') {
+    apriSheet(sheetIntegratore(null), { inId: null, inMom: 'colazione', inQuando: 'sempre' });
+    return;
+  }
+
+  if (a === 'salva-integratore') {
+    const nome = $('#inNome').value.trim();
+    if (!nome) { toast('Serve un nome'); return; }
+    const dati = {
+      n: nome,
+      dose: $('#inDose').value.trim(),
+      quando_m: sheetCtx.inMom || 'colazione',
+      quando: sheetCtx.inQuando || 'sempre',
+      note: $('#inNota').value.trim()
+    };
+    if (sheetCtx.inId) {
+      const x = DB.items.find(i => i.t === 'in' && i.id === sheetCtx.inId);
+      Object.assign(x, dati); tocca(x);
+    } else {
+      aggiungi(Object.assign({ t: 'in', ord: integratori().length, fatti: [] }, dati));
+    }
+    chiudiSheet(); render(); return;
+  }
+
+  if (a === 'elimina-integratore') {
+    const x = DB.items.find(i => i.t === 'in' && i.id === sheetCtx.inId);
+    if (!x) return;
+    if (!confirm('Eliminare “' + x.n + '”? Si perde anche lo storico di quando l’hai preso.')) return;
+    elimina(x.id); chiudiSheet(); render(); return;
+  }
+
+  if (a === 'oggi') { view.d = oggiISO(); render(); return; }
+  if (a === 'nuova-agenda') {
+    apriSheet(sheetAgenda(null, false), { agCat: 'personale', agRic: false });
+    return;
+  }
+  if (a === 'sql-push') { copiaOMostraSql('SQL delle notifiche', SQL_PUSH); return; }
+  if (a === 'backup') {
+    scarica('forma-backup-' + oggiISO() + '.json',
+      JSON.stringify({ v: 1, app: 'forma', versione: APP_VERSION, items: DB.items, settings: DB.settings }, null, 1),
+      'application/json');
+    return;
+  }
+  if (a === 'ripristina') {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = () => {
+      const f = inp.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const dati = JSON.parse(rd.result);
+          if (!Array.isArray(dati.items)) throw new Error('formato');
+          if (!confirm('Sostituisco i dati di questo dispositivo con le ' + dati.items.length +
+            ' voci del backup?')) return;
+          DB.items = dati.items;
+          DB.settings = Object.assign(DB.settings, dati.settings || {});
+          scadeCatalogo();
+          /* Tutto va rimandato al server: dal suo punto di vista è roba nuova. */
+          DB.dirty = {};
+          for (const i of DB.items) DB.dirty[i.id] = 1;
+          DB.sync.cursor = '';
+          save(true); toast('Backup ripristinato'); render();
+        } catch (err) { toast('Il file non è un backup di Forma'); }
+      };
+      rd.readAsText(f);
+    };
+    inp.click();
+    return;
+  }
+  if (a === 'azzera') {
+    if (!confirm('Cancella diario, allenamenti, misure e bersagli da QUESTO dispositivo. Procedo?')) return;
+    if (!confirm('Sicuro? Senza un backup non si torna indietro.')) return;
+    localStorage.removeItem(KEY);
+    location.reload();
+    return;
+  }
+}
+
+/* ---------- il pulsante rotondo ---------- */
+function fab() {
+  if (view.name === 'oggi') { apriSheet(sheetCerca(slotOra(), ''), { slot: slotOra() }); return; }
+  if (view.name === 'cibo') {
+    if (SUB.cibo === 'alimenti') apriSheet(sheetNuovoAlimento('', null), {});
+    else apriSheet(sheetCerca(slotOra(), ''), { slot: slotOra() });
+    return;
+  }
+  if (view.name === 'agenda') { apriSheet(sheetAgenda(null, false), { agCat: 'personale', agRic: false }); return; }
+  if (view.name === 'allena') {
+    if (SUB.allena === 'schede') {
+      const s = aggiungi({ t: 's', n: 'Nuova scheda', giorni: [{ n: 'Giornata 1', eser: [] }] });
+      vai({ name: 'scheda', id: s.id });
+    } else {
+      apriSheet(sheetAvvioAllenamento(), {});
+    }
+    return;
+  }
+}
+
+/* ---------- avvio di un allenamento ---------- */
+/* Nella scheda le ripetizioni si scrivono come le scrive un preparatore:
+   "8–10", "12-15", "Max tecn.". Nella sessione servono in un campo numerico, e
+   il numero giusto da proporre è il minimo dell'intervallo: è quello che devi
+   garantire, il resto è guadagnato. */
+function ripNumero(rip) {
+  const m = /(\d+)/.exec(String(rip == null ? '' : rip));
+  return m ? +m[1] : '';
+}
+
+function avviaAllenamento(sid, gn) {
+  const s = sid ? DB.items.find(i => i.id === sid) : null;
+  const g = s ? (s.giorni || []).find(x => x.n === gn) : null;
+  const eser = (g ? g.eser : []).map(e => ({
+    n: e.n, gruppo: e.gruppo || gruppoDi(e.n), rip: e.rip, peso: e.peso, rec: e.rec,
+    cardio: isCardio(e), note: e.note,
+    min: isCardio(e) ? (ripNumero(e.rip) || '') : undefined, km: isCardio(e) ? '' : undefined,
+    sets: isCardio(e) ? [] : Array.from({ length: num(e.serie, 3) },
+      () => ({ r: ripNumero(e.rip), w: e.peso || '', ok: false }))
+  }));
+  const w = aggiungi({
+    t: 'w', d: view.d || oggiISO(), sid: sid || '', sn: s ? s.n : '', gn: gn || 'Allenamento',
+    eser, fine: false, inizio: Date.now()
+  });
+  chiudiSheet();
+  vai({ name: 'sessione', id: w.id });
+}
+
+/* ---------- esercizio scelto dal pannello ---------- */
+function scegliEsercizio(nome) {
+  const gruppo = gruppoDi(nome);
+  const cardio = GRUPPI_CARDIO.includes(gruppo);
+  if (sheetCtx.dove === 'scheda') {
+    const s = DB.items.find(i => i.id === view.id);
+    const g = s.giorni[sheetCtx.gi];
+    g.eser = g.eser || [];
+    g.eser.push(cardio
+      ? { n: nome, gruppo, cardio: true, min: 30, km: '' }
+      : { n: nome, gruppo, serie: 3, rip: 10, peso: '', rec: DB.settings.recDefault });
+    tocca(s);
+  } else {
+    const w = DB.items.find(i => i.id === view.id);
+    w.eser = w.eser || [];
+    w.eser.push(cardio
+      ? { n: nome, gruppo, cardio: true, min: '', km: '', sets: [] }
+      : { n: nome, gruppo, rip: 10, peso: '', rec: DB.settings.recDefault, sets: [{ r: '', w: '', ok: false }, { r: '', w: '', ok: false }, { r: '', w: '', ok: false }] });
+    tocca(w);
+  }
+  chiudiSheet();
+  render();
+}
+
+/* ============================================================
+   Importazione di un piano o di una scheda da file
+   ============================================================ */
+
+function scegliFile(tipo) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.xlsx,.xlsm,.csv,.txt';
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    toast('Leggo ' + f.name + '…');
+    try {
+      if (tipo === 'piano') {
+        const g = await Importa.leggiPiano(f);
+        if (!g.length) throw new Error('Nel file non ho trovato colonne Alimento e Quantità');
+        apriSheet(sheetMappaPiano(g), { giornate: g });
+      } else {
+        const g = await Importa.leggiScheda(f);
+        if (!g.length) throw new Error('Nel file non ho trovato colonne Esercizio, Serie e Rip.');
+        apriSheet(sheetMappaScheda(g, f.name), {
+          giorni: g,
+          nomeScheda: f.name.replace(/\.(xlsx|xlsm|csv|txt)$/i, '').replace(/[_-]+/g, ' ').trim()
+        });
+      }
+    } catch (e) {
+      toast(String(e.message || e).slice(0, 120));
+    }
+  };
+  inp.click();
+}
+
+/* I nomi non coincidono mai alla lettera fra un file e un database: "Tonno al
+   naturale sgocciolato" contro "tonno naturale". Si confronta una forma
+   ridotta — minuscole, senza accenti, senza punteggiatura — e in seconda
+   battuta si accetta che uno contenga l'altro. */
+const nomeRidotto = s => String(s || '').toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
+function indiceAlimenti() {
+  const ix = {};
+  for (const a of catalogo()) ix[nomeRidotto(a.n)] = a;
+  return ix;
+}
+
+function trovaAlimento(nome, ix) {
+  const k = nomeRidotto(nome);
+  if (!k) return null;
+  if (ix[k]) return ix[k];
+
+  /* Con quasi mille voci il primo che "contiene" non basta più: "riso"
+     pescherebbe un qualunque risotto. Si preferisce chi comincia allo stesso
+     modo, e fra i candidati il nome più corto — cioè il meno specifico, che è
+     quasi sempre quello giusto quando il piano scrive solo "Riso basmati". */
+  const chiavi = Object.keys(ix);
+  const inizia = chiavi.filter(c => c.startsWith(k) || k.startsWith(c));
+  if (inizia.length) return ix[inizia.sort((a, b) => a.length - b.length)[0]];
+
+  const dentro = chiavi.filter(c => c.includes(k) || k.includes(c));
+  if (!dentro.length) return null;
+  return ix[dentro.sort((a, b) => a.length - b.length)[0]];
+}
+
+/* ---------- piano: quale giornata in quale giorno ---------- */
+
+function sheetMappaPiano(lette) {
+  /* Se una giornata si chiama come un giorno della settimana finisce lì da
+     sola; altrimenti si distribuiscono in ordine, che è comunque un punto di
+     partenza migliore di sette caselle vuote. */
+  const scelte = {};
+  GIORNI_SETT.forEach((g, i) => {
+    const perNome = lette.findIndex(x => nomeRidotto(x.nome).startsWith(nomeRidotto(g.l).slice(0, 5)));
+    scelte[g.id] = perNome >= 0 ? perNome : (lette.length ? i % lette.length : -1);
+  });
+
+  return `<h2 class="sheet-title">Trovate ${lette.length} giornate</h2>
+    <p class="set-note" style="margin:0 0 12px">Assegna ogni giornata al giorno della
+      settimana in cui la mangi. Puoi mettere la stessa giornata su più giorni, e
+      lasciare "—" dove non vuoi un piano.</p>
+    ${GIORNI_SETT.map(g => `<div class="field sel">
+      <label>${esc(g.l)}</label>
+      <select id="map-${g.id}">
+        <option value="-1">—</option>
+        ${lette.map((x, i) => {
+          const t = x.righe.reduce((a, r) => a + r.q, 0);
+          return `<option value="${i}" ${scelte[g.id] === i ? 'selected' : ''}>${esc(x.nome)} (${x.righe.length} voci)</option>`;
+        }).join('')}
+      </select></div>`).join('')}
+    <button class="btn" data-act="conferma-piano">Importa</button>`;
+}
+
+function confermaPiano() {
+  /* La variabile locale NON si chiama giornate: c'è già una funzione con quel
+     nome, e nasconderla qui dentro sarebbe un errore in attesa di succedere. */
+  const lette = sheetCtx.giornate || [];
+  const ix = indiceAlimenti();
+  const mancanti = new Set();
+
+  /* Ogni giornata del file diventa una giornata tipo, una volta sola anche se
+     l'hai assegnata a più giorni della settimana. */
+  const creata = {};
+  const creaGiornata = i => {
+    if (creata[i]) return creata[i];
+    const righe = [];
+    for (const r of lette[i].righe) {
+      const a = trovaAlimento(r.n, ix);
+      if (!a) { mancanti.add(r.n); continue; }
+      righe.push({ slot: r.slot, n: a.n, q: r.q, k: a.k, p: a.p, c: a.c, g: a.g });
+    }
+    const nome = lette[i].nome;
+    /* Se il nome dice già se è un giorno di turno o di riposo, la giornata lo
+       impara da sé: "Giorno 2 on" è un giorno di turno. */
+    const tipo = /\boff\b|riposo/i.test(nome) ? 'off' : /\bon\b|turno/i.test(nome) ? 'on' : '';
+    /* Reimportando lo stesso file non si accumulano doppioni: se una giornata
+       con quel nome c'è già, si aggiorna — contenuto compreso, che è quello
+       che serve quando reimporti un piano corretto. */
+    let gt = di('gt').find(x => x.n === nome);
+    if (gt) { gt.righe = righe; if (tipo) gt.tipo = tipo; tocca(gt); }
+    else gt = aggiungi({ t: 'gt', n: nome, tipo, righe });
+    creata[i] = gt;
+    return gt;
+  };
+
+  let assegnati = 0;
+  for (const g of GIORNI_SETT) {
+    const sel = $('#map-' + g.id);
+    const i = sel ? +sel.value : -1;
+    if (i < 0 || !lette[i]) continue;
+    const p = pianoRec(g.id, true);
+    p.gt = creaGiornata(i).id;
+    tocca(p);
+    assegnati++;
+  }
+
+  chiudiSheet();
+  SUB.cibo = 'piano';
+  vai({ name: 'cibo' });
+
+  if (mancanti.size) {
+    setTimeout(() => apriSheet(sheetMancanti(Array.from(mancanti))), 250);
+  } else {
+    toast(Object.keys(creata).length + ' giornate importate · ' + assegnati + ' giorni assegnati');
+  }
+}
+
+function sheetMancanti(nomi) {
+  return `<h2 class="sheet-title">${nomi.length} alimenti non riconosciuti</h2>
+    <p class="set-note" style="margin:0 0 12px">Questi nomi non esistono nel database, quindi
+      quelle righe non sono state importate. Creali e reimporta il file: il resto del piano
+      è già a posto.</p>
+    ${nomi.map(n => `<button class="sheet-row" data-creaal="${esc(n)}">
+      <span class="ic">➕</span><span>${esc(n)}</span></button>`).join('')}`;
+}
+
+/* ---------- scheda: anteprima prima di sostituire ---------- */
+
+function sheetMappaScheda(giorni, nomeFile) {
+  const totale = giorni.reduce((n, g) => n + g.eser.length, 0);
+  const dentroEditor = view.name === 'scheda';
+  return `<h2 class="sheet-title">Trovati ${giorni.length} giorni</h2>
+    <p class="set-note" style="margin:0 0 12px">${totale} esercizi in tutto.
+      ${dentroEditor
+        ? 'Sostituiscono i giorni della scheda che stai modificando.'
+        : 'Diventano una scheda nuova: i giorni si scelgono coi numeri in alto.'}</p>
+    ${giorni.map((g, i) => `<div class="sheet-row">
+      <span class="ic">${i + 1}</span>
+      <span>${esc(g.nome)}<span class="hint">${g.eser.length} esercizi</span></span>
+    </div>`).join('')}
+    <button class="btn" data-act="conferma-scheda">${dentroEditor ? 'Sostituisci' : 'Crea la scheda'}</button>`;
+}
+
+function confermaScheda() {
+  const giorni = (sheetCtx.giorni || []).map(g => ({
+    n: g.nome,
+    eser: g.eser.map(e => ({
+      n: e.n, gruppo: e.gruppo || '', serie: e.serie, rip: e.rip,
+      peso: '', rec: e.rec || DB.settings.recDefault, note: e.note || ''
+    }))
+  }));
+  if (!giorni.length) return;
+
+  let sc;
+  if (view.name === 'scheda') {
+    sc = DB.items.find(i => i.id === view.id);
+    sc.giorni = giorni;
+    tocca(sc);
+  } else {
+    sc = aggiungi({ t: 's', n: sheetCtx.nomeScheda || 'Scheda importata', giorni });
+  }
+  chiudiSheet();
+  vai({ name: 'scheda', id: sc.id, gi: 0 });
+  toast(giorni.length + ' giorni importati');
+}
+
+/* ---------- storico di un esercizio ---------- */
+function sheetProgressione(nome) {
+  const punti = progressione(nome);
+  const sess = di('w').filter(w => (w.eser || []).some(e => e.n.toLowerCase() === nome.toLowerCase()))
+    .sort((a, b) => a.d < b.d ? 1 : -1).slice(0, 12);
+  let h = `<h2 class="sheet-title">${esc(nome)}</h2>
+    ${punti.length > 1 ? grafico(punti, {}) : '<p class="set-note">Servono almeno due sessioni per vedere l’andamento.</p>'}
+    <div class="tablewrap" style="box-shadow:none;border:0;margin-top:10px"><table class="dt"><thead><tr>
+      <th>Data</th><th>Serie svolte</th><th class="n">Volume</th></tr></thead><tbody>`;
+  for (const w of sess) {
+    const e = w.eser.find(x => x.n.toLowerCase() === nome.toLowerCase());
+    const fatte = (e.sets || []).filter(s => s.ok);
+    const vol = fatte.reduce((v, s) => v + num(s.r) * num(s.w), 0);
+    h += `<tr><td>${esc(dataCorta(w.d))}</td>
+      <td>${fatte.length ? fatte.map(s => s.r + '×' + s.w).join(' · ') : (e.min ? e.min + ' min' : '—')}</td>
+      <td class="n">${vol ? r0(vol) + ' kg' : '—'}</td></tr>`;
+  }
+  return h + `</tbody></table></div>`;
+}
+
+/* ---------- campi che si modificano scrivendo ---------- */
+
+document.addEventListener('input', e => {
+  const el = e.target, d = el.dataset;
+
+  if (el.id === 'cercaCibo') {
+    clearTimeout(cercaT);
+    cercaT = setTimeout(() => {
+      const v = el.value;
+      $('#sheetContent').innerHTML = sheetCerca(sheetCtx.slot, v);
+      const n = $('#cercaCibo');
+      if (n) { n.focus(); n.setSelectionRange(v.length, v.length); }
+    }, 180);
+    return;
+  }
+  if (el.id === 'cercaEser') {
+    clearTimeout(cercaT);
+    cercaT = setTimeout(() => {
+      sheetCtx.q = el.value;
+      $('#sheetContent').innerHTML = sheetEsercizio();
+      const n = $('#cercaEser');
+      if (n) { n.focus(); n.setSelectionRange(sheetCtx.q.length, sheetCtx.q.length); }
+    }, 180);
+    return;
+  }
+
+  /* Ricerca e date dei filtri: si ridisegna, ma il cursore torna dov'era. */
+  if (d.f && d.set) {
+    filtri(d.f)[d.set] = el.value;
+    clearTimeout(cercaT);
+    cercaT = setTimeout(() => { save(); renderConFuoco(); }, 220);
+    return;
+  }
+
+  /* Gli altri campi NON ridisegnano: scrivere un peso mentre la pagina si
+     ricostruisce sotto le dita significa perdere metà del numero. */
+  if (d.cfg) {
+    const [gruppo, chiave] = d.cfg.split('.');
+    const c = cfg();
+    c[gruppo][chiave] = num(el.value);
+    tocca(c); return;
+  }
+  if (d.nome !== undefined) {
+    const c = cfg(); c.profilo.nome = el.value.trim().slice(0, 24); tocca(c); return;
+  }
+  if (d.rec !== undefined) { DB.settings.recDefault = Math.max(10, r0(num(el.value, 90))); save(); return; }
+  if (d.preav !== undefined) {
+    DB.settings.preavviso = Math.max(0, Math.min(240, r0(num(el.value, 15))));
+    save(); return;
+  }
+  if (d.sn) { const s = DB.items.find(i => i.id === d.sn); s.n = el.value; tocca(s); return; }
+  if (d.gn !== undefined) {
+    const s = DB.items.find(i => i.id === view.id);
+    s.giorni[num(d.gn)].n = el.value; tocca(s); return;
+  }
+  if (d.es) {
+    const [gi, ei, campo] = d.es.split('.');
+    const s = DB.items.find(i => i.id === view.id);
+    // "8–10" non è un numero: passarlo da num() lo ridurrebbe a 8 mentre scrivi
+    s.giorni[gi].eser[ei][campo] = (campo === 'rip' || campo === 'note') ? el.value : num(el.value);
+    tocca(s); return;
+  }
+  if (d.gtnome) {
+    const gt = giornataById(d.gtnome);
+    if (gt) { gt.n = el.value; tocca(gt); }
+    return;
+  }
+  if (d.ws) {
+    const parti = d.ws.split('.');
+    const w = DB.items.find(i => i.id === view.id);
+    if (parti.length === 2) w.eser[parti[0]][parti[1]] = num(el.value);
+    else w.eser[parti[0]].sets[parti[1]][parti[2]] = el.value;
+    tocca(w); return;
+  }
+  if (d.wnote !== undefined) {
+    const w = DB.items.find(i => i.id === view.id);
+    w.note = el.value; tocca(w); return;
+  }
+  if (d.wdur !== undefined) {
+    const w = DB.items.find(i => i.id === view.id);
+    w.dur = Math.max(0, r0(num(el.value))); tocca(w); return;
+  }
+});
+
+/* Il menu a tendina del pasto non è un "input" su tutti i browser. */
+document.addEventListener('change', e => {
+  const d = e.target.dataset;
+  if (d.f && d.set) {
+    filtri(d.f)[d.set] = e.target.value;
+    save(); render();
+    return;
+  }
+  /* Il menu a tendina di ogni giorno della settimana. */
+  if (d.assegna) {
+    const p = pianoRec(d.assegna, true);
+    p.gt = e.target.value;
+    tocca(p); haptic(); render();
+    return;
+  }
+  /* Il menu a tendina dell'allenamento: valore "idScheda|nomeGiornata". */
+  if (d.assturno) {
+    const p = turnoRec(d.assturno, true);
+    p.turno = e.target.value;
+    tocca(p); haptic(); render();
+    return;
+  }
+  if (d.assall) {
+    const p = pianoAllRec(d.assall, true);
+    const [sid, gn] = (e.target.value || '|').split('|');
+    p.sid = sid; p.gn = gn;
+    tocca(p); haptic(); render();
+  }
+});
+
+/* ============================================================
+   15. Avvio
+   ============================================================ */
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!$('#scan').hidden) { Scanner.chiudi(); return; }
+    if (!$('#sheet').hidden) chiudiSheet();
+    return;
+  }
+
+  /* Le scorciatoie valgono solo quando non stai scrivendo da qualche parte e
+     non c'è un pannello aperto: rubare la freccia a un campo di testo è il
+     modo più veloce di far odiare le scorciatoie. */
+  if (!$('#sheet').hidden || !$('#scan').hidden) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  const giorni = ['oggi', 'agenda'];
+  if (giorni.includes(view.name)) {
+    if (e.key === 'ArrowLeft')  { view.d = spostaData(view.d, -1); render(); return; }
+    if (e.key === 'ArrowRight') { view.d = spostaData(view.d, 1);  render(); return; }
+    if (e.key.toLowerCase() === 'o') { view.d = oggiISO(); render(); return; }
+  }
+  /* Da 1 a 6: le voci del menu nell'ordine in cui si vedono. */
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= TABS_ORDINE.length) { vai({ name: TABS_ORDINE[n - 1] }); return; }
+  if (e.key.toLowerCase() === 't') { cambiaTema(); return; }
+});
+
+/* Uscendo dall'app la fotocamera va spenta: lasciarla accesa in sottofondo
+   consuma batteria e accende la spia senza motivo. */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (typeof Scanner !== 'undefined') Scanner.chiudi();
+  } else {
+    controllaAggiornamenti();
+    controllaPromemoria();
+    /* Tornando all'app si ricontrolla anche il tema: su iPhone l'app resta in
+       sottofondo per ore, e non tutti i browser mandano l'evento del cambio
+       chiaro/scuro a una pagina che non si vede. Senza questo, la sera si
+       riapre ancora chiara finché non la si ricarica. */
+    if (temaSalvato() === 'auto') applicaTema('auto');
+  }
+  aggiornaPallino();
+});
+
+/* Passando da una finestra stretta a una larga cambiano sia le colonne sia la
+   barra in alto: senza ridisegnare, resterebbero quelle dell'altra misura. */
+let largoPrima = window.innerWidth >= 1000;
+window.addEventListener('resize', () => {
+  const ora = window.innerWidth >= 1000;
+  if (ora !== largoPrima) { largoPrima = ora; render(); }
+});
+
+window.addEventListener('popstate', e => {
+  /* Con un pannello aperto, il gesto "indietro" deve chiudere quello, non
+     cambiare schermata: è quello che si aspetta chi lo usa. */
+  if (!$('#scan').hidden) {
+    Scanner.chiudi();
+    history.pushState(view, '', '');
+    return;
+  }
+  if (!$('#sheet').hidden) {
+    chiudiSheet();
+    history.pushState(view, '', '');
+    return;
+  }
+  view = e.state || { name: 'oggi', d: oggiISO() };
+  render();
+});
+
+/* Ogni mezzo minuto: abbastanza da non far arrivare un avviso in ritardo,
+   abbastanza poco da non pesare su niente. */
+setInterval(controllaPromemoria, 30000);
+window.addEventListener('load', () => setTimeout(allineaIscrizione, 4000));
+
+if (!PROJECTS_EMBEDDED) {
+  load(); migraPiano(); migraElencoTurni(); migraTurni();
+  history.replaceState(view, '', ''); render();
+}
+
+if (!PROJECTS_EMBEDDED && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      /* Quando ne arriva uno nuovo lo si dice, invece di lasciare che il
+         telefono resti su una versione vecchia senza che nessuno lo sappia. */
+      reg.addEventListener('updatefound', () => {
+        const nuovo = reg.installing;
+        if (!nuovo) return;
+        nuovo.addEventListener('statechange', () => {
+          if (nuovo.state === 'installed' && navigator.serviceWorker.controller) {
+            toast('Versione nuova pronta: Impostazioni → Aggiorna l’app');
+          }
+        });
+      });
+    }).catch(() => {});
+  });
+}

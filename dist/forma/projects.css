@@ -1,0 +1,36 @@
+/* Forma dentro CodeMind Projects: stesso aspetto "Bento" del resto dell'app
+   (scelto il 20/11/2026). Questo file si carica solo nella finestra di Forma dentro
+   l'app; la riscrittura senza finestra arriva nella fase Palestra e alimentazione. */
+@font-face{font-family:"Chakra Petch";font-weight:400;font-display:swap;src:url("../assets/fonts/chakra-petch-400.woff2") format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:500;font-display:swap;src:url("../assets/fonts/chakra-petch-500.woff2") format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:600;font-display:swap;src:url("../assets/fonts/chakra-petch-600.woff2") format("woff2")}
+@font-face{font-family:"Chakra Petch";font-weight:700;font-display:swap;src:url("../assets/fonts/chakra-petch-700.woff2") format("woff2")}
+:root,:root[data-tema="chiaro"]{
+ --primario:#0B1A2E;--primario-vivo:#0B1A2E;--primario-tinta:rgba(108,212,240,.20);
+ --accento:#1E8DBA;--accento-tinta:rgba(108,212,240,.20);--secondario:#0B7FA6;
+ --evidenza:#FF664C;--evidenza-scuro:#E2553C;--evidenza-txt:#C2410C;
+ --fondo:#F7F8FA;--superficie:#FFFFFF;--superficie-2:#F1F3F6;--bg-elev2:#F1F3F6;
+ --line:#E3E6EB;--line-forte:#C9CED6;
+ --txt:#0B1A2E;--txt-dim:#4F5D70;--txt-faint:#6B7686;--txt-forte:#0B1A2E;
+ --secondario-txt:#0B6E91;--accento-txt:#0B6E91;--pannello:#0B1A2E;
+ --prot:#E2553C;--carb:#1E8DBA;--gras:#5B4BC4;--prog:#0B1A2E;
+ --radius:20px;--raggio-xl:24px;--shadow-sm:none;--shadow-md:none;
+}
+:root[data-tema="scuro"]{
+ --primario:#1E8DBA;--primario-vivo:#6CD4F0;--primario-tinta:rgba(108,212,240,.16);
+ --accento:#6CD4F0;--accento-tinta:rgba(108,212,240,.16);--secondario:#6CD4F0;
+ --evidenza:#FF7A63;--evidenza-scuro:#FF664C;
+ --fondo:#070F1C;--superficie:#0E1A2C;--superficie-2:#14243A;--bg-elev2:#14243A;
+ --line:#1E3048;--line-forte:#2B4363;
+ --txt:#E9F0F8;--txt-dim:#A5B5CA;--txt-faint:#8597B0;--txt-forte:#FFFFFF;
+ --secondario-txt:#6CD4F0;--accento-txt:#6CD4F0;--pannello:#0E1A2C;
+ --prot:#FF8A73;--carb:#6CD4F0;--gras:#B3A8FF;--prog:#6CD4F0;
+}
+body,button,input,select,textarea{font-family:"Chakra Petch",system-ui,sans-serif!important}
+#side,#topbar,#tabbar,.brand-foot{display:none!important}
+#app{margin:0!important;padding:4px 2px 20px!important;width:100%!important;max-width:none!important;min-height:100vh}
+body{padding:0!important;background:var(--fondo)}
+.wrap{max-width:none!important;margin:0!important}
+#fab{bottom:22px!important;right:22px!important;background:var(--evidenza)!important}
+#sheetPanel{max-height:92vh}
+@media(max-width:600px){#app{padding:4px 0 12px!important}.wrap{padding:0!important}.board{gap:14px!important}}

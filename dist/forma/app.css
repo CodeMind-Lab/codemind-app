@@ -1,0 +1,1665 @@
+/* Forma — schede bianche, blu, molto respiro
+   Blu per quello che si tocca, e i colori vivi solo sui dati: proteine blu,
+   carboidrati verde, grassi ambra. Le schede si staccano dal fondo perché
+   sono bianche su un grigio chiarissimo, non perché hanno un bordo marcato o
+   un'ombra pesante. I nomi delle variabili dicono il ruolo (primario,
+   accento, evidenza, pannello) e non la tinta: cambiare tavolozza costa due
+   blocchi, non duecento regole. */
+
+/* Il carattere sta nel repository e non su un CDN: l'app deve aprirsi in
+   aereo, e un font che arriva dalla rete lascerebbe il testo di ripiego. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('font/inter-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root, :root[data-tema="chiaro"] {
+  /* Blu come colore che comanda, schede bianche su un grigio chiarissimo, e i
+     dati con una tinta ciascuno: proteine blu, carboidrati verde, grassi
+     ambra. Molto respiro fra un blocco e l'altro — è quello, più del colore,
+     che fa sembrare ordinata una pagina piena di numeri. */
+  --primario:#2563EB;
+  --primario-vivo:#1D4ED8;
+  --primario-tinta:rgba(37,99,235,.10);
+  --accento:#3B82F6;
+  --accento-tinta:rgba(59,130,246,.12);
+  --secondario:#2563EB;
+  --evidenza:#F97316;
+  --evidenza-scuro:#EA580C;
+
+  /* superfici: schede bianche, pagina appena grigia perché le schede si vedano */
+  --fondo:#F4F6F9;
+  --superficie:#FFFFFF;
+  --superficie-2:#F8FAFC;
+  --bg:var(--superficie);
+  --bg-elev:var(--superficie-2);
+  --bg-elev2:#EFF3F8;
+  --line:#E6EAF0;
+  --line-forte:#CBD3DF;
+
+  --txt:#111827;
+  --txt-dim:#4B5563;
+  --txt-faint:#5F6B7A;
+  --txt-forte:#0B1220;
+
+  --secondario-txt:#1D4ED8;
+  --accento-txt:#1E40AF;
+  --rail-barra:var(--primario);
+  --rail-bg:#FFFFFF;
+  --rail-line:#E6EAF0;
+
+  /* Il pannello pieno resta scuro ma vira al blu: è il quadrante, e su una
+     pagina bianca deve essere l'unica cosa che pesa. */
+  --pannello:#111827;
+  --pannello-line:#1F2937;
+
+  --ok-bg:rgba(22,163,74,.12);   --ok-txt:#136A33;
+  --no-bg:rgba(220,38,38,.10);   --no-txt:#B91C1C;
+  --evidenza-txt:#C2410C;
+
+  --accent:var(--evidenza);
+  --accent-soft:rgba(249,115,22,.12);
+  --prog:var(--primario);
+  --ok:#16A34A;
+  --ok-tinta:rgba(22,163,74,.12);
+  --danger:#DC2626;
+
+  --prot:#3B82F6;
+  --carb:#22C55E;
+  --gras:#F59E0B;
+
+  /* Angoli larghi e ombre appena accennate: le schede si staccano dal fondo
+     per il bianco, non per il contorno. */
+  --radius:14px;
+  --raggio-xl:18px;
+  --pillola:999px;
+  --shadow-sm:0 1px 2px rgba(17,24,39,.05);
+  --shadow-md:0 4px 16px -6px rgba(17,24,39,.12);
+  --shadow-lg:0 16px 36px -18px rgba(17,24,39,.22);
+
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+  --topbar-h:54px;
+  --tabbar-h:58px;
+  --rail:240px;
+  --nav-h:64px;
+
+  color-scheme:light;
+}
+
+/* Lo scuro tiene la stessa impaginazione e sposta solo i valori: blu più
+   chiaro perché sul fondo notte quello pieno si spegne. */
+:root[data-tema="scuro"] {
+  --primario:#2563EB;
+  --primario-vivo:#3B82F6;
+  --primario-tinta:rgba(59,130,246,.18);
+  --accento:#60A5FA;
+  --accento-tinta:rgba(96,165,250,.16);
+  --secondario:#60A5FA;
+  --evidenza:#FB923C;
+  --evidenza-scuro:#F97316;
+
+  --fondo:#0B1120;
+  --superficie:#141B2D;
+  --superficie-2:#1B2438;
+  --bg:var(--superficie);
+  --bg-elev:var(--superficie-2);
+  --bg-elev2:#232D45;
+  --line:#273249;
+  --line-forte:#3A4863;
+
+  --txt:#F3F6FC;
+  --txt-dim:#C3CBDA;
+  --txt-faint:#98A2B6;
+  --txt-forte:#FFFFFF;
+
+  --secondario-txt:#93C5FD;
+  --accento-txt:#BFDBFE;
+  --rail-barra:var(--accento);
+  --rail-bg:#111827;
+  --rail-line:#232D45;
+
+  --pannello:#182238;
+  --pannello-line:#2B3854;
+
+  --ok-bg:rgba(74,222,128,.18);   --ok-txt:#86EFAC;
+  --no-bg:rgba(248,113,113,.18);  --no-txt:#FCA5A5;
+  --evidenza-txt:#FDBA74;
+
+  --accent:var(--evidenza);
+  --accent-soft:rgba(251,146,60,.18);
+  --prog:var(--accento);
+  --ok:#4ADE80;
+  --ok-tinta:rgba(74,222,128,.16);
+  --danger:#F87171;
+
+  --prot:#60A5FA;
+  --carb:#4ADE80;
+  --gras:#FBBF24;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 6px 18px -8px rgba(0,0,0,.6);
+  --shadow-lg:0 16px 34px -16px rgba(0,0,0,.7);
+
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none !important}
+html,body{margin:0;padding:0}
+body{
+  background:var(--fondo);
+  color:var(--txt);
+  font:15.5px/1.55 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-feature-settings:'cv05' 1,'ss03' 1;
+  overscroll-behavior-y:none;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+/* Il monogramma sostituisce il logo a colori fissi: è testo dentro un
+   quadrato, quindi segue il tema e resta nitido a qualunque densità. */
+.mk{
+  width:34px;height:34px;flex:none;border-radius:9px;
+  display:grid;place-items:center;
+  background:var(--primario);color:#fff;
+  font-size:17px;font-weight:800;font-style:italic;line-height:1;letter-spacing:-.02em;
+  box-shadow:var(--shadow-sm);
+}
+.marchio{display:flex;align-items:center;gap:10px}
+.marchio .mk{width:30px;height:30px;font-size:15px;border-radius:8px}
+.marchio b{font-size:18px;font-weight:800;letter-spacing:-.025em;color:var(--txt-forte)}
+
+/* ---------- barra superiore ---------- */
+#topbar{
+  position:fixed;top:0;left:0;right:0;z-index:40;
+  height:calc(var(--topbar-h) + var(--safe-top));
+  padding:var(--safe-top) 8px 0;
+  display:flex;align-items:center;gap:4px;
+  background:color-mix(in srgb, var(--fondo) 88%, transparent);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-bottom:1px solid var(--line);
+}
+#topTitle{
+  flex:1;margin:0;font-size:17px;font-weight:700;letter-spacing:-.015em;
+  padding-left:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:var(--txt-forte);display:flex;align-items:center;
+}
+.icon-btn{
+  width:38px;height:38px;display:grid;place-items:center;border-radius:10px;
+  color:var(--txt-forte);flex:none;
+}
+.icon-btn:active{background:var(--bg-elev2)}
+
+/* ---------- impaginazione ---------- */
+#app{
+  padding:calc(var(--topbar-h) + var(--safe-top) + 10px) 16px
+          calc(var(--tabbar-h) + var(--safe-bot) + 26px);
+  max-width:760px;margin:0 auto;
+}
+
+/* ---------- barra inferiore ---------- */
+#tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:40;
+  height:calc(var(--tabbar-h) + var(--safe-bot));
+  padding-bottom:var(--safe-bot);
+  display:flex;
+  background:color-mix(in srgb, var(--superficie) 93%, transparent);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-top:1px solid var(--line);
+}
+#tabbar button{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;color:var(--txt-dim);font-size:11px;font-weight:650;letter-spacing:.01em;
+}
+#tabbar button svg{width:21px;height:21px}
+#tabbar button.on{color:var(--evidenza)}
+
+/* ---------- pulsante aggiungi ---------- */
+#fab{
+  position:fixed;right:18px;z-index:41;
+  bottom:calc(var(--tabbar-h) + var(--safe-bot) + 16px);
+  width:54px;height:54px;border-radius:50%;
+  background:var(--primario);color:#fff;
+  display:grid;place-items:center;
+  box-shadow:0 8px 22px -8px rgba(27,26,22,.55);
+}
+#fab svg{width:26px;height:26px;stroke-width:2.5}
+#fab:active{transform:scale(.92)}
+
+/* ---------- elementi comuni ---------- */
+.section-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  margin:24px 0 11px;
+}
+.section-head:first-child{margin-top:4px}
+.section-head h2{
+  margin:0;font-size:20.5px;font-weight:780;letter-spacing:-.022em;color:var(--txt-forte);
+  position:relative;padding-left:11px;
+}
+.section-head h2::before{
+  content:"";position:absolute;left:0;top:.18em;bottom:.18em;width:3px;
+  border-radius:2px;background:var(--evidenza);
+}
+.section-head .count{font-size:12.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums}
+.section-head .act{font-size:13px;font-weight:700;color:var(--secondario-txt)}
+
+.empty{text-align:center;color:var(--txt-faint);padding:38px 20px}
+.empty .ic{font-size:34px;display:block;margin-bottom:12px;opacity:.55}
+.empty strong{display:block;color:var(--txt-forte);font-size:16px;margin-bottom:7px;font-weight:700}
+.empty p{margin:0;font-size:13px;line-height:1.65;color:var(--txt-dim)}
+.empty b{color:var(--evidenza-txt)}
+
+.chips{
+  display:flex;gap:7px;overflow-x:auto;padding:2px 16px 10px;scrollbar-width:none;
+  margin:0 -16px;
+}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:6px 13px;border-radius:99px;font-size:13px;font-weight:600;
+  background:var(--superficie);color:var(--txt-dim);border:1px solid var(--line);
+  white-space:nowrap;
+}
+.chip.on{background:var(--primario);color:#fff;border-color:var(--primario)}
+
+.panel{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;margin-top:14px;box-shadow:var(--shadow-sm);
+}
+.panel > .label{
+  font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--secondario-txt);margin-bottom:11px;
+}
+
+/* Il pulsante principale porta il colore principale. Il magenta resta agli
+   avvisi e ai dati: se lo usa anche il pulsante che premi più spesso, smette
+   di voler dire "guarda qui". */
+.btn{
+  display:block;width:100%;padding:14px;border-radius:12px;text-align:center;
+  font-size:15.5px;font-weight:750;background:var(--primario);color:#fff;margin-top:13px;
+  box-shadow:var(--shadow-sm);
+}
+.btn:active{background:var(--primario-vivo)}
+.btn.sec{background:var(--superficie);color:var(--txt-forte);border:1px solid var(--line);box-shadow:var(--shadow-sm)}
+.btn.danger{background:var(--superficie);color:var(--danger);border:1px solid var(--line);box-shadow:var(--shadow-sm)}
+.btn:active{opacity:.85}
+.btn.sm{padding:9px;font-size:13.5px;margin-top:9px}
+.btn-row{display:flex;gap:9px}
+.btn-row .btn{flex:1}
+
+/* I campi sono una colonna, non una riga alla volta: l'etichetta si allarga,
+   il riquadro ha una larghezza fissa e l'unità la sua. Lasciando che l'input si
+   adattasse al contenuto, "2000" e "65" davano riquadri di larghezza diversa e
+   l'elenco sembrava storto. */
+.field{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.field:first-of-type{border-top:0;padding-top:2px}
+.field label{flex:1;min-width:0;font-size:13.5px;color:var(--txt-dim);line-height:1.35}
+.field input[type=date],.field input[type=number],.field input[type=text],.field select{
+  flex:none;width:104px;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;font-size:14px;font-weight:650;color:var(--txt-forte);
+  text-align:right;font-variant-numeric:tabular-nums;
+}
+.field input[type=date]{width:132px;text-align:center;font-weight:600}
+.field select{text-align:left;font-weight:600}
+/* Larghezza fissa anche per l'unità, altrimenti "kcal" e "g" sposterebbero
+   il riquadro sopra e sotto di qualche pixel. */
+.field .unit{flex:none;width:30px;font-size:12px;color:var(--txt-faint);text-align:left}
+/* Dove il campo è un elenco a tendina con nomi lunghi la larghezza fissa non
+   basta: qui prende lo spazio che avanza. */
+.field.sel label{flex:none}
+.field.sel select{flex:1;width:auto;min-width:0;text-align:left}
+.txtin{
+  width:100%;background:var(--bg-elev2);border:1px solid var(--line);border-radius:10px;
+  padding:11px 12px;font-size:14px;color:var(--txt-forte);
+}
+textarea.notes{
+  width:100%;min-height:74px;resize:vertical;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;font-size:14px;line-height:1.55;color:var(--txt-forte);
+}
+textarea.notes:focus,.field input:focus,.txtin:focus{
+  outline:none;border-color:var(--secondario);background:var(--superficie);
+  box-shadow:0 0 0 3px rgba(15,144,185,.13);
+}
+.seg{display:flex;gap:5px;background:var(--bg-elev2);padding:4px;border-radius:10px}
+.seg button{
+  flex:1;padding:8px 4px;border-radius:8px;font-size:12px;font-weight:650;color:var(--txt-dim);
+  white-space:nowrap;
+}
+.seg button.on{background:var(--superficie);color:var(--txt-forte);box-shadow:var(--shadow-sm)}
+
+.stat-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
+.stat-row:first-child{border-top:0}
+.stat-row span:first-child{color:var(--txt-dim)}
+.stat-row span:last-child{color:var(--txt-forte);font-weight:650;font-variant-numeric:tabular-nums}
+.set-note{font-size:12px;color:var(--txt-dim);line-height:1.6;margin:9px 0 0}
+.set-note a{color:var(--secondario-txt);font-weight:650}
+.set-note b{color:var(--txt-forte)}
+
+/* ---------- navigatore del giorno ---------- */
+.daynav{
+  display:flex;align-items:center;gap:6px;margin:0 0 14px;
+  background:var(--bg-elev2);border-radius:12px;padding:4px;
+}
+.daynav button.arw{width:36px;height:34px;display:grid;place-items:center;color:var(--secondario-txt);border-radius:9px}
+.daynav button.arw:active{background:var(--superficie)}
+.daynav button.arw[disabled]{color:var(--txt-faint);opacity:.4}
+
+/* ---------- calendario del mese ---------- */
+.cal-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.cal-top .arw{
+  width:36px;height:34px;display:grid;place-items:center;color:var(--secondario-txt);
+  border-radius:9px;background:var(--bg-elev2);flex:none;
+}
+.cal-top .arw:active{background:var(--secondario);color:#fff}
+.cal-m{flex:1;text-align:center;font-size:15px;font-weight:750;color:var(--txt-forte)}
+.cal-h{
+  display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;
+}
+.cal-h span{
+  text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--txt-faint);
+}
+.cal-griglia{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-v{display:block}
+.cal-g{
+  aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;
+  font-variant-numeric:tabular-nums;background:var(--bg-elev);
+}
+.cal-g b{font-size:14px;font-weight:650;color:var(--txt-forte);line-height:1}
+.cal-g.futuro b{color:var(--txt-faint);font-weight:600}
+/* Oggi si riconosce dal bordo, il giorno scelto dal pieno: due segni diversi
+   perché spesso sono lo stesso giorno e uno solo non basterebbe a dirlo. */
+.cal-g.oggi{box-shadow:inset 0 0 0 2px var(--secondario)}
+.cal-g.sel{background:var(--primario)}
+.cal-g.sel b{color:#fff}
+.cal-g:active{background:var(--bg-elev2)}
+.cal-p{display:flex;gap:3px;height:5px}
+.cal-p i{width:5px;height:5px;border-radius:50%;background:transparent;display:block}
+.cal-p i.cibo{background:var(--evidenza)}
+.cal-p i.piano{background:var(--accento)}
+.cal-p i.pesi{background:var(--secondario)}
+.cal-g.sel .cal-p i.cibo,.cal-g.sel .cal-p i.piano,.cal-g.sel .cal-p i.pesi{background:#fff}
+
+/* La data in cima ora è un pulsante: deve sembrarlo. */
+.daynav .lbl{
+  flex:1;text-align:center;font-size:14px;font-weight:700;color:var(--txt-forte);
+  letter-spacing:-.01em;padding:4px 0;border-radius:9px;
+}
+.daynav .lbl small{display:block;font-size:10.5px;font-weight:600;color:var(--txt-faint);letter-spacing:.02em}
+.daynav .lbl:active{background:var(--superficie)}
+
+/* ---------- striscia dei giorni ---------- */
+.weekstrip{display:flex;gap:6px;margin-bottom:16px}
+.weekstrip button{
+  flex:1;min-width:0;padding:7px 2px 6px;border-radius:var(--pillola);
+  background:var(--superficie);border:1px solid var(--line);
+  font-size:11.5px;font-weight:700;color:var(--txt-dim);
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+.weekstrip button.on{background:var(--primario);color:#fff;border-color:var(--primario)}
+/* Il pallino dice a colpo d'occhio dove c'è già qualcosa: corallo = registrato
+   davvero, azzurro = c'è solo il piano. Senza, dovresti aprire i giorni uno per
+   uno per sapere quali hai compilato. */
+.weekstrip button i{width:5px;height:5px;border-radius:50%;background:transparent;display:block}
+.weekstrip button i.pieno{background:var(--evidenza)}
+.weekstrip button i.piano{background:var(--accento)}
+.weekstrip button.on i.pieno,.weekstrip button.on i.piano{background:#fff}
+
+.weekstrip.giorni{flex-wrap:wrap;gap:6px}
+.weekstrip.giorni button{flex:1 1 76px;padding:9px 6px;gap:2px}
+.weekstrip.giorni button b{font-size:15px;font-weight:800;line-height:1.1}
+.weekstrip.giorni button span{
+  font-size:9.5px;font-weight:650;opacity:.72;max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.weekstrip.giorni button.piu{flex:0 0 46px;color:var(--evidenza-txt);font-size:17px;justify-content:center}
+
+/* ---------- riepilogo calorie ---------- */
+/* Bianca come tutte le altre: nel riferimento non c'è nessun blocco scuro, e
+   il contrasto lo fa il colore dell'anello, non il fondo della scheda. */
+.kcal-card{
+  background:var(--superficie);border:1px solid var(--line);
+  border-radius:var(--raggio-xl);padding:16px 16px 14px;color:var(--txt);
+  box-shadow:var(--shadow-sm);
+}
+.kcal-top{display:flex;align-items:center;gap:16px}
+.ring{width:96px;height:96px;flex:none;position:relative}
+.ring svg{width:96px;height:96px;stroke:none}
+.ring .rest{fill:none;stroke:var(--bg-elev2);stroke-width:9}
+.ring .arc{fill:none;stroke:var(--primario);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .45s}
+.ring.over .arc{stroke:var(--evidenza)}
+.ring .mid{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1;
+}
+.ring .mid b{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--txt-forte)}
+.ring .mid span{font-size:9.5px;color:var(--txt-faint);margin-top:4px;letter-spacing:.06em;text-transform:uppercase;font-weight:700}
+.kcal-side{flex:1;min-width:0}
+.kcal-side .big{font-size:15px;font-weight:700;margin-bottom:2px}
+.kcal-side .sub{
+  font-size:12px;color:var(--txt-dim);
+  display:flex;align-items:center;flex-wrap:wrap;gap:6px;
+}
+.kcal-side .sub .link{
+  color:var(--secondario-txt);font-size:12px;font-weight:650;
+  text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-forte);
+}
+/* L'etichetta è anche l'interruttore: dice quale dei due giorni è e cambiarlo
+   costa un tocco sulla parola che stai già leggendo. */
+.tipo-sw{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 9px;border-radius:99px;
+  background:rgba(108,211,240,.18);color:var(--accento);
+  font-size:11.5px;font-weight:750;letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;
+}
+.tipo-sw.off{background:var(--bg-elev2);color:var(--txt-dim)}
+.tipo-sw svg{width:12px;height:12px;stroke-width:2.4;opacity:.75}
+.tipo-sw:active{background:var(--accento);color:var(--primario)}
+
+.macros{display:flex;gap:12px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.macro{flex:1;min-width:0}
+.macro .mh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.macro .mn{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-faint)}
+.macro .mv{font-size:13.5px;font-weight:750;font-variant-numeric:tabular-nums}
+.macro .mv i{font-style:normal;color:var(--txt-faint);font-weight:600}
+.macro .bar{height:7px;border-radius:99px;background:var(--bg-elev2);overflow:hidden}
+.macro .bar i{display:block;height:100%;border-radius:99px;transition:width .4s}
+.macro.p .bar i{background:var(--prot)}
+.macro.c .bar i{background:var(--carb)}
+.macro.g .bar i{background:var(--gras)}
+.macro .bar i.over{background:var(--danger)}
+/* I grammi che restano stanno sotto la barra, non dentro: dentro avrebbero
+   costretto a rimpicciolire i numeri che si leggono davvero. */
+.macro .mr{margin-top:6px;font-size:11px;font-weight:600;color:var(--txt-faint);letter-spacing:.01em}
+
+/* ---------- assegnazione giorno → giornata tipo ---------- */
+/* Due righe: sopra il giorno con le sue calorie, sotto i due menu. Su una
+   riga sola, a 375 px, i due menu diventerebbero due fessure illeggibili. */
+.ass{
+  display:grid;grid-template-columns:1fr auto;gap:6px 10px;
+  padding:10px 0;border-top:1px solid var(--line);align-items:center;
+}
+.ass:first-of-type{border-top:0;padding-top:2px}
+.ass-g{font-size:13.5px;font-weight:700;color:var(--txt-forte)}
+.ass-t{
+  grid-column:1;min-width:0;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;
+  padding:8px 26px 8px 10px;font-size:13px;font-weight:650;color:var(--txt-dim);
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230F90B9' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;background-size:15px;
+}
+/* Bordo e testo prendono il colore del turno, messo lì dal codice: sono sette
+   righe, e riconoscerle dal colore evita di rileggerle una per una. */
+.ass-t{font-weight:700}
+.ass-t:focus{outline:none;box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.ass-s{
+  grid-column:2;min-width:0;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;
+  padding:8px 26px 8px 10px;font-size:13.5px;color:var(--txt-forte);
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230F90B9' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;background-size:15px;
+}
+.ass-s:focus{outline:none;border-color:var(--secondario);background-color:var(--superficie);box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.ass-k{
+  text-align:right;font-size:12px;font-weight:700;
+  color:var(--txt-faint);font-variant-numeric:tabular-nums;
+}
+/* Il giorno della settimana accanto al nome della giornata, sulla dashboard. */
+.ph-gg{
+  display:block;font-size:10.5px;font-weight:700;color:var(--txt-faint);
+  text-transform:uppercase;letter-spacing:.04em;margin-top:1px;
+}
+
+@media (min-width:560px){
+  /* Con spazio, tutto su una riga sola. */
+  .ass{grid-template-columns:110px 150px 1fr auto}
+  .ass-t{grid-column:2}
+  .ass-s{grid-column:3}
+}
+
+/* ---------- agenda ---------- */
+.ag-r{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.ag-r:first-of-type{border-top:0;padding-top:2px}
+.ag-t{
+  width:24px;height:24px;flex:none;border-radius:7px;border:1.8px solid var(--line-forte);
+  display:grid;place-items:center;background:var(--superficie);
+}
+.ag-t svg{width:14px;height:14px;stroke:#fff;stroke-width:3.2;opacity:0}
+.ag-r.fatto .ag-t{background:var(--ok);border-color:var(--ok)}
+.ag-r.fatto .ag-t svg{opacity:1}
+/* La striscia colorata dice la categoria senza rubare una parola alla riga. */
+.ag-c{width:3px;height:30px;border-radius:99px;flex:none}
+.ag-b{flex:1;min-width:0;text-align:left}
+.ag-n{display:block;font-size:14px;font-weight:600;color:var(--txt-forte);line-height:1.35}
+.ag-n b{font-weight:800;font-variant-numeric:tabular-nums;margin-right:2px}
+.ag-m{
+  display:block;font-size:11px;color:var(--txt-faint);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ag-r.fatto .ag-n{color:var(--txt-faint);text-decoration:line-through}
+
+/* Lo spazio fra due nodi di testo dentro un contenitore flex viene mangiato:
+   il margine è l'unico modo per staccare l'emoji dalla parola. */
+.ag-n .em,.ag-m .em{font-style:normal;margin-right:5px}
+
+.ag-piu{
+  width:100%;padding:9px 0 2px;font-size:12px;font-weight:700;color:var(--secondario-txt);
+  border-top:1px solid var(--line);margin-top:6px;
+}
+
+/* Le righe che vengono dal programma non si spuntano: portano altrove. */
+.ag-r.fisso{width:100%;text-align:left}
+.ag-o{
+  width:46px;flex:none;font-size:12px;font-weight:800;color:var(--secondario-txt);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---------- il turno di lavoro ---------- */
+.turno-bar{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px 14px;border-radius:var(--radius);margin-bottom:12px;
+  background:var(--superficie);border:1px solid var(--line);
+  color:var(--txt);box-shadow:var(--shadow-sm);
+  border-left:4px solid var(--accento);
+}
+/* Il colore arriva da come hai impostato il turno, non da una classe fissa:
+   i turni si possono aggiungere e rinominare. */
+.turno-bar.riposo{background:var(--bg-elev);color:var(--txt-forte)}
+.turno-bar.vuoto{
+  background:var(--bg-elev);color:var(--txt-dim);
+  border:1px dashed var(--line);border-left:4px solid var(--txt-faint);
+}
+.tb-i{font-size:22px;flex:none;line-height:1}
+.tb-t{flex:1;min-width:0}
+.tb-t b{display:block;font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.2;color:var(--txt-forte)}
+.tb-t span{
+  display:block;font-size:11.5px;margin-top:2px;color:var(--txt-dim);
+  font-variant-numeric:tabular-nums;
+}
+.tb-c{flex:none;color:var(--txt-faint)}
+.tb-c svg{width:18px;height:18px;display:block}
+.turno-bar:active{opacity:.88}
+
+/* quando il turno del giorno non segue la settimana */
+.kcal-side .ecc{
+  font-size:10.5px;font-weight:700;color:var(--evidenza-txt);
+  background:var(--accent-soft);padding:2px 7px;border-radius:99px;
+}
+
+/* la riga selezionata nel pannello di scelta */
+.sheet-row.sel{background:var(--bg-elev);border-radius:10px}
+.sheet-row.sel span:not(.ic){font-weight:700}
+
+/* ---------- i turni nelle impostazioni ---------- */
+.tn-r{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  padding:11px 0;border-top:1px solid var(--line);
+}
+.tn-r:first-of-type{border-top:0;padding-top:2px}
+.tn-c{width:4px;height:32px;border-radius:99px;flex:none}
+.tn-i{font-size:18px;flex:none;line-height:1}
+.tn-b{flex:1;min-width:0}
+.tn-n{display:block;font-size:14px;font-weight:700;color:var(--txt-forte);line-height:1.3}
+.tn-o{display:block;font-size:11.5px;color:var(--txt-faint);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn-r .go{flex:none;color:var(--txt-faint)}
+.tn-r .go svg{width:18px;height:18px}
+
+/* la tavolozza: il pallino mostra il colore, il bordo dice qual è scelto */
+.tn-col button{position:relative;padding-left:26px}
+.tn-col button::before{
+  content:"";position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  width:11px;height:11px;border-radius:50%;background:var(--c);
+}
+.tn-col button.on{background:var(--c);border-color:var(--c);color:#fff}
+.tn-col button.on::before{background:#fff}
+
+/* ---------- il piano del giorno ---------- */
+.plan-hero{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  margin-top:12px;padding:13px;box-shadow:var(--shadow-sm);
+  /* La striscia azzurra a sinistra è la stessa convenzione delle card del
+     manuale: dice "questo è un modello", non un dato registrato. */
+  border-left:3px solid var(--accento);
+}
+.plan-hero.vuoto{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  border-style:dashed;border-left-style:solid;box-shadow:none;background:var(--bg-elev);
+}
+.ph-top{display:flex;align-items:center;gap:11px}
+.ph-badge{
+  width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;
+  background:var(--accento-tinta);color:var(--accento-txt);
+  font-size:11px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;
+}
+.ph-t{flex:1;min-width:0;display:block}
+.ph-t b{display:block;font-size:15px;font-weight:750;color:var(--txt-forte);letter-spacing:-.015em}
+.ph-t span{
+  display:block;font-size:11.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums;
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* Nel riquadro vuoto la frase è un invito, non un dato: deve poter andare a
+   capo invece di finire in tre puntini. */
+.plan-hero.vuoto .ph-t span{white-space:normal;line-height:1.45}
+.ph-edit{flex:none;font-size:12px;font-weight:700;color:var(--secondario-txt);padding:4px 2px}
+.ph-chev{flex:none;color:var(--secondario-txt);transition:transform .18s}
+.ph-chev svg{width:17px;height:17px;display:block}
+.ph-chev.su{transform:rotate(180deg)}
+.ph-top{cursor:pointer}
+.ph-go{flex:none;color:var(--txt-faint)}
+.ph-go svg{width:18px;height:18px}
+
+.ph-meals{margin-top:11px;border-top:1px solid var(--line);padding-top:4px}
+.pm{padding:7px 0;border-top:1px solid var(--line)}
+.pm:first-child{border-top:0}
+.pmh{
+  display:flex;justify-content:space-between;gap:8px;
+  font-size:13.5px;font-weight:700;color:var(--txt-forte);
+}
+/* L'emoji va staccata dal nome con un margine, non con uno spazio: dentro un
+   contenitore flex lo spazio fra due nodi di testo viene mangiato. */
+.pmn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmi{font-style:normal;margin-right:6px}
+.pmh b{color:var(--secondario-txt);font-variant-numeric:tabular-nums;flex:none}
+.pml{display:block;margin-top:5px}
+/* Una riga per alimento: nome a sinistra, grammi a destra incolonnati. */
+.pf{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:3px 0;font-size:13px;line-height:1.45;color:var(--txt-dim);
+}
+.pf .pfn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmm{
+  display:block;margin-top:5px;font-size:11px;font-weight:600;color:var(--txt-faint);
+  font-variant-numeric:tabular-nums;
+}
+/* I grammi sono la sola cosa che devi guardare mentre pesi: vanno letti a
+   colpo d'occhio dentro una riga di nomi. Le macro restano dove sono. */
+.pml b{
+  flex:none;color:var(--txt-forte);font-weight:800;font-variant-numeric:tabular-nums;
+  font-size:13.5px;letter-spacing:-.01em;
+}
+/* Il pasto già scritto nel diario si spegne, quello che manca tiene il suo
+   pulsante: la differenza fra "l'ho mangiato" e "devo ancora" è la sola cosa
+   che questo elenco deve dire quando il piano è sempre lo stesso. */
+.pmn{flex:1}
+.pmh{align-items:center}
+/* La spunta del pasto: la stessa casella delle cose da fare, perché è lo
+   stesso gesto — "questo l'ho fatto". */
+.pm-t{
+  width:22px;height:22px;flex:none;border-radius:7px;border:1.8px solid var(--line-forte);
+  display:grid;place-items:center;background:var(--superficie);margin-right:9px;
+}
+.pm-t svg{width:13px;height:13px;stroke:#fff;stroke-width:3.4;opacity:0}
+.pm.ok .pm-t{background:var(--ok);border-color:var(--ok)}
+.pm.ok .pm-t svg{opacity:1}
+.pm-add{
+  flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent-soft);color:var(--evidenza-txt);font-size:13px;font-weight:800;
+  line-height:1;margin:-2px 0;
+}
+.pm-add:active{background:var(--evidenza);color:#fff}
+.pm.ok .pmn,.pm.ok .pml,.pm.ok .pf{color:var(--txt-faint)}
+.pm.ok .pml b,.pm.ok .pmh b{color:var(--txt-dim);font-weight:700}
+.pm.ok .pmn{text-decoration:line-through;text-decoration-color:var(--line-forte)}
+
+/* L'azione principale porta il colore principale: l'arancione qui dentro era
+   l'unico pieno caldo della pagina e tirava l'occhio più del contenuto. */
+.ph-cta{
+  display:block;width:100%;margin-top:12px;padding:12px;border-radius:10px;
+  background:var(--primario);color:#fff;font-size:14px;font-weight:750;text-align:center;
+  box-shadow:var(--shadow-sm);
+}
+.ph-cta:hover{background:var(--primario-vivo)}
+.ph-cta.sec{background:var(--superficie);color:var(--txt-forte);border:1px solid var(--line);box-shadow:none}
+.ph-cta:active{opacity:.85}
+.ph-conf{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:11px;padding-top:11px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--txt-dim);
+}
+.ph-conf b{color:var(--txt-forte);font-weight:750;font-variant-numeric:tabular-nums}
+
+/* ---------- l'acqua, dentro la scheda delle calorie ---------- */
+.acqua-row{
+  display:grid;grid-template-columns:1fr auto;gap:9px 12px;align-items:center;
+  margin-top:13px;padding-top:12px;border-top:1px solid var(--line);
+}
+.ar-t{display:flex;align-items:baseline;gap:9px;font-size:10.5px;font-weight:800;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--txt-faint);min-width:0}
+.ar-t b{font-size:17px;font-weight:800;color:var(--txt-forte);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ar-t b i{font-style:normal;font-size:11.5px;font-weight:650;color:var(--txt-faint);letter-spacing:0}
+.ar-b{display:flex;gap:6px;flex:none}
+.ar-b button{
+  padding:6px 11px;border-radius:9px;background:var(--bg-elev2);border:1px solid var(--line);
+  color:var(--txt-dim);font-size:12px;font-weight:750;
+}
+.ar-b button:hover{color:var(--txt-forte);border-color:var(--line-forte)}
+.ar-b button:active{background:var(--primario);color:#fff;border-color:var(--primario)}
+.acqua-row .water{grid-column:1 / -1;margin-top:0}
+.acqua-row .water i{background:var(--bg-elev2)}
+.acqua-row .water i.on{background:var(--accento)}
+
+/* ---------- contatori rapidi ---------- */
+/* Passi e olio affiancati: due contatori che si guardano insieme. La regola
+   era sparita in una pulizia del CSS inutilizzato, quando la classe non aveva
+   ancora nessuno che la usasse. */
+.quick{display:flex;gap:10px;margin-top:12px}
+.quick .qcard{flex:1;min-width:0}
+.qcard{
+  flex:1;background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  padding:11px 12px;box-shadow:var(--shadow-sm);min-width:0;
+}
+.qcard .qh{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-faint);margin-bottom:7px}
+.qcard .qv{font-size:21px;font-weight:800;color:var(--txt-forte);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.qcard .qv small{font-size:11.5px;font-weight:650;color:var(--txt-faint);letter-spacing:0}
+.qcard .qb{display:flex;gap:6px;margin-top:9px}
+.qcard .qb button{
+  flex:1;padding:6px 0;border-radius:8px;background:var(--bg-elev2);
+  font-size:12px;font-weight:750;color:var(--secondario-txt);border:1px solid var(--line);
+}
+.qcard .qb button:active{background:var(--secondario);color:#fff}
+.water{display:flex;gap:4px;margin-top:8px}
+.water i{flex:1;height:7px;border-radius:99px;background:var(--bg-elev2)}
+.water i.on{background:var(--accento)}
+
+/* ---------- l'andamento della settimana ---------- */
+.wk-bars{display:flex;align-items:flex-end;gap:6px;height:96px}
+.wk-bars .wb{
+  flex:1;min-width:0;height:100%;
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;
+  border-radius:9px;padding:3px 2px;
+}
+.wk-bars .wb.on{background:var(--bg-elev2)}
+.wk-bars .wb i{width:100%;max-width:26px;border-radius:5px 5px 0 0;background:var(--accento);display:block}
+.wk-bars .wb i.over{background:var(--evidenza)}
+.wk-bars .wb i.vuoto{background:var(--line)}
+/* Il puntino sotto la colonna dice che quel giorno hai anche allenato: due
+   informazioni nello stesso spazio, senza un secondo grafico. */
+.wk-bars .wb u{width:5px;height:5px;border-radius:50%;background:transparent;display:block}
+.wk-bars .wb u.si{background:var(--secondario)}
+.wk-bars .wb span{font-size:9.5px;font-weight:750;color:var(--txt-faint);text-transform:uppercase}
+.wk-bars .wb.on span{color:var(--txt-forte)}
+
+/* ---------- intestazione della dashboard ---------- */
+/* Sul telefono saluto e data non stanno sulla stessa riga: il nome andrebbe a
+   capo sotto la data, che è il modo più brutto di rompere un titolo. */
+.hero{display:flex;flex-direction:column;gap:12px;margin-bottom:18px}
+.hero-d{align-self:flex-start}
+.hero-t h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--txt-forte)}
+.hero-t p{margin:4px 0 0;font-size:13.5px;color:var(--txt-dim)}
+.hero-d{display:flex;align-items:center;gap:2px;flex:none}
+.hero-d .arw{
+  width:32px;height:32px;display:grid;place-items:center;border-radius:9px;
+  color:var(--txt-dim);
+}
+.hero-d .arw:hover{background:var(--bg-elev2);color:var(--txt-forte)}
+.hero-lbl{
+  padding:5px 10px;border-radius:9px;font-size:13px;font-weight:650;color:var(--txt-dim);
+  white-space:nowrap;line-height:1.25;text-align:center;
+}
+.hero-lbl small{
+  display:block;font-size:10.5px;font-weight:600;color:var(--txt-faint);
+  letter-spacing:.01em;
+}
+.hero-lbl:hover{background:var(--bg-elev2);color:var(--txt-forte)}
+/* Il ritorno a oggi compare solo quando serve: quando sei già su oggi
+   sarebbe un pulsante che non fa niente. */
+.hero-oggi{
+  padding:6px 12px;margin-right:4px;border-radius:var(--pillola);
+  background:var(--primario-tinta);color:var(--secondario-txt);
+  font-size:12.5px;font-weight:750;
+}
+.hero-oggi:active{background:var(--primario);color:#fff}
+.hero-t p b{color:var(--txt-forte);font-weight:750;font-variant-numeric:tabular-nums}
+
+/* ---------- le quattro tessere ----------
+   Valore grande e bersaglio piccolo accanto: si leggono di sfuggita, e per
+   questo non hanno grafici dentro. La barra sotto è l'unica cosa che serve
+   per sapere se sei a metà o quasi in fondo. */
+.tessere{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.tess{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  padding:13px 14px;box-shadow:var(--shadow-sm);min-width:0;
+}
+.tess-h{
+  display:flex;align-items:center;gap:7px;
+  font-size:11.5px;font-weight:700;color:var(--txt-dim);letter-spacing:.01em;
+}
+.tess-i{
+  width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;
+  font-size:13px;line-height:1;
+}
+.tess.verde .tess-i{background:rgba(34,197,94,.14)}
+.tess.ambra .tess-i{background:rgba(245,158,11,.16)}
+.tess.blu   .tess-i{background:rgba(59,130,246,.14)}
+.tess.oliva .tess-i{background:rgba(132,164,58,.16)}
+.tess-v{
+  margin-top:9px;font-size:23px;font-weight:800;letter-spacing:-.03em;
+  color:var(--txt-forte);font-variant-numeric:tabular-nums;line-height:1.1;
+}
+.tess-v small{
+  display:block;margin-top:2px;font-size:11.5px;font-weight:600;
+  color:var(--txt-faint);letter-spacing:0;
+}
+.tess-b{height:5px;border-radius:99px;background:var(--bg-elev2);overflow:hidden;margin-top:10px}
+.tess-b i{display:block;height:100%;border-radius:99px;transition:width .4s}
+.tess.verde .tess-b i{background:#22C55E}
+.tess.ambra .tess-b i{background:#F59E0B}
+.tess.blu   .tess-b i{background:#3B82F6}
+.tess.oliva .tess-b i{background:#84A43A}
+.tess.oltre .tess-b i{background:var(--danger)}
+.tess.oltre .tess-v{color:var(--danger)}
+.tess-az{display:flex;gap:6px;margin-top:10px}
+.tess-az button{
+  flex:1;height:30px;border-radius:8px;font-size:12px;font-weight:650;
+  background:var(--bg-elev2);border:1px solid var(--line);color:var(--txt-dim);
+}
+.tess-az button:hover{color:var(--txt-forte);border-color:var(--line-forte)}
+.tess-az button:active{background:var(--primario);color:#fff;border-color:var(--primario)}
+
+/* ---------- adesso: il prossimo pasto del piano ---------- */
+/* Sta in cima perché è l'unica scheda che risponde con un'azione invece che
+   con un numero: qui non guardi come è andata, decidi cosa fare adesso. */
+.adesso{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  border-left:3px solid var(--secondario);
+  padding:12px 13px;box-shadow:var(--shadow-sm);
+}
+.adesso.fatto{border-left-color:var(--ok);display:flex;align-items:center;gap:11px}
+.ad-h{display:flex;align-items:center;gap:11px}
+.ad-i{
+  width:38px;height:38px;flex:none;border-radius:10px;display:grid;place-items:center;
+  background:var(--accento-tinta);font-size:18px;line-height:1;
+}
+.ad-t{flex:1;min-width:0}
+.ad-t b{display:block;font-size:15px;font-weight:750;color:var(--txt-forte);letter-spacing:-.015em}
+.ad-t span{display:block;font-size:11.5px;color:var(--txt-dim);margin-top:2px}
+.ad-cta{
+  flex:none;padding:8px 15px;border-radius:var(--pillola);
+  background:var(--primario);color:#fff;font-size:12.5px;font-weight:750;
+  box-shadow:var(--shadow-sm);
+}
+.ad-cta:active{background:var(--secondario)}
+.ad-l{
+  margin-top:9px;padding-top:9px;border-top:1px solid var(--line);
+  font-size:13.5px;line-height:1.55;color:var(--txt-dim);
+}
+.ad-l b{color:var(--txt-forte);font-weight:750}
+/* I pasti che vengono dopo: una fila di pastiglie, così si vede in un colpo
+   quanto resta della giornata e si può scriverne uno fuori ordine. */
+.ad-dopo{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+/* Niente gap qui: fra l'emoji e il nome c'è un nodo di testo nudo, che il
+   gap del flex non stacca in modo affidabile. I margini sì. */
+.ad-p{
+  display:flex;align-items:center;padding:7px 11px;border-radius:var(--pillola);
+  background:var(--bg-elev2);border:1px solid var(--line);
+  font-size:13px;font-weight:650;color:var(--txt-dim);
+}
+.ad-p .em{font-style:normal;margin-right:5px}
+.ad-p b{margin-left:7px;color:var(--txt-forte);font-weight:800;font-variant-numeric:tabular-nums}
+.ad-p:active{background:var(--primario);color:#fff;border-color:var(--primario)}
+.ad-p:active b{color:#fff}
+.ad-tot{margin-top:10px;font-size:12.5px;color:var(--txt-faint)}
+.ad-tot b{color:var(--secondario-txt);font-weight:800;font-variant-numeric:tabular-nums}
+
+/* ---------- gruppi di pasto ---------- */
+.meal{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  margin-top:10px;box-shadow:var(--shadow-sm);overflow:hidden;
+}
+.meal.vuoto{border-style:dashed;box-shadow:none;background:transparent}
+.meal > .mtop{display:flex;align-items:center;gap:9px;width:100%;padding:11px 13px;text-align:left}
+.meal .mic{font-size:16px;flex:none;line-height:1}
+.meal .mname{flex:1;font-size:14px;font-weight:700;color:var(--txt-forte);min-width:0}
+.meal.vuoto .mname{color:var(--txt-faint);font-weight:600}
+.meal .mkcal{font-size:12.5px;font-weight:750;color:var(--secondario-txt);font-variant-numeric:tabular-nums;flex:none}
+.meal .madd{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;flex:none}
+.meal .madd svg{width:16px;height:16px;stroke-width:2.6;color:var(--evidenza)}
+.meal .rows{border-top:1px solid var(--line)}
+
+.frow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 13px;border-top:1px solid var(--line)}
+.frow:first-child{border-top:0}
+.frow .fb{flex:1;min-width:0}
+.frow .fn{font-size:13.5px;font-weight:600;color:var(--txt-forte);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .fm{font-size:11.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums;margin-top:1px}
+.frow .fk{font-size:13px;font-weight:750;color:var(--txt-forte);font-variant-numeric:tabular-nums;flex:none}
+.frow:active{background:var(--bg-elev)}
+
+/* ---------- ricerca alimenti ---------- */
+.searchbar{
+  display:flex;align-items:center;gap:9px;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;margin-bottom:12px;
+}
+.searchbar:focus-within{background:var(--superficie);border-color:var(--secondario);box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.searchbar svg{width:18px;height:18px;color:var(--secondario-txt);flex:none}
+.searchbar input{flex:1;background:none;border:0;font-size:15px;min-width:0;color:var(--txt-forte)}
+.searchbar input:focus{outline:none}
+.scan-btn{
+  flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background:var(--accent-soft);color:var(--evidenza-txt);
+}
+.scan-btn svg{width:18px;height:18px;stroke-width:2}
+.scan-btn:active{background:var(--evidenza);color:#fff}
+
+.res{display:flex;gap:11px;width:100%;text-align:left;padding:10px 2px;border-bottom:1px solid var(--line);align-items:center}
+.res .ic{width:34px;height:34px;border-radius:10px;background:var(--bg-elev2);display:grid;place-items:center;font-size:16px;flex:none}
+.res .body{flex:1;min-width:0}
+.res h3{margin:0 0 2px;font-size:14px;font-weight:650;line-height:1.3;color:var(--txt-forte);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .meta{font-size:11.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums}
+.res .meta b{color:var(--secondario-txt);font-weight:700}
+.res .meta .mine{color:var(--evidenza-txt);font-weight:750}
+.res .add{flex:none;width:31px;height:31px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center}
+.res .add svg{width:17px;height:17px;stroke-width:2.6;color:var(--evidenza)}
+
+/* ---------- quantità ---------- */
+.qty{text-align:center;padding:2px 0 4px}
+.qty .qn{font-size:13px;color:var(--txt-dim);margin-bottom:2px}
+.qty .qbig{
+  font-size:44px;font-weight:800;color:var(--txt-forte);letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums;line-height:1.1;
+}
+.qty .qbig span{font-size:19px;font-weight:700;color:var(--txt-faint);letter-spacing:0}
+.qty .qmac{font-size:12.5px;color:var(--txt-dim);margin-top:4px;font-variant-numeric:tabular-nums}
+.qty .qmac b{color:var(--txt-forte);font-weight:750}
+.pads{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.pads button{
+  padding:12px 0;border-radius:10px;background:var(--bg-elev2);border:1px solid var(--line);
+  font-size:16px;font-weight:750;color:var(--txt-forte);font-variant-numeric:tabular-nums;
+}
+.pads button:active{background:var(--secondario);color:#fff;border-color:var(--secondario)}
+.pads button.op{color:var(--secondario-txt);font-size:14px}
+.porz{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;justify-content:center}
+.porz button{
+  padding:6px 11px;border-radius:99px;font-size:12px;font-weight:650;
+  background:var(--superficie);border:1px solid var(--line);color:var(--txt-dim);
+}
+.porz button:active{background:var(--primario);color:#fff;border-color:var(--primario)}
+
+/* ---------- allenamento ---------- */
+.card-row{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;margin-bottom:10px;box-shadow:var(--shadow-sm);
+}
+.card-row .cbadge{
+  width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;
+  background:var(--bg-elev2);font-size:11px;font-weight:800;color:var(--secondario-txt);
+  letter-spacing:.02em;text-align:center;line-height:1.1;
+}
+.card-row .cbadge.coral{background:var(--accent-soft);color:var(--evidenza-txt)}
+.card-row .cb{flex:1;min-width:0}
+.card-row h3{margin:0 0 3px;font-size:14.5px;font-weight:700;color:var(--txt-forte);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-row .meta{font-size:11.5px;color:var(--txt-faint)}
+.card-row .go{flex:none;color:var(--txt-faint)}
+.card-row .go svg{width:18px;height:18px}
+.card-row .cta{
+  flex:none;padding:9px 13px;border-radius:10px;background:var(--accent-soft);
+  color:var(--evidenza-txt);font-size:12px;font-weight:800;white-space:nowrap;
+}
+.card-row .cta:active{background:var(--evidenza);color:#fff}
+
+.ex{border-top:1px solid var(--line);padding:12px 0}
+.ex:first-of-type{border-top:0}
+/* Non annidata sotto .ex: la stessa intestazione serve anche nei pannelli
+   della sessione, dove non c'è nessun .ex attorno. */
+.eh{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.eh .en{flex:1;font-size:14px;font-weight:700;color:var(--txt-forte);min-width:0;line-height:1.25}
+.eh .ed{
+  font-size:10.5px;font-weight:700;color:var(--secondario-txt);flex:none;
+  background:var(--bg-elev2);padding:3px 8px;border-radius:99px;white-space:nowrap;
+}
+.eh .del{color:var(--txt-faint);flex:none;width:26px;height:26px;display:grid;place-items:center}
+.eh .del svg{width:16px;height:16px}
+
+.sets{display:flex;flex-direction:column;gap:6px}
+.setrow{display:flex;align-items:center;gap:7px}
+.setrow .sn{
+  width:24px;height:32px;flex:none;display:grid;place-items:center;border-radius:8px;
+  background:var(--bg-elev2);font-size:11.5px;font-weight:800;color:var(--txt-faint);
+  font-variant-numeric:tabular-nums;
+}
+.setrow input{
+  flex:1;min-width:0;width:100%;height:34px;text-align:center;
+  background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;
+  font-size:14px;font-weight:650;color:var(--txt-forte);font-variant-numeric:tabular-nums;
+  padding:0 4px;
+}
+.setrow input:focus{outline:none;border-color:var(--secondario);background:var(--superficie);box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.setrow .u{font-size:11px;color:var(--txt-faint);flex:none;width:20px}
+.setrow .tick{
+  width:34px;height:34px;flex:none;border-radius:9px;border:1.8px solid var(--line-forte);
+  display:grid;place-items:center;background:var(--superficie);
+}
+.setrow .tick svg{width:16px;height:16px;stroke:var(--txt-faint);stroke-width:3.2}
+.setrow.on .tick{background:var(--ok);border-color:var(--ok)}
+.setrow.on .tick svg{stroke:#fff}
+.setrow.on input{color:var(--txt-faint)}
+.sethead{display:flex;align-items:center;gap:7px;padding:0 0 2px}
+.sethead .sn{background:none}
+.sethead span{flex:1;text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-faint)}
+.sethead .u,.sethead .tick{background:none;border:0}
+.addset{
+  margin-top:8px;padding:7px 0;border-radius:9px;width:100%;
+  background:var(--bg-elev2);border:1px dashed var(--line);
+  font-size:12px;font-weight:700;color:var(--secondario-txt);
+}
+
+/* La nota del preparatore, dentro la sessione. */
+.nota-es{
+  margin:0 0 9px;padding:8px 10px;border-radius:9px;
+  background:var(--accent-soft);border-left:2px solid var(--evidenza);
+  font-size:12.5px;line-height:1.5;color:var(--txt-dim);
+}
+.sez-es{
+  margin:16px 0 -4px;font-size:10px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--secondario-txt);
+}
+
+/* ---------- barra del recupero ---------- */
+#rest{
+  position:fixed;left:12px;right:12px;z-index:50;
+  bottom:calc(var(--tabbar-h) + var(--safe-bot) + 12px);
+  display:flex;align-items:center;gap:11px;
+  background:var(--pannello);border:1px solid var(--pannello-line);
+  color:#fff;border-radius:12px;
+  padding:11px 13px;box-shadow:var(--shadow-lg);
+  max-width:736px;margin:0 auto;
+}
+#rest #restLabel{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+#rest b{flex:1;font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#rest #restPlus{padding:6px 11px;border-radius:9px;background:rgba(255,255,255,.14);font-size:12px;font-weight:750}
+#rest #restStop{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:rgba(255,255,255,.14)}
+#rest #restStop svg{width:15px;height:15px;stroke-width:2.6}
+
+/* ---------- progressi ---------- */
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow-sm)}
+.kpi .kl{font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--txt-faint);margin-bottom:6px}
+.kpi .kv{font-size:25px;font-weight:800;color:var(--txt-forte);letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05}
+.kpi .kv small{font-size:12px;font-weight:650;color:var(--txt-faint);letter-spacing:0}
+.kpi .kd{font-size:12px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .kd.giu{color:var(--secondario-txt)}
+.kpi .kd.su{color:var(--evidenza-txt)}
+.kpi .kd.pari{color:var(--txt-faint)}
+
+.chart{width:100%;height:170px;display:block;stroke:none;margin-top:4px;overflow:visible}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .lbl{fill:var(--txt-faint);font-size:9.5px;font-weight:600}
+.chart .lin{fill:none;stroke:var(--secondario);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.chart .area{fill:rgba(15,144,185,.10);stroke:none}
+.chart .dot{fill:#fff;stroke:var(--secondario);stroke-width:2.2}
+.chart .dot.last{fill:var(--evidenza);stroke:var(--evidenza)}
+.chart .goal{stroke:var(--evidenza);stroke-width:1.4;stroke-dasharray:4 4}
+.bars{display:flex;align-items:flex-end;gap:5px;height:104px;margin-top:6px}
+.bars .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;height:100%}
+/* Con due o tre giorni registrati una colonna larga tutto lo schermo non è un
+   grafico, è una lastra: si tiene una larghezza massima e si centra. */
+.bars .b i{
+  width:100%;max-width:52px;margin:0 auto;
+  border-radius:5px 5px 0 0;background:var(--accento);min-height:3px;display:block;
+}
+.bars .b i.over{background:var(--evidenza)}
+.bars .b i.vuoto{background:var(--bg-elev2)}
+.bars .b span{font-size:9.5px;font-weight:700;color:var(--txt-faint);text-transform:uppercase}
+
+/* ---------- pannello dal basso ---------- */
+#sheet{position:fixed;inset:0;z-index:60}
+#sheetBackdrop{position:absolute;inset:0;background:rgba(14,35,66,.42);animation:fade .2s}
+#sheetPanel{
+  position:absolute;left:0;right:0;bottom:0;max-height:92vh;overflow-y:auto;
+  background:var(--superficie);border-radius:20px 20px 0 0;
+  padding:8px 16px calc(20px + var(--safe-bot));
+  animation:slide .26s cubic-bezier(.2,.9,.3,1);
+  box-shadow:0 -8px 34px rgba(14,35,66,.22);
+  -webkit-overflow-scrolling:touch;
+}
+#sheetPanel::before{content:"";display:block;width:38px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 12px}
+/* Una via d'uscita sempre visibile. Il trattino sopra suggerisce lo scorrimento
+   verso il basso, ma non è un pulsante e da solo non basta a far capire come si
+   esce da un pannello che non hai più voglia di compilare. */
+#sheetClose{
+  position:absolute;top:12px;right:12px;z-index:2;
+  width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+  background:var(--bg-elev2);color:var(--txt-dim);
+}
+#sheetClose svg{width:16px;height:16px;stroke-width:2.6}
+#sheetClose:active{background:var(--line)}
+/* Spazio perché il titolo non finisca sotto al pulsante */
+#sheetContent .sheet-title{padding-right:38px}
+@keyframes slide{from{transform:translateY(100%)}}
+@keyframes fade{from{opacity:0}}
+.sheet-title{font-size:17px;font-weight:750;margin:0 0 14px;letter-spacing:-.015em;color:var(--txt-forte)}
+.sheet-row{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:13px 2px;border-top:1px solid var(--line);font-size:15px;color:var(--txt-forte);
+}
+.sheet-row:first-of-type{border-top:0}
+.sheet-row svg{width:20px;height:20px;color:var(--secondario-txt);flex:none}
+.sheet-row .ic{font-size:19px;width:20px;text-align:center;flex:none}
+.sheet-row.danger{color:var(--danger)}
+.sheet-row.danger svg{color:var(--danger)}
+.sheet-row .hint{margin-left:auto;font-size:12px;color:var(--txt-faint);font-variant-numeric:tabular-nums}
+
+/* ---------- lettore del codice a barre ---------- */
+#scan{position:fixed;inset:0;z-index:90;background:#000}
+#scanVideo{width:100%;height:100%;object-fit:cover;display:block}
+#scanMask{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;padding:24px;
+}
+/* Il riquadro non ritaglia niente: serve a far capire dove tenere il codice.
+   La riga rossa al centro è dove l'app guarda davvero. */
+.sm-box{
+  width:min(86vw,420px);height:150px;position:relative;
+  border:2px solid rgba(255,255,255,.85);border-radius:14px;
+  box-shadow:0 0 0 100vmax rgba(0,0,0,.45);
+}
+.sm-box i{
+  position:absolute;left:8px;right:8px;top:50%;height:2px;
+  background:var(--evidenza);box-shadow:0 0 10px rgba(255,102,76,.9);
+  animation:scanline 1.8s ease-in-out infinite;
+}
+@keyframes scanline{0%,100%{transform:translateY(-42px)}50%{transform:translateY(42px)}}
+#scanStato{
+  margin:0;color:#fff;font-size:14px;font-weight:650;text-align:center;
+  max-width:min(86vw,420px);line-height:1.5;position:relative;
+  text-shadow:0 1px 6px rgba(0,0,0,.7);
+}
+#scanManuale{
+  position:relative;padding:11px 18px;border-radius:11px;
+  background:rgba(255,255,255,.16);color:#fff;font-size:13.5px;font-weight:700;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+#scanChiudi{
+  position:absolute;z-index:2;
+  top:calc(var(--safe-top) + 14px);right:14px;
+  width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(0,0,0,.5);color:#fff;
+}
+#scanChiudi svg{width:19px;height:19px;stroke-width:2.6}
+
+/* La riga con il prodotto trovato, nel pannello del risultato. */
+.trovato{
+  display:flex;gap:12px;align-items:center;
+  background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;margin-bottom:4px;
+}
+.trovato .tb{flex:1;min-width:0}
+.trovato h3{margin:0 0 3px;font-size:15px;font-weight:750;color:var(--txt-forte);line-height:1.3}
+.trovato .meta{font-size:12px;color:var(--txt-dim);font-variant-numeric:tabular-nums}
+.trovato .meta b{color:var(--secondario-txt);font-weight:750}
+.trovato .ean{
+  font-size:10.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums;
+  letter-spacing:.04em;margin-top:3px;
+}
+
+/* ---------- avviso ---------- */
+#toast{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--tabbar-h) + var(--safe-bot) + 22px);z-index:80;
+  background:var(--pannello);border:1px solid var(--pannello-line);color:#fff;
+  padding:11px 17px;border-radius:11px;font-size:13.5px;font-weight:600;
+  box-shadow:var(--shadow-lg);animation:fade .2s;max-width:88vw;text-align:center;
+}
+
+.brand-foot{text-align:center;margin:26px 0 4px}
+.brand-foot .wm{font-size:13px;font-weight:800;color:var(--txt-forte);letter-spacing:-.01em}
+.brand-foot .wm span{color:var(--evidenza-txt)}
+.brand-foot p{margin:7px 0 0;font-size:11.5px;color:var(--txt-faint)}
+
+/* ============================================================
+   Registro gestionale: filtri, tabelle, badge, report
+   ============================================================ */
+
+/* ---------- barra dei filtri ---------- */
+.filters{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;box-shadow:var(--shadow-sm);margin-bottom:12px;
+}
+.filters .fhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.filters .fhead .ft{
+  font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--secondario-txt);
+}
+/* Il pulsante di azzeramento resta visibile ma spento quando non c'è niente da
+   azzerare: se sparisse, l'area dei filtri cambierebbe altezza a ogni tocco. */
+.filters .freset{font-size:12px;font-weight:750;color:var(--evidenza-txt)}
+.filters .freset[disabled]{color:var(--txt-faint);opacity:.5;pointer-events:none}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.fgroup{min-width:0}
+.fgroup > label{
+  display:block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--txt-faint);margin-bottom:5px;
+}
+.fgroup select,.fgroup input{
+  width:100%;background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;
+  padding:9px 10px;font-size:13.5px;color:var(--txt-forte);appearance:none;-webkit-appearance:none;
+}
+.fgroup select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230F90B9' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;background-size:15px;padding-right:28px;
+}
+.fgroup select:focus,.fgroup input:focus{outline:none;border-color:var(--secondario);background-color:var(--superficie);box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.fgroup.full{grid-column:1 / -1}
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchips button{
+  padding:6px 11px;border-radius:99px;font-size:12px;font-weight:650;
+  background:var(--bg-elev2);color:var(--txt-dim);border:1px solid var(--line);
+}
+.fchips button.on{background:var(--primario);color:#fff;border-color:var(--primario)}
+.fsearch{display:flex;align-items:center;gap:8px;background:var(--bg-elev2);border:1px solid var(--line);border-radius:9px;padding:0 10px}
+.fsearch svg{width:16px;height:16px;color:var(--secondario-txt);flex:none}
+.fsearch input{flex:1;background:none;border:0;padding:9px 0;font-size:13.5px;min-width:0}
+.fsearch input:focus{outline:none}
+.fsearch:focus-within{background:var(--superficie);border-color:var(--secondario);box-shadow:0 0 0 3px rgba(15,144,185,.13)}
+.fsearch .clr{color:var(--txt-faint);font-size:17px;line-height:1;flex:none;width:20px}
+
+.fsummary{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:10px;font-size:12px;color:var(--txt-dim);
+}
+.fsummary b{color:var(--txt-forte);font-weight:750;font-variant-numeric:tabular-nums}
+.fsummary .exp{display:flex;gap:7px;flex:none}
+.fsummary .exp button{
+  padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:750;
+  background:var(--superficie);border:1px solid var(--line);color:var(--secondario-txt);box-shadow:var(--shadow-sm);
+}
+
+/* ---------- tabella dati ---------- */
+.tablewrap{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);overflow-x:auto;-webkit-overflow-scrolling:touch;
+}
+table.dt{width:100%;border-collapse:collapse;font-size:13px;min-width:100%}
+table.dt th,table.dt td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+table.dt th{
+  font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--txt-faint);background:var(--bg-elev);position:sticky;top:0;z-index:1;
+}
+table.dt th.n,table.dt td.n{text-align:right;font-variant-numeric:tabular-nums}
+table.dt td.nome{white-space:normal;min-width:150px;font-weight:600;color:var(--txt-forte)}
+table.dt tbody tr:last-child td{border-bottom:0}
+table.dt tbody tr:active{background:var(--bg-elev)}
+table.dt tfoot td{
+  border-top:2px solid var(--line);border-bottom:0;font-weight:800;color:var(--txt-forte);
+  background:var(--bg-elev);font-variant-numeric:tabular-nums;
+}
+table.dt th[data-sort]{cursor:pointer}
+table.dt th[data-sort] i{font-style:normal;color:var(--secondario-txt);margin-left:2px}
+table.dt .sub{display:block;font-size:10.5px;color:var(--txt-faint);font-weight:600;white-space:nowrap}
+
+/* Su un telefono in verticale non ci stanno otto colonne: quelle marcate "opt"
+   spariscono sotto i 700 px. Restano dove serve — nell'export CSV e nella
+   stampa, che non hanno il problema della larghezza. */
+@media (max-width:700px){
+  table.dt th.opt,table.dt td.opt{display:none}
+  table.dt th,table.dt td{padding:9px 7px}
+  table.dt td.nome{min-width:110px}
+}
+
+/* La scatola dei filtri si richiude: aperta occupa mezzo schermo, e nel 90%
+   dei casi ti serve solo sapere che periodo stai guardando. */
+.filters.chiuso .fgrid{display:none}
+.filters .fhead{cursor:pointer}
+.filters .fhead .riass{
+  flex:1;font-size:12px;color:var(--txt-dim);margin:0 10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.filters .fhead .riass b{color:var(--txt-forte);font-weight:700}
+.filters .fhead .chev{color:var(--secondario-txt);flex:none;transition:transform .18s}
+.filters .fhead .chev svg{width:17px;height:17px}
+.filters:not(.chiuso) .fhead .chev{transform:rotate(180deg)}
+
+.badge{
+  display:inline-block;padding:3.5px 9px;border-radius:99px;
+  font-size:11px;font-weight:800;letter-spacing:.02em;white-space:nowrap;
+}
+.badge.ok{background:var(--ok-bg);color:var(--ok-txt)}
+.badge.no{background:var(--no-bg);color:var(--no-txt)}
+.badge.neutro{background:var(--bg-elev2);color:var(--txt-dim)}
+.badge.sky{background:var(--accento-tinta);color:var(--accento-txt)}
+.badge.coral{background:var(--accent-soft);color:var(--evidenza-txt)}
+
+/* ---------- righe che si aprono ---------- */
+.acc{
+  background:var(--superficie);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);margin-bottom:9px;overflow:hidden;
+}
+.acc-h{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:12px 13px;
+}
+.acc-h:active{background:var(--bg-elev)}
+.acc-i{font-size:16px;flex:none;line-height:1}
+.acc-d{
+  flex:1;min-width:0;font-size:14px;font-weight:750;color:var(--txt-forte);
+  letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.acc-d small{
+  display:block;font-size:10.5px;font-weight:600;color:var(--txt-faint);
+  text-transform:uppercase;letter-spacing:.04em;margin-top:1px;
+}
+.acc-n{flex:none;font-size:11.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums}
+.acc-k{flex:none;font-size:14px;font-weight:800;color:var(--txt-forte);font-variant-numeric:tabular-nums}
+.acc-k i{font-style:normal;font-size:11px;font-weight:650;color:var(--txt-faint)}
+.acc-c{flex:none;color:var(--secondario-txt);transition:transform .18s}
+.acc-c svg{width:17px;height:17px;display:block}
+.acc.aperto .acc-c{transform:rotate(180deg)}
+/* Il corpo eredita già il riquadro dell'accordion: la tabella dentro non deve
+   ridisegnarne un altro. */
+.acc-b{border-top:1px solid var(--line)}
+.acc-b .tablewrap{border:0;border-radius:0;box-shadow:none}
+.acc-b table.dt th{background:var(--bg-elev)}
+
+/* Sul telefono la colonna Pasto sparisce: il nome del pasto torna sotto
+   l'alimento, dove non ruba una colonna. */
+.opt-inv{display:none}
+@media (max-width:700px){
+  .opt-inv{display:block}
+  .acc-h{padding:11px;gap:7px}
+  /* Solo nelle righe del diario, dove accanto ci sono già le calorie e lo
+     scarto: nelle categorie degli alimenti il conteggio ci sta e serve. */
+  .acc-h.fitta .acc-n{display:none}
+}
+
+/* ---------- la lista della spesa ---------- */
+.sp-r{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  padding:10px 2px;border-top:1px solid var(--line);
+}
+.sp-r:first-of-type{border-top:0}
+.sp-c{
+  width:24px;height:24px;flex:none;border-radius:7px;border:1.8px solid var(--line-forte);
+  display:grid;place-items:center;background:var(--superficie);
+}
+.sp-c svg{width:14px;height:14px;stroke:#fff;stroke-width:3.2;opacity:0}
+.sp-r.preso .sp-c{background:var(--ok);border-color:var(--ok)}
+.sp-r.preso .sp-c svg{opacity:1}
+.sp-b{flex:1;min-width:0}
+.sp-n{display:block;font-size:14px;font-weight:650;color:var(--txt-forte);line-height:1.3}
+.sp-g{display:block;font-size:11px;color:var(--txt-faint);margin-top:1px}
+.sp-q{flex:none;font-size:14px;font-weight:800;color:var(--secondario-txt);font-variant-numeric:tabular-nums}
+/* Barrato quando è nel carrello: si vede da lontano cosa manca ancora. */
+.sp-r.preso .sp-n{color:var(--txt-faint);text-decoration:line-through}
+.sp-r.preso .sp-q{color:var(--txt-faint)}
+
+/* ---------- abitudini nel report ---------- */
+.abit{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line)}
+.abit:first-of-type{border-top:0}
+.ab-i{font-size:18px;flex:none;line-height:1}
+.ab-b{flex:1;min-width:0}
+.ab-t{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:5px}
+.ab-t span{color:var(--txt-dim)}
+.ab-t b{color:var(--txt-forte);font-weight:800;font-variant-numeric:tabular-nums}
+.ab-n{display:block;font-size:11px;color:var(--txt-faint);margin-top:4px}
+
+/* ---------- il verdetto sul peso ---------- */
+.verdetto{
+  display:flex;gap:12px;align-items:flex-start;margin-top:12px;
+  padding:12px;border-radius:12px;background:var(--bg-elev);
+  border-left:3px solid var(--txt-faint);
+}
+.verdetto b{
+  flex:none;font-size:18px;font-weight:800;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1.2;
+}
+.verdetto span{flex:1;min-width:0;font-size:12px;line-height:1.6;color:var(--txt-dim)}
+.verdetto span b{font-size:12px;color:var(--txt-forte)}
+.verdetto.bene{border-left-color:var(--secondario)}
+.verdetto.bene > b{color:var(--secondario-txt)}
+.verdetto.fermo{border-left-color:var(--evidenza)}
+.verdetto.fermo > b{color:var(--evidenza-txt)}
+.verdetto.male{border-left-color:var(--danger)}
+.verdetto.male > b{color:var(--danger)}
+
+/* la media mobile è la linea che conta: quella grezza si fa da parte */
+.chart .media{fill:none;stroke:var(--evidenza);stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round}
+.chart.con-media .lin{stroke-width:1.2;opacity:.4}
+.chart.con-media .dot{stroke-width:1.6;opacity:.55}
+.chart.con-media .dot.last{opacity:1}
+
+/* il contatore dell'olio quando si sfora */
+.qcard .qv.oltre{color:var(--evidenza-txt)}
+.qcard .water i.oltre{background:var(--evidenza)}
+.qcard .qnota{font-size:11px;color:var(--txt-faint);line-height:1.4}
+
+/* ---------- report ---------- */
+.rep-h{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin:0 0 10px;
+}
+.rep-h h3{margin:0;font-size:14.5px;font-weight:750;color:var(--txt-forte);letter-spacing:-.01em}
+.rep-h .hint{font-size:11.5px;color:var(--txt-faint)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:11px;color:var(--txt-dim)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.split{display:flex;height:11px;border-radius:99px;overflow:hidden;background:var(--bg-elev2);margin-top:3px}
+.split i{display:block;height:100%}
+.rank{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.rank:first-of-type{border-top:0}
+.rank .rn{width:20px;flex:none;font-size:11px;font-weight:800;color:var(--txt-faint);font-variant-numeric:tabular-nums}
+.rank .rb{flex:1;min-width:0}
+.rank .rl{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:4px}
+.rank .rl span:first-child{font-weight:650;color:var(--txt-forte);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank .rl span:last-child{color:var(--txt-dim);font-variant-numeric:tabular-nums;flex:none;font-weight:700}
+/* display:block è necessario, non decorativo: questi sono <span>, e su un
+   elemento inline l'altezza viene ignorata — la barra sparirebbe. */
+.rank .rt{display:block;height:6px;border-radius:99px;background:var(--bg-elev2);overflow:hidden}
+.rank .rt i{display:block;height:100%;background:var(--secondario);border-radius:99px}
+.rank .rt i.coral{background:var(--evidenza)}
+.rank .rt i.sky{background:var(--accento)}
+
+/* ---------- colonna di sinistra (solo Mac) ---------- */
+#side{display:none}
+
+/* ============================================================
+   Il Mac — stesso impianto del gestionale budget
+   ============================================================
+   Colonna su un piano suo, un gradino sopra il fondo; la voce attiva è una
+   pillola che SCORRE da una voce all'altra invece di accendersi e spegnersi;
+   e la colonna si stringe a barra quando serve spazio.
+*/
+@media (min-width:1000px){
+  body{background:var(--fondo)}
+
+  /* ---------- barra di navigazione in alto ----------
+     Non più una colonna a sinistra: una barra bianca larga tutta la pagina,
+     con il marchio a sinistra e le schede in fila. Toglie 240 px di larghezza
+     al contenuto, che su una plancia a tre colonne è l'unica cosa che conta. */
+  #side{
+    display:flex;flex-direction:row;align-items:center;gap:26px;
+    position:fixed;top:0;left:0;right:0;height:var(--nav-h);width:auto;z-index:45;
+    background:var(--rail-bg);color:var(--txt);
+    border-right:0;border-bottom:1px solid var(--rail-line);
+    padding:0 26px;
+  }
+  .side-logo{display:flex;align-items:center;gap:10px;flex:none}
+  .side-logo .sub{
+    font-size:11px;font-weight:700;color:var(--txt);letter-spacing:-.01em;
+    white-space:nowrap;margin:0;line-height:1.2;
+  }
+  .side-logo .sub b{display:block;font-size:16px;font-weight:800;letter-spacing:-.025em}
+  .side-logo .sub span{display:block;font-size:10px;font-weight:600;color:var(--txt-faint)}
+
+  /* ---------- le schede, con la riga che scorre ----------
+     La riga sotto la voce attiva si sposta invece di accendersi e spegnersi.
+     Larghezza e posizione le misura il codice, perché "Allenamento" e "Cibo"
+     non sono larghe uguale e un passo fisso le mancherebbe entrambe. */
+  .side-menu{position:relative;display:flex;flex-direction:row;gap:4px;flex:1;min-width:0}
+  .side-menu::before{content:none}
+  .side-ind{
+    position:absolute;left:0;top:auto;bottom:-1px;height:2.5px;width:var(--w,0px);
+    border-radius:3px 3px 0 0;background:var(--rail-barra);box-shadow:none;
+    transform:translateX(var(--x,0px));
+    transition:transform .3s cubic-bezier(.4,0,.2,1),width .3s cubic-bezier(.4,0,.2,1),opacity .2s;
+    pointer-events:none;
+  }
+  .side-menu button{
+    position:relative;z-index:1;
+    display:flex;align-items:center;gap:7px;height:var(--nav-h);padding:0 12px;
+    border-radius:0;color:var(--txt-dim);font-size:14.5px;font-weight:600;
+    transition:color .18s ease;
+  }
+  .side-menu button svg{width:18px;height:18px;flex:none;opacity:.6;transition:opacity .18s}
+  .side-menu button:hover{color:var(--txt)}
+  .side-menu button.on{color:var(--secondario-txt)}
+  .side-menu button.on svg{opacity:1}
+  .side-menu button span{white-space:nowrap}
+  /* Impostazioni ha già il suo posto a destra: nell'elenco sarebbe due volte */
+  .side-menu button[data-tab="settings"]{display:none}
+
+  /* Il riepilogo ripetuto serve solo dove si scorre: sul Mac la scheda delle
+     calorie sta già a sinistra, e ripeterla sarebbe la stessa cosa due volte
+     sulla stessa schermata. */
+  .sez-kcal2{display:none}
+
+  .side-foot{margin:0;padding:0;border:0;display:flex;align-items:center;gap:10px;flex:none}
+  .side-az{display:flex;gap:6px}
+  .side-az button{
+    height:36px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;
+    border-radius:var(--pillola);background:var(--superficie-2);border:1px solid var(--line);
+    color:var(--txt-dim);font-size:12px;font-weight:650;
+  }
+  .side-az button:hover{color:var(--txt-forte);border-color:var(--line-forte)}
+  .side-az button svg{width:15px;height:15px}
+  /* La versione stava in fondo alla colonna; in una barra alta 64 px non ci
+     sta, e comunque la si legge in Impostazioni. */
+  .side-ver{display:none}
+  #btnStringi{display:none}
+
+  #tabbar{display:none}
+
+  /* La barra grigia col titolo non serve più: il titolo lo dice
+     l'intestazione dentro il contenuto, e le schede stanno nella barra di
+     navigazione qui sopra. */
+  #topbar{display:none}
+
+  #app{
+    margin:0;max-width:none;
+    padding:calc(var(--nav-h) + 26px) 30px 56px;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+
+  #fab{right:30px;bottom:30px;width:52px;height:52px}
+  #rest{left:auto;right:30px;bottom:30px;width:340px;margin:0}
+  #toast{left:auto;right:30px;transform:none;bottom:30px}
+
+  .tessere{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+  .tess{padding:16px 17px}
+  .tess-v{font-size:26px}
+  .hero{flex-direction:row;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+  .hero-d{align-self:center}
+  .hero-t h1{font-size:30px}
+
+  /* Frecce e striscia della settimana su una riga sola: sono lo stesso comando
+     e in colonna sprecavano la fascia più preziosa della pagina. */
+  .giorno-bar{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .giorno-bar .daynav{margin:0;flex:none;width:290px}
+  .giorno-bar .weekstrip{margin:0;flex:1;max-width:none}
+
+  /* ---------- la plancia ---------- */
+  /* Due colonne: a sinistra quello che fai adesso, a destra il contorno. La
+     settimana è la terza area, che sotto i 1400 px si accoda alla seconda
+     colonna invece di stringere tutto. */
+  .board{
+    display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);
+    grid-template-areas:"a b" "a c";
+    gap:20px;align-items:start;
+  }
+  .bc-a{grid-area:a}
+  .bc-b{grid-area:b}
+  .bc-c{grid-area:c}
+  .bc-a,.bc-b,.bc-c{min-width:0}
+  .bc-a > :first-child,.bc-b > :first-child,.bc-c > :first-child{margin-top:0}
+  .bc-b .section-head:first-child,.bc-c .section-head:first-child{margin-top:0}
+
+  .fgrid{grid-template-columns:repeat(4,1fr)}
+  /* auto-fit e non repeat(4): gli stessi KPI stanno sia larghi in fondo a un
+     report sia stretti dentro una colonna della plancia, e con quattro colonne
+     fisse là dentro l'ultimo veniva tagliato. */
+  .kpis{grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .cols2 .panel{margin-top:0}
+
+  .kcal-card{padding:22px;border-radius:var(--raggio-xl)}
+  .ring,.ring svg{width:120px;height:120px}
+  .ring .mid b{font-size:28px}
+  .kcal-side .big{font-size:17px}
+  .macros{gap:18px}
+  .turno-bar{padding:15px 18px;border-radius:var(--raggio-xl)}
+  .tb-t b{font-size:17px}
+  .panel,.acc,.card-row,.tablewrap,.filters,.plan-hero{border-radius:var(--radius)}
+
+  .weekstrip,.daynav{max-width:580px}
+  table.dt th,table.dt td{padding:10px 14px}
+}
+
+/* Da qui in su lo schermo regge tre colonne: la settimana esce dalla coda
+   della seconda e si vede senza scorrere, che è il solo motivo per averla. */
+@media (min-width:1400px){
+  .wrap{max-width:1440px}
+  .board{
+    grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);
+    grid-template-areas:"a b c";
+  }
+}
+
+@media (min-width:1700px){
+  .wrap{max-width:1560px}
+}
+
+/* ---------- l'ordine della dashboard sul telefono ----------
+   Su una colonna sola l'ordine è una gerarchia: quello che sta in cima è
+   quello che apri l'app per fare. Prima l'alimentazione, poi le cose da fare,
+   poi l'allenamento; le quattro tessere scendono quasi in fondo, perché sono
+   numeri da controllare a fine giornata, non da cui partire.
+
+   Si fa con "order" e non riscrivendo l'HTML perché sul Mac l'ordine giusto è
+   un altro — lì le colonne stanno affiancate e le tessere in cima ci stanno
+   bene. display:contents scioglie la plancia e le sue colonne, così le sezioni
+   diventano tutte figlie della stessa fila e si possono ordinare insieme. */
+@media (max-width:999px){
+  #app[data-vista="oggi"] .wrap{display:flex;flex-direction:column}
+  #app[data-vista="oggi"] .board,
+  #app[data-vista="oggi"] .bc-b{display:contents}
+
+  #app[data-vista="oggi"] .hero{order:1}
+  #app[data-vista="oggi"] .weekstrip{order:2}
+  #app[data-vista="oggi"] .turno-bar{order:3}
+  /* Il riepilogo in cima sparisce: è lo stesso che sta più in basso, e due
+     volte nella stessa colonna è solo strada da scorrere. */
+  #app[data-vista="oggi"] .sez-kcal1{display:none}
+  #app[data-vista="oggi"] .bc-a{order:4}          /* alimentazione */
+  #app[data-vista="oggi"] .sez-agenda{order:5}    /* cose da fare */
+  #app[data-vista="oggi"] .sez-allena{order:6}
+  #app[data-vista="oggi"] .sez-integra{order:7}
+  #app[data-vista="oggi"] .sez-kcal2{order:8}    /* il riepilogo, di nuovo */
+  #app[data-vista="oggi"] .tessere{order:9}
+  #app[data-vista="oggi"] .bc-c{order:10}         /* la settimana */
+}
+
+/* ---------- stampa: il report diventa un PDF ---------- */
+@media print{
+  #topbar,#tabbar,#fab,#side,#rest,#sheet,#toast,.filters .freset,.fsummary .exp{display:none !important}
+  body{background:var(--superficie)}
+  #app{margin:0;padding:0;max-width:none}
+  /* Su carta le due colonne diventano una: stampando si legge dall'alto in
+     basso, non a zig-zag. */
+  .wrap{max-width:none;margin:0}
+  .board{display:block}
+  .panel,.tablewrap,.kpi{box-shadow:none;break-inside:avoid}
+  table.dt th{background:#F7F9FC !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .kcal-card{background:var(--superficie) !important;color:var(--txt-forte) !important;border:1px solid var(--line)}
+}

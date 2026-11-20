@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { calendarWeek, layoutCalendarDay, calendarSelection, movedCalendarEntry, shiftedCalendarDay } from '../dist/js/utils/agendaCalendar.js?v=65';
+import { toInstant, summary } from '../dist/js/utils/agenda.js?v=65';
+import { shiftDate } from '../dist/js/utils/dates.js?v=65';
+const timezone='Europe/Rome', days=Array.from({length:7},(_,i)=>shiftDate('2026-10-05',i));
+const entry=(id,start,end,category='work')=>({id,category,entry_date:start.slice(0,10),starts_at:toInstant(start),ends_at:toInstant(end),planned_minutes:0});
+const night=entry('night','2026-10-08T23:30','2026-10-09T07:30');
+const original=JSON.stringify(night);
+let week=calendarWeek([night,{id:'off',category:'work',kind:'off',entry_date:'2026-10-09',planned_minutes:0},{id:'backlog',category:'study',planned_minutes:60}],days,timezone);
+assert.equal(week[3].planned,30);assert.equal(week[4].planned,450);
+assert.equal(week[3].timed[0].endMinute,1440);assert.equal(week[3].timed[0].continues,true);
+assert.equal(week[4].timed[0].startMinute,0);assert.equal(week[4].timed[0].continuation,true);
+assert.equal(week[4].untimed[0].id,'off');assert.equal(JSON.stringify(night),original);
+assert.equal(calendarWeek([night],days,timezone,'study').flatMap(d=>d.timed).length,0);
+const overflow=entry('cross-week','2026-10-11T23:00','2026-10-12T02:00');
+assert.equal(calendarWeek([overflow],days,timezone)[6].planned,60);
+const segment=(id,startMinute,endMinute)=>({entry:{id},startMinute,endMinute});
+const overlaps=layoutCalendarDay([segment('a',540,720),segment('b',570,600),segment('c',600,660),segment('d',720,780)]);
+assert.equal(overlaps.find(s=>s.entry.id==='a').lanes,2);
+assert.equal(overlaps.find(s=>s.entry.id==='b').lane,1);
+assert.equal(overlaps.find(s=>s.entry.id==='c').lane,1);
+assert.equal(overlaps.find(s=>s.entry.id==='d').lanes,1);
+const tiny=layoutCalendarDay([segment('one',600,605),segment('two',610,615)]);
+assert.equal(tiny[0].lanes,2);assert.notEqual(tiny[0].lane,tiny[1].lane);
+for(const [day,expected] of [['2026-03-29',300],['2026-10-25',420]]) {
+ const e=entry(day,day+'T00:00',day+'T06:00');
+ const result=calendarWeek([e],Array.from({length:7},(_,i)=>shiftDate(day,i)),timezone)[0];
+ assert.equal(result.planned,expected);assert.equal(result.timed[0].endMinute,360);
+ assert.equal(summary([e],[],day,day,timezone).planned,expected);
+}
+const repeated={id:'repeat',category:'work',entry_date:'2026-10-25',starts_at:'2026-10-25T00:45:00Z',ends_at:'2026-10-25T01:15:00Z'};
+const repeatedDay=calendarWeek([repeated],Array.from({length:7},(_,i)=>shiftDate('2026-10-25',i)),timezone)[0];
+assert.equal(repeatedDay.planned,30);assert(repeatedDay.timed[0].endMinute>repeatedDay.timed[0].startMinute);
+// Stress the model and verify conservation without a machine-dependent timing assertion.
+const many=Array.from({length:1000},(_,i)=>entry(String(i),days[i%7]+'T09:00',days[i%7]+'T10:00',i%2?'study':'work'));
+const before=performance.now();week=calendarWeek(many,days,timezone);
+assert.equal(week.flatMap(d=>d.timed).length,1000);assert.equal(week.reduce((n,d)=>n+d.planned,0),60000);
+assert.equal(summary(many,[],days[0],days[6],timezone).planned,60000);
+console.log(`PASS: grid overnight/week clipping, untimed/OFF/backlog, category filter, overlap lanes, tiny event hit areas, DST elapsed duration, immutable inputs and 1000-event model (${(performance.now()-before).toFixed(1)} ms in this run).`);
+
+const range=calendarSelection('2026-10-05',795,884,true);
+assert.equal(range.start,'2026-10-05T13:15');assert.equal(range.end,'2026-10-05T14:45');
+const reverse=calendarSelection('2026-10-05',855,800,true);
+assert.equal(reverse.start,'2026-10-05T13:15');assert.equal(reverse.end,'2026-10-05T14:30');
+assert.equal(calendarSelection('2026-10-05',1439).end,'2026-10-06T00:45');
+const moved=movedCalendarEntry(night,'2026-10-11',300,timezone,330);
+assert.equal(moved.entry_date,'2026-10-10');assert.equal(moved.starts_at,toInstant('2026-10-10T23:30'));
+assert.equal(Date.parse(moved.ends_at)-Date.parse(moved.starts_at),480*60000);
+const exact=entry('exact','2026-10-05T08:07','2026-10-05T09:37');
+assert.equal(shiftedCalendarDay(exact,'2026-10-06','2026-10-05',timezone).starts_at,toInstant('2026-10-06T08:07'));
+assert.equal(movedCalendarEntry(exact,'2026-10-05',-15,timezone).entry_date,'2026-10-04');
+assert.throws(()=>movedCalendarEntry(night,'2026-03-29',150,timezone));
+const spring=movedCalendarEntry(night,'2026-03-28',1410,timezone);
+assert.equal(Date.parse(spring.ends_at)-Date.parse(spring.starts_at),480*60000);
+assert.deepEqual(movedCalendarEntry({kind:'off'},'2026-10-11',600,timezone),{entry_date:'2026-10-11'});
+console.log('PASS: 15-minute range selection, reverse/night ranges, drag continuation grab offset, exact day shifting, midnight/DST moves and OFF handling.');

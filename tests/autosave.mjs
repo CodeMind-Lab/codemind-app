@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {state} from '../dist/js/services/store.js?v=65';
+import {editorSession,readDraft} from '../dist/js/services/autosave.js?v=65';
+const storage=new Map();
+globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+state.mode='demo';
+let release,calls=0;
+const s=editorSession('journal:test',{body:''},null,async(values,existing)=>{
+ calls++; if(calls===1) await new Promise(r=>release=r);
+ return {body:values.body,updated_at:String(calls),id:'stable'};
+});
+s.update({body:'first'}); const pending=s.flush();
+s.update({body:'latest'}); assert.equal(calls,1);release();await pending;
+assert(s.dirty);assert.equal(readDraft('journal:test').values.body,'latest');
+await s.flush();assert.equal(calls,2);assert.equal(s.existing.body,'latest');assert(!s.dirty);assert.equal(readDraft('journal:test'),null);
+let attempts=0;
+const f=editorSession('journal:offline',{body:''},null,async()=>{attempts++;throw Error('Sei offline');});
+f.update({body:'Do not lose'});await f.flush();assert(f.error);assert.equal(readDraft('journal:offline').values.body,'Do not lose');
+state.mode='cloud';state.user={id:'different'};assert.equal(readDraft('journal:offline'),null);assert.equal(await f.flush(),false);assert.equal(attempts,1);
+state.mode='demo';
+storage.set('cm-draft:demo:journal:restored',JSON.stringify({values:{body:'Draft from previous visit'},existing:{updated_at:'old'}}));
+let baseline;
+const r=editorSession('journal:restored',{body:'Remote'},{updated_at:'new'},async(v,b)=>{baseline=b;throw Error('Conflict');});
+assert(r.restored);assert.equal(r.values.body,'Draft from previous visit');await r.flush();assert.equal(baseline.updated_at,'old');assert(r.dirty);
+const n=editorSession('note:new',{title:'',body:''},null,async v=>({...v,id:'one'}));n.update({title:'Title',body:'Body'});await n.flush();
+const fresh=editorSession('note:new',{title:'',body:''},null,async v=>v);assert.equal(fresh.values.title,'');
+console.log('PASS: serialized writes, typing during save, draft recovery, failed-save retention, account isolation, stale-write baseline and new-note reset.');

@@ -1,0 +1,43 @@
+import {PGlite} from '@electric-sql/pglite';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec("create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth,public to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;");
+for(const m of ['001_initial','002_daily_focus','003_daily_notebook','004_notes','007_personal_agenda','008_work_shift_calendar','009_agenda_productivity'])await db.exec(fs.readFileSync('supabase/migrations/'+m+'.sql','utf8'));
+const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
+await db.query('insert into auth.users(id) values($1),($2)',[A,B]);
+const rows=async(q,p=[]) => (await db.query(q,p)).rows;
+async function role(id){await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);}
+await role(A);
+await rows("insert into schedule_entries(user_id,title,category,kind,entry_date,planned_minutes) values($1,'Studio esistente','study','activity','2026-10-09',120),($1,'OFF esistente','work','off','2026-10-08',0)",[A]);
+const legacy=await rows("select to_jsonb(t) as row from schedule_entries t order by id");
+await db.exec('reset role');
+await db.exec(fs.readFileSync('supabase/migrations/010_sport_connection.sql','utf8'));
+await role(A);
+assert.deepEqual((await rows("select to_jsonb(t)-'sport_session_key' as row from schedule_entries t order by id")),legacy);
+const e=(await rows("insert into schedule_entries(user_id,title,category,entry_date,planned_minutes,notes) values($1,'Palestra manuale','gym','2026-10-11',90,'Da preservare') returning *",[A]))[0];
+const snapshot={version:1,source_id:'test-source',workouts:[{id:'w1',date:'2026-10-11',completed:true,title:'Upper',started_at:'2026-10-11T08:00Z',ended_at:'2026-10-11T09:00Z',duration_minutes:60},{id:'w2',date:'2026-10-10',completed:true,title:'Lower',started_at:null,ended_at:null,duration_minutes:30}],plans:[{id:'pa1',weekday:0,title:'Upper'}]};
+const connection=(await rows('select save_sport_snapshot($1) as c',[JSON.stringify(snapshot)]))[0].c;
+await rows('select save_sport_snapshot($1)',[JSON.stringify({...snapshot,connection_id:connection.id})]);
+assert.equal(JSON.stringify((await rows('select snapshot from sport_connections'))).includes('connection_id'),false);
+const item={key:'test-source:session:w1',date:'2026-10-11',title:'Upper',completed:true,link_id:e.id,expected_updated_at:e.updated_at};
+const result=(await rows('select import_sport_agenda($1) as r',[JSON.stringify([item])]))[0].r;
+assert.deepEqual(result,{imported:1,skipped:0,logs:1,missing_times:0});
+const updated=(await rows('select * from schedule_entries where id=$1',[e.id]))[0];assert.equal(updated.notes,'Da preservare');assert.equal(updated.title,e.title);assert.equal(updated.planned_minutes,90);
+assert.equal((await rows('select import_sport_agenda($1) as r',[JSON.stringify([item])]))[0].r.skipped,1);assert.equal((await rows('select * from time_logs')).length,1);
+await assert.rejects(()=>db.query('select save_sport_snapshot($1)',[JSON.stringify({...snapshot,source_id:'another-source'})]));
+await assert.rejects(()=>db.query('select import_sport_agenda($1)',[JSON.stringify([{...item,key:'test-source:session:fake'}])]));
+const absent={key:'test-source:session:w2',date:'2026-10-10',title:'Lower',completed:true,link_id:null};
+assert.equal((await rows('select import_sport_agenda($1) as r',[JSON.stringify([absent])]))[0].r.missing_times,1);
+assert.equal((await rows('select * from time_logs')).length,1);
+await role(B);assert.equal((await rows('select * from sport_connections')).length,0);assert.equal((await rows('select * from sport_imports')).length,0);
+await rows('select save_sport_snapshot($1)',[JSON.stringify(snapshot)]);
+await assert.rejects(()=>db.query('select import_sport_agenda($1)',[JSON.stringify([item])]));
+await role(A);
+await rows('delete from sport_connections where id=$1',[connection.id]);
+await assert.rejects(()=>db.query('select save_sport_snapshot($1)',[JSON.stringify({...snapshot,connection_id:connection.id})])); // A late update cannot reconnect after disconnect.
+assert.equal((await rows('select * from sport_connections')).length,0);
+await rows('select save_sport_snapshot($1)',[JSON.stringify(snapshot)]);
+await rows('delete from schedule_entries where id=$1',[e.id]);
+assert.equal((await rows('select import_sport_agenda($1) as r',[JSON.stringify([item])]))[0].r.skipped,1); // Deletion is respected.
+await db.exec('reset role;set role anon');await assert.rejects(()=>db.query('select * from sport_connections'));await assert.rejects(()=>db.query('select save_sport_snapshot($1)',[JSON.stringify(snapshot)]));await assert.rejects(()=>db.query('select import_sport_agenda($1)',[JSON.stringify([item])]));
+await db.close();console.log('PASS: sport RLS/anonymous denial, account binding, source validation, atomic imports, manual data preservation, idempotency, deleted event receipt and real interval import.');
