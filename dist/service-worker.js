@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v71";
+const CACHE = "codemind-shell-v72";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -65,6 +65,7 @@ const ASSETS = [
  "./js/modules/sport.js",
  "./js/modules/sviluppo.js",
  "./js/modules/tasks.js",
+ "./js/modules/universita.js",
  "./js/modules/university.js",
  "./js/router.js",
  "./js/services/agendaPreferences.js",
@@ -86,6 +87,7 @@ const ASSETS = [
  "./js/services/sportService.js",
  "./js/services/store.js",
  "./js/services/supabase.js",
+ "./js/services/universitaService.js",
  "./js/utils/agenda.js",
  "./js/utils/agendaCalendar.js",
  "./js/utils/agendaProductivity.js",
@@ -98,6 +100,7 @@ const ASSETS = [
  "./js/utils/noteLinks.js",
  "./js/utils/sport.js",
  "./js/utils/sviluppo.js",
+ "./js/utils/universita.js",
  "./js/utils/university.js",
  "./js/utils/workShifts.js",
  "./manifest.json"

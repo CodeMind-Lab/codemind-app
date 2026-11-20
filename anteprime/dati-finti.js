@@ -81,6 +81,17 @@ state.formazione = [
   { id: id(), titolo: 'Agenti con strumenti e MCP', tipo: 'documentazione', link: '', stato: 'da_fare', ore_previste: 4, ore_fatte: 0, note: '', updated_at: new Date().toISOString() },
 ];
 state.lavoroError = '';
+// Università: Algoritmi con 30 lezioni (intermedia fino alla 20), Machine Learning da iniziare.
+const uni = (dati) => 'CODEMIND_UNIVERSITY_V1\n' + JSON.stringify({ kind: 'university-subject', version: 1, ...dati });
+state.projects.find(p => p.id === 'p-algo').notes = uni({ studyStatus: 'studying', credits: 9, lezioniTotali: 30, intermediaFino: 20, professor: 'Docente del corso', syllabus: 'Algoritmi e pseudocodice\nComplessità\nListe, pile e code\nAlberi e grafi', examMode: 'Prova intermedia online e finale in presenza.' });
+state.projects.push({ id: 'p-ml', name: 'Machine Learning e Artificial Intelligence', status: 'active', color: '#0B7FA6', notes: uni({ studyStatus: 'planned', credits: 9, lezioniTotali: 45, intermediaFino: 34 }) });
+state.uniLezioni = Array.from({ length: 12 }, (_, i) => ({ id: id(), materia_id: 'p-algo', numero: i + 1, titolo: i === 0 ? 'Introduzione agli algoritmi' : '', seguita: true, data_seguita: shiftDate(oggi, -30 + i * 2), note: '', updated_at: new Date().toISOString() }));
+state.uniPiano = [['1', 'Pseudocodice, cicli e funzioni', '1–2', 10, true], ['2', 'Ricerca in un array, potenze e logaritmi', '3, 7', 10, true], ['3', 'Ricorsione e Torre di Hanoi', '4', 10, true], ['4', 'Crescita delle funzioni', '5–6', 10, false]].map(([settimana, argomento, lezioni, ore, fatto], i) => ({ id: id(), materia_id: 'p-algo', posizione: i + 1, settimana, argomento, lezioni, ore, fatto, note: '', updated_at: new Date().toISOString() }));
+state.uniAppelli = [{ id: id(), materia_id: 'p-algo', data: shiftDate(oggi, 25), ora: '10:00:00', prova: 'intermedia', modalita: 'online', iscrizione_entro: shiftDate(oggi, 4), iscritto: false, esito: '', punti: null, note: '', updated_at: new Date().toISOString() }, { id: id(), materia_id: 'p-ml', data: shiftDate(oggi, 53), ora: null, prova: 'finale', modalita: 'in presenza', iscrizione_entro: null, iscritto: true, esito: '', punti: null, note: '', updated_at: new Date().toISOString() }];
+state.uniSimulazioni = [[-18, 14], [-11, 19], [-4, 17]].map(([g, c]) => ({ id: id(), materia_id: 'p-algo', data: shiftDate(oggi, g), prova: 'intermedia', domande: 24, corrette: c, minuti: 40, note: '', updated_at: new Date().toISOString() }));
+state.uniErrori = [{ id: id(), materia_id: 'p-algo', lezione: 7, domanda: 'Complessità della ricerca binaria su un array ordinato', risposta: 'O(log n)', spiegazione: '', ripassi: 1, prossimo_ripasso: oggi, risolto: false, updated_at: new Date().toISOString() }, { id: id(), materia_id: 'p-algo', lezione: 4, domanda: 'Caso base nella ricorsione di Hanoi', risposta: 'n = 1: un solo spostamento', spiegazione: '', ripassi: 2, prossimo_ripasso: shiftDate(oggi, 5), risolto: false, updated_at: new Date().toISOString() }];
+state.uniElaborati = [{ id: id(), materia_id: 'p-algo', titolo: 'Relazione sugli algoritmi di ordinamento', scadenza: shiftDate(oggi, 30), stato: 'in_corso', punti: null, link: '', note: '', updated_at: new Date().toISOString() }];
+state.universitaError = '';
 state.mode = 'cloud'; state.loaded = true; state.user = { id: 'prova', email: 'prova@esempio.it' }; state.agendaAvailable = true;
 render();
 'dati finti caricati';

@@ -3,7 +3,6 @@ import { startAppUpdates } from "./services/appUpdate.js?v=68";
 import { sportPage, bindSport } from './modules/sport.js?v=65';
 import { clearSport } from './services/sportService.js?v=65';
 import { universityData } from "./utils/university.js?v=65";
-import { universityPage, bindUniversity } from "./modules/university.js?v=65";
 import { openChecklistImport } from "./modules/checklistImport.js?v=65";
 import { attachmentsSection, bindAttachments, openFileImport } from './modules/attachments.js?v=65';
 import { notesPage, bindNotes, noteForm } from "./modules/notes.js?v=65";
@@ -17,6 +16,8 @@ import { oggiPage, bindOggi } from "./modules/oggi.js?v=70";
 import { schedeSviluppo, schedeNote } from "./modules/sezioni.js?v=70";
 import { hotelPage, bindHotel } from "./modules/hotel.js?v=70";
 import { sviluppoPage, bindSviluppo } from "./modules/sviluppo.js?v=70";
+import { universitaPage, bindUniversita } from "./modules/universita.js?v=70";
+import { clearUniversita } from "./services/universitaService.js?v=70";
 import { clearLavoro } from "./services/lavoroService.js?v=70";
 import {
   projects,
@@ -57,7 +58,7 @@ const recovering = location.hash.includes("type=recovery");
 let searchQuery = "",
   installEvent;
 export function render() {
-  const { page, id } = route();
+  const { page, id, sub } = route();
   if (page === "projects" && id && universityData(state.projects.find(p => p.id === id))) {
     location.replace(`#/university/${id}`);
     return;
@@ -93,7 +94,7 @@ export function render() {
       : '<div class="panel empty">Progetto non trovato. <a class="link" href="#/projects">Torna ai progetti</a></div>';
   } else {
     const views = {
-      university: () => universityPage(id),
+      university: () => universitaPage(id, sub),
       dashboard: oggiPage,
       hotel: () => hotelPage(id),
       sviluppo: () => sviluppoPage(id),
@@ -114,7 +115,7 @@ export function render() {
   if (page === "dashboard") bindOggi(render);
   if (page === "hotel") bindHotel(render);
   if (page === "sviluppo") bindSviluppo(render);
-  bindUniversity(render);
+  if (page === "university") bindUniversita(render);
   bindAttachments();
   bindAgenda(render);
   bindSport(render);
@@ -321,7 +322,7 @@ async function init() {
       state.mode = "signed_out";
       state.projects = [];
       state.tasks = [];
-      clearAgenda(); clearSport(); clearForma(); clearLavoro();
+      clearAgenda(); clearSport(); clearForma(); clearLavoro(); clearUniversita();
       const s = await session();
       if (s) {
         await loadCloud();
@@ -337,7 +338,7 @@ async function init() {
           state.tasks = [];
           state.dailyTodos = [];
           state.notes = [];
-          clearAgenda(); clearSport(); clearForma(); clearLavoro();
+          clearAgenda(); clearSport(); clearForma(); clearLavoro(); clearUniversita();
           clearNotebookDrafts();
           render();
         }

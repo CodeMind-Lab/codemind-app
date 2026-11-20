@@ -4,6 +4,7 @@ import { universityData } from "../utils/university.js?v=65";
 import { listAttachments } from './attachmentsService.js?v=65';
 import { loadAgenda, importLegacyWorkShifts } from "./agendaService.js?v=65";
 import { loadLavoro } from "./lavoroService.js?v=70";
+import { loadUniversita } from "./universitaService.js?v=70";
 import { state } from "./store.js?v=65";
 import { getClient, unwrap, readAll } from "./supabase.js?v=65";
 import { uid, safeURL, statuses } from "../utils/helpers.js?v=65";
@@ -33,7 +34,7 @@ export async function loadCloud() {
   state.user = s.user;
   state.profile = profile;
   state.mode = "cloud";
-  await Promise.all([loadAgenda(),loadSport(),loadForma(),loadLavoro()]);
+  await Promise.all([loadAgenda(),loadSport(),loadForma(),loadLavoro(),loadUniversita()]);
   await importLegacyWorkShifts();
   state.loaded = true;
 }

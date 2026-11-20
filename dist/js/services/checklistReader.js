@@ -56,3 +56,18 @@ export async function readChecklistFile(file) {
   }
   throw Error('Per creare attività usa CSV, Excel (.xlsx o .xls), ODS, Word (.docx), PDF con testo, TXT o Markdown. Per foto e altri file usa “Allega file”.');
 }
+// Testo semplice di un .docx (per l'import delle schede delle materie).
+export async function testoDocx(file) {
+  if (!file || !/\.docx$/i.test(file.name)) throw Error('Scegli un file Word (.docx).');
+  if (file.size > 10 * 1024 * 1024) throw Error('Il file supera il limite di 10 MB.');
+  const mammoth = await loadScript('mammoth.browser.min.js', 'mammoth');
+  return (await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value;
+}
+// Righe di un foglio Excel/CSV come tabella (per importare il piano di studio).
+export async function righeFoglio(file) {
+  const estensione = file.name.split('.').pop().toLowerCase();
+  if (!['xlsx', 'xls', 'ods', 'csv', 'tsv'].includes(estensione)) throw Error('Scegli un file Excel, ODS o CSV.');
+  const xlsx = await loadScript('xlsx.full.min.js', 'XLSX'), semplice = ['csv', 'tsv'].includes(estensione);
+  const libro = xlsx.read(semplice ? await file.text() : await file.arrayBuffer(), { type: semplice ? 'string' : 'array', sheetRows: 1002 });
+  return xlsx.utils.sheet_to_json(libro.Sheets[libro.SheetNames[0]], { header: 1, defval: '', raw: false, blankrows: false });
+}

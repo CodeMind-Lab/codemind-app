@@ -1,0 +1,32 @@
+// Migrazione 014: tabelle dell'Università legate alle materie, con RLS e cancellazione a cascata.
+import {PGlite} from '@electric-sql/pglite';import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec("create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to anon,authenticated;grant execute on function auth.uid() to anon,authenticated;");
+for(const m of ['001_initial','002_daily_focus','003_daily_notebook','004_notes','007_personal_agenda','008_work_shift_calendar','009_agenda_productivity','010_sport_connection','011_forma_workspace','012_categoria_sviluppo','013_lavoro','014_universita'])await db.exec(fs.readFileSync('supabase/migrations/'+m+'.sql','utf8'));
+const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
+await db.query('insert into auth.users(id) values($1),($2)',[A,B]);
+const rows=async(q,p=[])=>(await db.query(q,p)).rows;
+const fails=async fn=>{let ok=false;try{await fn();}catch{ok=true;}assert.ok(ok,'doveva fallire');};
+async function role(id){await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);}
+await role(A);
+const m=(await rows("insert into projects(user_id,name,notes) values($1,'Algoritmi','CODEMIND_UNIVERSITY_V1\n{}') returning id",[A]))[0].id;
+await rows("insert into uni_lezioni(user_id,materia_id,numero,titolo,seguita,data_seguita) values($1,$2,1,'Introduzione',true,'2026-11-01')",[A,m]);
+await fails(()=>db.query("insert into uni_lezioni(user_id,materia_id,numero) values($1,$2,1)",[A,m]));
+await fails(()=>db.query("insert into uni_lezioni(user_id,materia_id,numero) values($1,$2,0)",[A,m]));
+await rows("insert into uni_piano(user_id,materia_id,posizione,settimana,argomento,lezioni,ore) values($1,$2,1,'1','Pseudocodice','1–2',10)",[A,m]);
+await fails(()=>db.query("insert into uni_piano(user_id,materia_id,argomento) values($1,$2,'  ')",[A,m]));
+await rows("insert into uni_appelli(user_id,materia_id,data,prova,iscrizione_entro) values($1,$2,'2026-12-15','intermedia','2026-12-01')",[A,m]);
+await fails(()=>db.query("insert into uni_appelli(user_id,materia_id,data,prova) values($1,$2,'2026-12-15','orale')",[A,m]));
+await rows("insert into uni_simulazioni(user_id,materia_id,prova,domande,corrette) values($1,$2,'intermedia',24,19)",[A,m]);
+await fails(()=>db.query("insert into uni_simulazioni(user_id,materia_id,domande,corrette) values($1,$2,24,25)",[A,m]));
+await rows("insert into uni_errori(user_id,materia_id,lezione,domanda) values($1,$2,7,'Complessità della ricerca binaria')",[A,m]);
+await rows("insert into uni_elaborati(user_id,materia_id,titolo,stato) values($1,$2,'Relazione di laboratorio','in_corso')",[A,m]);
+await fails(()=>db.query("insert into uni_elaborati(user_id,materia_id,titolo,stato) values($1,$2,'X','boh')",[A,m]));
+const tab=['uni_lezioni','uni_piano','uni_appelli','uni_simulazioni','uni_errori','uni_elaborati'];
+await role(B);
+for(const t of tab)assert.equal((await rows(`select * from ${t}`)).length,0,t);
+await fails(()=>db.query("insert into uni_piano(user_id,materia_id,argomento) values($1,$2,'Rubato')",[B,m]));
+await db.exec('reset role;set role anon');for(const t of tab)await fails(()=>db.query(`select * from ${t}`));
+await role(A);await rows('delete from projects where id=$1',[m]);
+for(const t of tab)assert.equal((await rows(`select count(*)::int n from ${t}`))[0].n,0,t);
+console.log('PASS: università: lezioni uniche per numero, piano, appelli, simulazioni coerenti, errori ed elaborati legati alla materia, isolamento tra utenti, anonimi esclusi, cancellazione a cascata.');

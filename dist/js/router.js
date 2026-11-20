@@ -7,7 +7,7 @@ export const pages = {
   settings: 'Impostazioni',
 };
 export function route() {
-  const [, requested = 'dashboard', id] = location.hash.split('/');
+  const [, requested = 'dashboard', id, sub] = location.hash.split('/');
   const aliases = { agenda:'today', journal:'dashboard', calendar:'today', notebook:'daily-todos', statistics:'dashboard' };
-  return {page: aliases[requested] || requested || 'dashboard', id};
+  return {page: aliases[requested] || requested || 'dashboard', id, sub};
 }

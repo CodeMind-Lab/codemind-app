@@ -427,3 +427,54 @@ html[data-theme="dark"] .link-c a { color: var(--azzurro); }
 .incassi-elenco { margin: 12px 0; padding: 10px 12px; background: var(--pannello-2); border-radius: 12px; }
 .form-grid .check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 @media (max-width: 1100px) { .clienti-griglia { grid-template-columns: 1fr; } }
+
+/* ==========================================================================
+   Università (anteprime/04-universita.html e 05-materia.html)
+   ========================================================================== */
+.universita .torna { margin: 0 0 4px; } .universita .torna a { color: var(--teal); text-decoration: none; font-size: 13px; font-weight: 600; }
+html[data-theme="dark"] .universita .torna a { color: var(--azzurro); }
+.materie-griglia { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.materia-carta { background: var(--pannello); border-radius: var(--raggio); padding: 18px; display: flex; flex-direction: column; gap: 10px; color: var(--testo); text-decoration: none; min-width: 0; }
+.materia-carta:hover { outline: 2px solid var(--azzurro); }
+.materia-carta .riga-t1 { display: flex; align-items: flex-start; gap: 10px; }
+.materia-carta h3 { font-size: 17px; line-height: 1.2; margin-bottom: 4px; }
+.materia-carta .cfu { margin-left: auto; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.prog { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: 12.5px; color: var(--testo-2); }
+.prog .barra { margin: 0; }
+.materia-carta .piede { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--testo-2); border-top: 1px solid var(--riga); padding-top: 10px; }
+.materia-carta .piede b { color: var(--testo); }
+.s-studio { background: #D9F3FB; color: #0B6E91; } .s-iniziare { background: #EEF0F3; color: #4B5563; } .s-sostenere { background: #FFE3DD; color: #B5412B; } .s-superato { background: #DDF3EE; color: #15803D; }
+.app-riga { display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--riga); }
+.app-riga:first-child { border-top: 0; }
+.app-data { background: var(--pannello-2); border-radius: 12px; text-align: center; padding: 6px 0; line-height: 1.1; }
+.app-data b { display: block; font-size: 18px; } .app-data span { font-size: 11px; color: var(--testo-3); text-transform: uppercase; }
+.app-riga small { display: block; color: var(--testo-3); font-size: 12px; }
+.app-riga .dx, .errore .dx { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.att { color: #B45309; font-weight: 600; font-size: 12.5px; }
+.lezioni-griglia { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.lez { border-radius: 10px; padding: 6px 0; text-align: center; font-weight: 700; font-size: 13px; background: var(--pannello-2); color: var(--testo-3); border: 2px solid transparent; cursor: pointer; font-family: inherit; }
+.lez.int { border-color: #6CD4F0; } .lez.fin { border-color: #B3A8FF; }
+.lez.fatta { background: var(--teal); color: #fff; }
+.lez.fatta.int { background: #6CD4F0; color: #0B1A2E; } .lez.fatta.fin { background: #8F80EE; color: #fff; }
+.legenda { display: flex; gap: 14px; font-size: 12px; color: var(--testo-2); margin-top: 10px; flex-wrap: wrap; }
+.legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 5px; vertical-align: -1px; background: var(--pannello-2); border: 1px solid var(--riga-forte); }
+.legenda i.int { background: #6CD4F0; border-color: #6CD4F0; } .legenda i.fin { background: #8F80EE; border-color: #8F80EE; }
+.grafico-sim { display: flex; align-items: flex-end; gap: 8px; height: 130px; }
+.grafico-sim div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; font-size: 11px; color: var(--testo-3); }
+.grafico-sim i { display: block; width: 100%; border-radius: 8px 8px 4px 4px; background: #8F80EE; }
+.grafico-sim i.finale { background: var(--teal); }
+.grafico-sim b { font-size: 12px; color: var(--testo); }
+.errore { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid var(--riga); align-items: start; }
+.errore:first-child { border-top: 0; } .errore small { display: block; color: var(--testo-3); font-size: 12px; } .errore p { margin: 4px 0 0; font-size: 13px; color: var(--testo-2); white-space: pre-line; }
+.errore.risolto b { color: var(--testo-3); text-decoration: line-through; }
+.titolo-lezione { width: 100%; min-width: 180px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--testo); padding: 4px 6px; font: inherit; }
+.titolo-lezione:hover, .titolo-lezione:focus { border-color: var(--riga); background: var(--pannello); }
+table.dati td.testo-lungo { white-space: normal; min-width: 200px; }
+.testo-scheda { white-space: pre-line; font-size: 14px; line-height: 1.55; color: var(--testo); }
+.import-schede { display: grid; gap: 8px; margin: 12px 0; max-height: 55vh; overflow: auto; }
+.import-scheda { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--pannello-2); cursor: pointer; }
+.import-scheda small { display: block; color: var(--testo-2); font-size: 12.5px; margin-top: 2px; }
+.spunta { width: 24px; height: 24px; border-radius: 8px; border: 1.5px solid var(--riga-forte); background: var(--pannello); display: inline-grid; place-items: center; color: #fff; font-size: 14px; cursor: pointer; padding: 0; vertical-align: middle; }
+.spunta.si { background: #15803D; border-color: #15803D; }
+@media (max-width: 1100px) { .materie-griglia { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .materie-griglia { grid-template-columns: 1fr; } .lezioni-griglia { grid-template-columns: repeat(6, minmax(0, 1fr)); } .app-riga { grid-template-columns: 48px 1fr; } .app-riga .dx { grid-column: 1 / -1; justify-content: flex-start; } }
