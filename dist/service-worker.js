@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v75";
+const CACHE = "codemind-shell-v76";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -148,7 +148,10 @@ self.addEventListener("fetch", (event) => {
   )
     return;
   event.respondWith(
-    fetch(event.request, event.request.mode === "navigate" ? { cache: "no-cache" } : undefined)
+    // "no-cache": il browser chiede sempre al server se il file è cambiato (con l'ETag,
+    // di solito risponde 304). Senza, GitHub Pages lascia per 10 minuti in cache i moduli
+    // con lo stesso ?v= e un aggiornamento può mescolare file vecchi e nuovi.
+    fetch(event.request, { cache: "no-cache" })
       .then((response) => {
         if (response.ok && response.type !== "opaqueredirect") {
           const copy = response.clone();
