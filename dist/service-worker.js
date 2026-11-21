@@ -1,4 +1,4 @@
-const CACHE = "codemind-shell-v79";
+const CACHE = "codemind-shell-v80";
 const ASSETS = [
  "./",
  "./assets/fonts/OFL-ChakraPetch.txt",
@@ -111,7 +111,9 @@ const ASSETS = [
  "./js/utils/universita.js",
  "./js/utils/university.js",
  "./js/utils/workShifts.js",
- "./manifest.json"
+ "./manifest.json",
+ "./scheda-abc/index.html",
+ "./scheda-abc/inter-var.woff2"
 ];
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {

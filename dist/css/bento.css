@@ -634,6 +634,7 @@ body .btn.pieno, #modal .btn.pieno { width: 100%; justify-content: center; backg
   html[data-theme="dark"] .tile.t-azzurro .piccoli button, html[data-theme="dark"] .tile.t-lilla .piccoli button { background: #ffffff1f; color: #fff; }
   .griglia2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .all-tel { display: flex; align-items: center; gap: 10px; } .all-tel small { color: #9FB0C7; font-size: 12px; }
+  .all-tel .all-abc { display: block; width: fit-content; margin-top: 8px; color: #fff; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #ffffff66; }
   .all-tel .btn { margin-left: auto; background: var(--corallo); border-color: var(--corallo); color: #fff; text-decoration: none; padding: 9px 18px; }
   /* i pasti diventano schede compatte: si toccano per vedere e cambiare le righe */
   body .card.pal-pasti { background: transparent; box-shadow: none; }

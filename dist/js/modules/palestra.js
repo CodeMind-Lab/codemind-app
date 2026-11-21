@@ -54,7 +54,9 @@ function testa(a, d) {
   ${a ? `<div class="mese-nav piccolo"><button class="icona-tonda" data-pal-giorno="-1" aria-label="Giorno precedente">‹</button><button class="pal-oggi" data-pal-oggi title="Torna a oggi">${d === oggi() ? 'Oggi' : esc(giornoBreve(d))}</button><button class="icona-tonda" data-pal-giorno="1" aria-label="Giorno successivo">›</button></div>
   <div class="azioni"><button class="btn" data-pal-scan>${ICONA_SCAN}<span>Scansiona</span></button><button class="btn primary pal-acc" data-pal-aggiungi>+ Alimento</button></div>` : ''}</div>`;
 }
-const schede = attiva => `<nav class="schede-sezione pal-schede" aria-label="Schede di Palestra e alimentazione">${SCHEDE.map(([k, n]) => `<a class="chip ${k === attiva ? 'on' : ''}" href="#/sport${k === 'oggi' ? '' : '/' + k}" ${k === attiva ? 'aria-current="page"' : ''}>${n}</a>`).join('')}</nav>`;
+// "Scheda A·B·C" è una pagina a parte (dist/scheda-abc/, generata dal piano fitness):
+// la scheda da tenere aperta in palestra, con le serie da spuntare e il timer del recupero.
+const schede = attiva => `<nav class="schede-sezione pal-schede" aria-label="Schede di Palestra e alimentazione">${SCHEDE.map(([k, n]) => `<a class="chip ${k === attiva ? 'on' : ''}" href="#/sport${k === 'oggi' ? '' : '/' + k}" ${k === attiva ? 'aria-current="page"' : ''}>${n}</a>`).join('')}<a class="chip" href="scheda-abc/index.html">Scheda A·B·C</a></nav>`;
 
 function statoHtml() {
   const s = P.statoSalvataggio, offline = !navigator.onLine;
@@ -122,13 +124,15 @@ function cartaAcqua(x) {
     <div class="mini"><div class="etichetta">Passi</div><div class="num">${fmt(rg.passi)} <small>/ ${fmt(t.passi)}</small></div>${barra(rg.passi, t.passi, '#15803D')}<div class="azioni"><button data-pal-passi>Scrivi passi</button></div></div>
   </div></div></section>`;
 }
+// Accanto al link del riquadro, la pagina Scheda A·B·C: sull'iPhone la barra delle schede la nasconde in fondo.
+const linkAbc = altro => `<span class="link-gruppo"><a class="link" href="scheda-abc/index.html">Scheda A·B·C</a> · ${altro}</span>`;
 function cartaAllenamento(a, d, x) {
   const { all, fatte } = x;
-  if (!all && !fatte.length) return `<section class="card"><div class="card-testa"><h2>Allenamento</h2><a class="link" href="#/sport/piano">Piano →</a></div><p class="vuoto-giornata">Riposo: nessuna seduta nel piano per questo giorno.</p></section>`;
-  if (!all) return `<section class="card"><div class="card-testa"><h2>Allenamento</h2><a class="link" href="#/sport/allena">Sessioni →</a></div><div class="contenuto"><div class="all-t fatto"><div><b>${esc(fatte[0].gn || 'Allenamento')}</b><small>fatto ✓</small></div></div></div></section>`;
+  if (!all && !fatte.length) return `<section class="card"><div class="card-testa"><h2>Allenamento</h2>${linkAbc('<a class="link" href="#/sport/piano">Piano →</a>')}</div><p class="vuoto-giornata">Riposo: nessuna seduta nel piano per questo giorno.</p></section>`;
+  if (!all) return `<section class="card"><div class="card-testa"><h2>Allenamento</h2>${linkAbc('<a class="link" href="#/sport/allena">Sessioni →</a>')}</div><div class="contenuto"><div class="all-t fatto"><div><b>${esc(fatte[0].gn || 'Allenamento')}</b><small>fatto ✓</small></div></div></div></section>`;
   const ult = ultimaSessione(a, all.scheda.id, all.giorno.n, d), fatto = fatte.some(w => w.sid === all.scheda.id && w.gn === all.giorno.n);
   const esercizi = (all.giorno.eser || []).map(e => `<div class="es"><span class="nome">${esc(e.n)}</span><span>${e.cardio ? (e.min ? esc(e.min) + ' min' : 'cardio') : `${esc(e.serie || 3)} × ${esc(e.rip || '')}`}</span><em>${e.peso ? esc(e.peso) + ' kg' : ''}</em></div>`).join('');
-  return `<section class="card"><div class="card-testa"><h2>Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</h2><a class="link" href="#/sport/piano">Cambia →</a></div><div class="contenuto">
+  return `<section class="card"><div class="card-testa"><h2>Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</h2>${linkAbc('<a class="link" href="#/sport/piano">Cambia →</a>')}</div><div class="contenuto">
     <div class="all-t ${fatto ? 'fatto' : ''}"><div><b>${esc(all.giorno.n)}</b><small>${esc(all.scheda.n || 'Scheda')}${ult ? ` · ultima volta ${esc(giornoBreve(ult.d))}${ult.dur ? ', ' + fmt(ult.dur) + ' min' : ''}` : ''}</small></div>${fatto ? '<span class="pill p-off">fatto ✓</span>' : bottoneInizia(a, d, all.scheda.id, all.giorno.n)}</div>
     ${esercizi}</div></section>`;
 }
@@ -154,7 +158,7 @@ function blocchiTelefono(a, d, x) {
       <div class="tile t-azzurro"><div class="etq">Acqua</div><div class="grosso">${fmt(rg.acqua / 1000, 2)} <small>/ ${fmt(t.acqua / 1000, 1)} l</small></div><div class="piccoli"><button data-pal-acqua="250">+250</button><button data-pal-acqua="500">+500</button><button data-pal-acqua="-250" aria-label="Togli 250 ml">−</button></div></div>
       <div class="tile t-lilla"><div class="etq">Passi</div><div class="grosso">${fmt(rg.passi)} <small>/ ${fmt(t.passi)}</small></div><div class="piccoli"><button data-pal-passi>Scrivi</button></div></div>
     </div>
-    <div class="tile t-navy all-tel"><div><div class="etq">Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</div>${allenamento}</div>${all && !fatte.length ? bottoneInizia(a, d, all.scheda.id, all.giorno.n) : ''}</div>
+    <div class="tile t-navy all-tel"><div><div class="etq">Allenamento ${d === oggi() ? 'di oggi' : 'del giorno'}</div>${allenamento}<a class="all-abc" href="scheda-abc/index.html">Scheda A·B·C →</a></div>${all && !fatte.length ? bottoneInizia(a, d, all.scheda.id, all.giorno.n) : ''}</div>
   </div>`;
 }
 

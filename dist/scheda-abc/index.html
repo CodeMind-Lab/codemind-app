@@ -1,0 +1,642 @@
+<!doctype html>
+<!-- Pagina generata da build_pagina.py del piano fitness, a partire dalla scheda
+     (02_weekly_schedule.md): non modificarla a mano, rigenerala. -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141B2D" media="(prefers-color-scheme: dark)">
+<style>
+/* Inter sta accanto alla pagina e non su un CDN: in palestra la rete non è garantita. */
+@font-face {
+  font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url('inter-var.woff2') format('woff2');
+}
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+</style>
+<title>Scheda A·B·C</title>
+<style>
+/* Una colonna da telefono (max 560px): barra fissa in alto con fase e sessione,
+   esercizi come schede bianche su grigio chiaro (come Forma), timer del recupero
+   che sale dal fondo quando spunti una serie. */
+:root {
+  --fondo: #F4F6F9;
+  --scheda: #FFFFFF;
+  --scheda-2: #F8FAFC;
+  --linea: #E6EAF0;
+  --linea-forte: #CBD3DF;
+  --testo: #111827;
+  --testo-2: #4B5563;
+  --testo-3: #5F6B7A;
+  --blu-pieno: #2563EB;
+  --blu-testo: #1D4ED8;
+  --blu-tinta: rgba(37, 99, 235, .10);
+  --su-blu: #FFFFFF;
+  --arancio: #EA580C;
+  --arancio-tinta: rgba(249, 115, 22, .12);
+  --arancio-testo: #C2410C;
+  --verde-testo: #136A33;
+  --verde-tinta: rgba(22, 163, 74, .12);
+  --ambra-testo: #92400E;
+  --ambra-tinta: rgba(245, 158, 11, .18);
+  --rosso-testo: #B91C1C;
+  --rosso-tinta: rgba(220, 38, 38, .10);
+  --pannello: #111827;
+  --pannello-2: #1F2937;
+  --pannello-testo: #F3F6FC;
+  --pannello-testo-2: #C3CBDA;
+  --ombra: 0 1px 2px rgba(17, 24, 39, .05);
+  --f-testo: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --raggio: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fondo: #0B1120; --scheda: #141B2D; --scheda-2: #1B2438; --linea: #273249; --linea-forte: #3A4863;
+    --testo: #F3F6FC; --testo-2: #C3CBDA; --testo-3: #98A2B6;
+    --blu-pieno: #2563EB; --blu-testo: #93C5FD; --blu-tinta: rgba(59, 130, 246, .18); --su-blu: #FFFFFF;
+    --arancio: #FB923C; --arancio-tinta: rgba(251, 146, 60, .16); --arancio-testo: #FDBA74;
+    --verde-testo: #86EFAC; --verde-tinta: rgba(74, 222, 128, .14);
+    --ambra-testo: #FCD34D; --ambra-tinta: rgba(251, 191, 36, .16);
+    --rosso-testo: #FCA5A5; --rosso-tinta: rgba(248, 113, 113, .14);
+    --pannello: #1B2438; --pannello-2: #273249; --pannello-testo: #F3F6FC; --pannello-testo-2: #C3CBDA;
+    --ombra: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --fondo: #0B1120; --scheda: #141B2D; --scheda-2: #1B2438; --linea: #273249; --linea-forte: #3A4863;
+  --testo: #F3F6FC; --testo-2: #C3CBDA; --testo-3: #98A2B6;
+  --blu-pieno: #2563EB; --blu-testo: #93C5FD; --blu-tinta: rgba(59, 130, 246, .18); --su-blu: #FFFFFF;
+  --arancio: #FB923C; --arancio-tinta: rgba(251, 146, 60, .16); --arancio-testo: #FDBA74;
+  --verde-testo: #86EFAC; --verde-tinta: rgba(74, 222, 128, .14);
+  --ambra-testo: #FCD34D; --ambra-tinta: rgba(251, 191, 36, .16);
+  --rosso-testo: #FCA5A5; --rosso-tinta: rgba(248, 113, 113, .14);
+  --pannello: #1B2438; --pannello-2: #273249; --pannello-testo: #F3F6FC; --pannello-testo-2: #C3CBDA;
+  --ombra: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--fondo);
+  color: var(--testo);
+  font-family: var(--f-testo);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--scheda);
+}
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--blu-pieno); outline-offset: 2px; }
+
+/* ---------- barra in alto ---------- */
+.barra {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--scheda);
+  border-bottom: 1px solid var(--linea);
+}
+.barra .wrap { display: grid; gap: 10px; padding-block: 12px 12px; }
+.riga-titolo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gruppo-titolo { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.indietro {
+  display: inline-flex; align-items: center; gap: 2px; text-decoration: none; white-space: nowrap;
+  font-size: 14px; font-weight: 600; color: var(--blu-testo);
+  padding: 4px 10px 4px 6px; border-radius: 999px; background: var(--blu-tinta);
+}
+.marchio { font-weight: 800; font-size: 17px; letter-spacing: -.01em; white-space: nowrap; }
+.marchio span { color: var(--blu-testo); }
+.schermo {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  border: 1px solid var(--linea-forte); background: none; border-radius: 999px;
+  padding: 5px 11px; font-size: 12.5px; font-weight: 600; color: var(--testo-2); cursor: pointer;
+}
+.schermo svg { width: 16px; height: 16px; flex: none; }
+.schermo[aria-pressed="true"] { background: var(--blu-tinta); color: var(--blu-testo); border-color: transparent; }
+/* Sui telefoni stretti il pulsante resta solo icona: la barra non deve andare a capo. */
+@media (max-width: 430px) {
+  .schermo-t { display: none; }
+  .schermo { padding: 7px; }
+}
+.avviso {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  width: min(calc(100% - 32px), 480px);
+  background: var(--pannello); color: var(--pannello-testo);
+  border-radius: 12px; padding: 10px 14px; font-size: 14px; box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .4);
+}
+
+.fasi {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  padding-inline: max(16px, env(safe-area-inset-left, 0px));
+}
+.fasi::-webkit-scrollbar { display: none; }
+.fase {
+  flex: none; display: grid; gap: 1px; text-align: left;
+  border: 1px solid var(--linea); background: var(--scheda-2); border-radius: 10px;
+  padding: 6px 11px; cursor: pointer;
+}
+.fase b { font-size: 13px; font-weight: 700; }
+.fase small { font-size: 11.5px; color: var(--testo-3); font-variant-numeric: tabular-nums; }
+.fase[aria-selected="true"] { background: var(--blu-tinta); border-color: var(--blu-pieno); }
+.fase[aria-selected="true"] b { color: var(--blu-testo); }
+
+.sessioni {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  background: var(--scheda-2); border: 1px solid var(--linea); border-radius: 12px; padding: 4px;
+}
+.sess {
+  border: 0; background: none; border-radius: 9px; padding: 7px 4px; cursor: pointer;
+  display: grid; gap: 0; line-height: 1.2;
+}
+.sess b { font-size: 17px; font-weight: 800; }
+.sess small { font-size: 11.5px; color: var(--testo-3); }
+.sess[aria-selected="true"] { background: var(--blu-pieno); color: var(--su-blu); }
+.sess[aria-selected="true"] small { color: var(--su-blu); opacity: .85; }
+
+/* ---------- testa della sessione ---------- */
+main.wrap { display: grid; gap: 14px; padding-block: 18px 120px; }
+.testa { display: grid; gap: 8px; }
+.testa h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
+.dati { display: flex; flex-wrap: wrap; gap: 6px; }
+.dato {
+  font-size: 12.5px; font-weight: 600; color: var(--testo-2);
+  background: var(--scheda); border: 1px solid var(--linea); border-radius: 999px; padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.dato.fatto { color: var(--verde-testo); background: var(--verde-tinta); border-color: transparent; }
+.intro { margin: 0; color: var(--testo-2); font-size: 14px; max-width: 62ch; }
+
+details.risc {
+  background: var(--scheda); border: 1px solid var(--linea); border-radius: var(--raggio);
+  box-shadow: var(--ombra);
+}
+details.risc summary {
+  list-style: none; cursor: pointer; padding: 12px 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  font-weight: 700;
+}
+details.risc summary::-webkit-details-marker { display: none; }
+details.risc summary span { font-weight: 600; font-size: 13px; color: var(--testo-3); }
+details.risc summary::after { content: "+"; font-weight: 700; color: var(--testo-3); }
+details.risc[open] summary::after { content: "−"; }
+details.risc p { margin: 0; padding: 0 14px 14px; color: var(--testo-2); font-size: 14px; }
+details.risc p + p { padding-top: 0; }
+
+/* ---------- esercizi ---------- */
+.esercizi { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.es {
+  background: var(--scheda); border: 1px solid var(--linea); border-radius: var(--raggio);
+  box-shadow: var(--ombra); padding: 14px; display: grid; gap: 10px; min-width: 0;
+}
+.coppia {
+  display: grid; gap: 0;
+  border: 1px solid var(--linea); border-radius: var(--raggio); background: var(--scheda);
+  box-shadow: var(--ombra); overflow: hidden;
+}
+.coppia-et {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--testo-3); padding: 9px 14px 0;
+}
+.coppia .es { border: 0; box-shadow: none; border-radius: 0; }
+.coppia .es + .es { border-top: 1px dashed var(--linea-forte); }
+
+.es-testa { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.num {
+  flex: none; min-width: 30px; height: 26px; padding: 0 6px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 13px; font-weight: 800;
+  background: var(--blu-tinta); color: var(--blu-testo); font-variant-numeric: tabular-nums;
+}
+.es h3 { margin: 2px 0 0; font-size: 16.5px; font-weight: 700; line-height: 1.25; min-width: 0; }
+
+.prescr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sxr { font-size: 22px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.sxr small { font-size: 13px; font-weight: 600; color: var(--testo-3); letter-spacing: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 700; border-radius: 999px; padding: 4px 10px;
+  font-variant-numeric: tabular-nums; border: 0;
+}
+.chip.rpe { background: var(--scheda-2); color: var(--testo-2); border: 1px solid var(--linea); }
+.chip.rec { background: var(--arancio-tinta); color: var(--arancio-testo); cursor: pointer; }
+.chip.rec svg { width: 14px; height: 14px; }
+
+.serie { display: flex; flex-wrap: wrap; gap: 8px; }
+.set {
+  width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  border: 2px solid var(--linea-forte); background: var(--scheda);
+  font-weight: 700; font-size: 14px; color: var(--testo-2); font-variant-numeric: tabular-nums;
+  display: grid; place-items: center; transition: background .15s, border-color .15s;
+}
+.set[aria-pressed="true"] { background: var(--blu-pieno); border-color: var(--blu-pieno); color: var(--su-blu); }
+.set svg { width: 18px; height: 18px; }
+
+.nota { margin: 0; font-size: 14px; color: var(--testo-2); }
+details.tec summary {
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--blu-testo); list-style: none;
+}
+details.tec summary::-webkit-details-marker { display: none; }
+details.tec summary::before { content: "▸ "; }
+details.tec[open] summary::before { content: "▾ "; }
+details.tec p { margin: 6px 0 0; font-size: 14px; color: var(--testo-2); }
+
+.azioni { display: flex; justify-content: center; }
+.azzera {
+  border: 1px solid var(--linea-forte); background: var(--scheda); border-radius: 999px;
+  padding: 9px 16px; font-weight: 600; font-size: 14px; color: var(--testo-2); cursor: pointer;
+}
+
+/* ---------- regole ---------- */
+.regole { display: grid; gap: 12px; margin-top: 10px; }
+.regole h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.blocco {
+  background: var(--scheda); border: 1px solid var(--linea); border-radius: var(--raggio);
+  padding: 14px; display: grid; gap: 10px; box-shadow: var(--ombra); min-width: 0;
+}
+.blocco h3 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--testo-3); }
+.blocco p { margin: 0; font-size: 14px; color: var(--testo-2); }
+.semaforo { display: grid; gap: 8px; }
+.luce { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; font-size: 14px; }
+.luce b { font-size: 12.5px; font-weight: 800; border-radius: 8px; padding: 4px 0; text-align: center; }
+.luce.v b { background: var(--verde-tinta); color: var(--verde-testo); }
+.luce.g b { background: var(--ambra-tinta); color: var(--ambra-testo); }
+.luce.r b { background: var(--rosso-tinta); color: var(--rosso-testo); }
+.luce span { color: var(--testo-2); }
+.luce em { font-style: normal; color: var(--testo); font-weight: 600; }
+.tab-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px 7px 0; border-bottom: 1px solid var(--linea); vertical-align: top; }
+th { font-size: 12px; color: var(--testo-3); font-weight: 600; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td { font-variant-numeric: tabular-nums; color: var(--testo-2); }
+td:first-child { color: var(--testo); }
+.scala { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.scala div { background: var(--scheda-2); border: 1px solid var(--linea); border-radius: 8px; padding: 6px 4px; text-align: center; }
+.scala b { display: block; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.scala small { font-size: 11px; color: var(--testo-3); line-height: 1.2; display: block; }
+
+/* ---------- timer ---------- */
+.timer {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--pannello); color: var(--pannello-testo);
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, .35);
+}
+.timer .wrap { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; padding-top: 12px; }
+.timer-et { font-size: 12.5px; color: var(--pannello-testo-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer-tempo { font-size: 34px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.timer-tasti { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 8px; }
+.timer-tasti button {
+  border: 0; border-radius: 12px; padding: 11px 14px; font-weight: 700; font-size: 14px; cursor: pointer;
+  background: var(--pannello-2); color: var(--pannello-testo);
+}
+.timer-tasti .stop { background: var(--arancio); color: #FFFFFF; }
+.timer-barra { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--pannello-2); overflow: hidden; margin-top: 6px; }
+.timer-barra i { display: block; height: 100%; width: 100%; background: var(--arancio); transform-origin: left; }
+.timer.finito .timer-tempo { color: var(--arancio); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="barra">
+  <div class="wrap">
+    <div class="riga-titolo">
+      <div class="gruppo-titolo"><a class="indietro" href="../#/sport" aria-label="Torna a Palestra in CodeMind">‹ CodeMind</a><div class="marchio">Scheda <span>A·B·C</span></div></div>
+      <button class="schermo" id="schermo" type="button" aria-pressed="false" aria-label="Tieni lo schermo acceso">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span class="schermo-t">Schermo acceso</span>
+      </button>
+    </div>
+    <div class="fasi" id="fasi" role="tablist" aria-label="Fase del programma"></div>
+    <div class="sessioni" id="sessioni" role="tablist" aria-label="Sessione"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="testa">
+    <h1 id="titolo">Sessione A — Forza</h1>
+    <div class="dati" id="dati"></div>
+    <p class="intro" id="intro"></p>
+  </section>
+
+  <details class="risc" id="risc">
+    <summary>Riscaldamento <span id="risc-durata"></span></summary>
+    <p id="risc-testo"></p>
+  </details>
+
+  <ol class="esercizi" id="esercizi"></ol>
+
+  <div class="azioni"><button class="azzera" id="azzera" type="button">Nuova seduta: azzera le serie spuntate</button></div>
+
+  <section class="regole" aria-labelledby="regole-t">
+    <h2 id="regole-t">Prima di cominciare</h2>
+
+    <div class="blocco">
+      <h3>Semaforo</h3>
+      <div class="semaforo">
+        <div class="luce v"><b>Verde</b><span>Almeno 7 ore di sonno, energia buona. <em>Scheda normale.</em></span></div>
+        <div class="luce g"><b>Giallo</b><span>5-7 ore di sonno, rientro rapido, DOMS forti. <em>RPE −1 su tutto e una serie in meno sugli esercizi principali.</em></span></div>
+        <div class="luce r"><b>Rosso</b><span>Meno di 5 ore, giorno in cui smonti dalla notte, malessere, dolore articolare. <em>Niente pesi: la seduta passa alla prossima occasione.</em></span></div>
+      </div>
+    </div>
+
+    <div class="blocco">
+      <h3>Quando allenarti</h3>
+      <div class="tab-wrap">
+        <table>
+          <thead><tr><th>Turno</th><th>Seduta</th></tr></thead>
+          <tbody>
+            <tr><td>Mattina 07:30-15:30</td><td>17:00-18:00, spuntino alle 16:00</td></tr>
+            <tr><td>Pomeriggio 15:30-23:30</td><td>10:00-11:30, dopo la colazione</td></tr>
+            <tr><td>Libero</td><td>Quando vuoi: il giorno migliore per la A</td></tr>
+            <tr><td>Entri in notte</td><td>Meglio riposo, al massimo entro le 12:00</td></tr>
+            <tr><td>Smonti dalla notte</td><td>Niente pesi</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Sempre A → B → C, anche se salti una seduta: non raddoppiare, fai quella che toccava. Almeno un giorno di riposo fra due sedute quando puoi, mai tre giorni di fila.</p>
+    </div>
+
+    <div class="blocco">
+      <h3>RPE: quante ripetizioni ti restano</h3>
+      <div class="scala">
+        <div><b>6</b><small>4 in riserva</small></div>
+        <div><b>7</b><small>3 in riserva</small></div>
+        <div><b>8</b><small>2 in riserva</small></div>
+        <div><b>9</b><small>1 in riserva</small></div>
+        <div><b>10</b><small>cedimento</small></div>
+      </div>
+      <p>"7-8" vuol dire 7 nella prima metà della fase e 8 nella seconda. Mai cedimento con il bilanciere.</p>
+    </div>
+
+    <div class="blocco">
+      <h3>Quando aumentare il carico</h3>
+      <p>Stesso carico su tutte le serie. Quando le chiudi tutte al massimo delle ripetizioni restando nell'RPE, la volta dopo aumenti e riparti dal minimo delle ripetizioni.</p>
+      <div class="tab-wrap">
+        <table>
+          <tbody>
+            <tr><td>Bilanciere, gambe</td><td>+5 kg</td></tr>
+            <tr><td>Bilanciere, parte alta</td><td>+2,5 kg</td></tr>
+            <tr><td>Pressa 45°</td><td>+10 kg</td></tr>
+            <tr><td>Manubri</td><td>il paio successivo</td></tr>
+            <tr><td>Macchine e cavi</td><td>la piastra successiva</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="avviso" id="avviso" hidden role="status"></div>
+
+<div class="timer" id="timer" hidden role="status" aria-live="polite">
+  <div class="wrap">
+    <div class="timer-et" id="timer-et">Recupero</div>
+    <div class="timer-tempo" id="timer-tempo">0:00</div>
+    <div class="timer-tasti">
+      <button type="button" id="timer-piu">+30"</button>
+      <button type="button" class="stop" id="timer-stop">Stop</button>
+    </div>
+    <div class="timer-barra"><i id="timer-barra"></i></div>
+  </div>
+</div>
+
+<script>
+/* I dati vengono da 02_weekly_schedule.md (li inserisce build_pagina.py). */
+const DATI = {"fasi":[{"id":"f1","nome":"Fase 1","settimane":"Sett. 1-3","dal":"2026-11-23","al":"2026-12-13","intro":"Riadattamento. RPE 6 in settimana 1, 6-7 in settimana 2, 7 in settimana 3: niente cedimento. In settimana 1 cerca i carichi di partenza. Se avanza tempo, 10' facoltativi di camminata in salita o cyclette alla fine.","sessioni":{"A":{"nome":"Forza","durata":42,"riscaldamento":{"durata":"10'","testi":["4' Cyclette o Vogatore a ritmo facile · 2' di mobilità (10 squat lenti a corpo libero, 5 affondi con rotazione per lato, 10 circonduzioni delle spalle) · Face pull leggero 1 × 15 · Plank 1 × 30\" · avvicinamento allo squat: bilanciere scarico × 10, 50% × 6, 70% × 4, 85% × 2","Più 2 serie di squat con il bilanciere scarico per ripassare la tecnica"]},"righe":[{"num":"1","nome":"Squat con bilanciere","serie":3,"rip":"8-10","rpe":"6-7","rec":120,"nota":"Profondità e controllo prima del carico","tecnica":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra"},{"num":"2","nome":"Panca piana con bilanciere","serie":3,"rip":"8-10","rpe":"6-7","rec":120,"nota":"Fermi o assistenza","tecnica":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza"},{"num":"3","nome":"Rematore con bilanciere","serie":3,"rip":"10-12","rpe":"6-7","rec":90,"nota":"Schiena neutra","tecnica":"1 serie di avvicinamento. Busto a ~45°, schiena neutra, tira verso l'ombelico senza slancio. Se la zona lombare cede dopo lo squat, usa il Rematore con manubrio"},{"num":"4a","nome":"Leg curl seduto","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Discesa lenta (2-3\")"},{"num":"4b","nome":"Alzate laterali","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Gomiti morbidi, sali fino all'altezza delle spalle, senza slancio"}]},"B":{"nome":"Volume","durata":40,"riscaldamento":{"durata":"10'","testi":["4' Cyclette o Vogatore · 2' di mobilità per anche e femorali (10 good morning a corpo libero, 10 ponti glutei, 5 affondi con rotazione per lato) · Face pull leggero 1 × 15 · avvicinamento allo stacco rumeno: 50% × 8, 75% × 4","Più 2 serie di stacco rumeno con il bilanciere scarico"]},"righe":[{"num":"1","nome":"Stacco rumeno","serie":2,"rip":"10-12","rpe":"6-7","rec":120,"nota":"Solo 2 serie: è l'esercizio che dà più DOMS al rientro","tecnica":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra"},{"num":"2a","nome":"Panca inclinata con manubri","serie":2,"rip":"10-12","rpe":"6-7","rec":75,"nota":"","tecnica":"Panca a 30°, scendi controllato ai lati del petto"},{"num":"2b","nome":"Lat machine avanti","serie":2,"rip":"10-12","rpe":"6-7","rec":75,"nota":"","tecnica":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto"},{"num":"3","nome":"Bulgarian split squat","serie":2,"rip":"10-12 per gamba","rpe":"6-7","rec":90,"nota":"Prima seduta anche senza manubri","tecnica":"Manubri in mano, piede dietro sulla panca. Comincia con la gamba più debole. Il recupero parte dopo aver fatto entrambe le gambe"},{"num":"4a","nome":"Curl con manubri","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Gomiti fermi ai fianchi"},{"num":"4b","nome":"Push down ai cavi","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Gomiti attaccati ai fianchi, estensione completa"},{"num":"5","nome":"Crunch ai cavi","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Stessa postazione del push down. In ginocchio, arrotola il busto: lavora con l'addome, non con le braccia"}]},"C":{"nome":"Pompaggio","durata":37,"riscaldamento":{"durata":"10'","testi":["4' Cyclette · 2' di mobilità (squat lenti, circonduzioni delle spalle) · Plank 1 × 30\" + Plank laterale 1 × 20\" per lato · avvicinamento alla pressa: 50% × 10, 75% × 5"]},"righe":[{"num":"1","nome":"Pressa 45°","serie":2,"rip":"12-15","rpe":"6-7","rec":90,"nota":"Bacino sempre appoggiato","tecnica":"Piedi a larghezza spalle a metà pedana. Scendi solo finché il bacino resta appoggiato, non bloccare le ginocchia in alto"},{"num":"2a","nome":"Chest press alla macchina","serie":2,"rip":"12-15","rpe":"6-7","rec":60,"nota":"","tecnica":"Impugnature all'altezza del petto medio, scapole contro lo schienale"},{"num":"2b","nome":"Pulley basso","serie":2,"rip":"12-15","rpe":"6-7","rec":60,"nota":"","tecnica":"Busto fermo, tira al basso ventre e stringi le scapole per 1\""},{"num":"3a","nome":"Leg curl sdraiato","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Bacino schiacciato sul cuscino, discesa lenta"},{"num":"3b","nome":"Alzate laterali al cavo","serie":2,"rip":"15-20 per lato","rpe":"6-7","rec":45,"nota":"","tecnica":"Cavo basso, un braccio alla volta senza pausa fra i lati, busto fermo"},{"num":"4a","nome":"Hammer curl","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Presa neutra, gomiti fermi"},{"num":"4b","nome":"Estensioni tricipiti sopra la testa","serie":2,"rip":"12-15","rpe":"6-7","rec":45,"nota":"","tecnica":"Al cavo con la corda (o con un manubrio), gomiti stretti e puntati in alto"}]}}},{"id":"f2","nome":"Fase 2","settimane":"Sett. 4-7","dal":"2026-12-14","al":"2027-01-10","intro":"Accumulo: il volume pieno. Negli RPE doppi il primo numero vale per le settimane 4-5, il secondo per le 6-7. Doppia progressione su tutti gli esercizi. Natale e Capodanno: nessuna seduta recuperata raddoppiando.","sessioni":{"A":{"nome":"Forza","durata":55,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore a ritmo facile · 2' di mobilità (10 squat lenti a corpo libero, 5 affondi con rotazione per lato, 10 circonduzioni delle spalle) · Face pull leggero 1 × 15 · Plank 1 × 30\" · avvicinamento allo squat: bilanciere scarico × 10, 50% × 6, 70% × 4, 85% × 2"]},"righe":[{"num":"1","nome":"Squat con bilanciere","serie":4,"rip":"6-8","rpe":"7-8","rec":150,"nota":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra","tecnica":""},{"num":"2","nome":"Panca piana con bilanciere","serie":4,"rip":"6-8","rpe":"7-8","rec":150,"nota":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza","tecnica":""},{"num":"3","nome":"Rematore con bilanciere","serie":4,"rip":"8-10","rpe":"7-8","rec":120,"nota":"1 serie di avvicinamento. Busto a ~45°, schiena neutra, tira verso l'ombelico senza slancio. Se la zona lombare cede dopo lo squat, usa il Rematore con manubrio","tecnica":""},{"num":"4a","nome":"Leg curl seduto","serie":3,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Discesa lenta (2-3\")","tecnica":""},{"num":"4b","nome":"Alzate laterali","serie":3,"rip":"12-15","rpe":"8-9","rec":45,"nota":"Gomiti morbidi, sali fino all'altezza delle spalle, senza slancio","tecnica":""}]},"B":{"nome":"Volume","durata":50,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore · 2' di mobilità per anche e femorali (10 good morning a corpo libero, 10 ponti glutei, 5 affondi con rotazione per lato) · Face pull leggero 1 × 15 · avvicinamento allo stacco rumeno: 50% × 8, 75% × 4"]},"righe":[{"num":"1","nome":"Stacco rumeno","serie":3,"rip":"8-10","rpe":"7-8","rec":120,"nota":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra","tecnica":""},{"num":"2a","nome":"Panca inclinata con manubri","serie":3,"rip":"8-10","rpe":"7-8","rec":90,"nota":"Panca a 30°, scendi controllato ai lati del petto","tecnica":""},{"num":"2b","nome":"Lat machine avanti","serie":3,"rip":"8-10","rpe":"7-8","rec":90,"nota":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto","tecnica":""},{"num":"3","nome":"Bulgarian split squat","serie":3,"rip":"8-10 per gamba","rpe":"7-8","rec":90,"nota":"Manubri in mano, piede dietro sulla panca. Comincia con la gamba più debole. Il recupero parte dopo aver fatto entrambe le gambe","tecnica":""},{"num":"4a","nome":"Curl con manubri","serie":2,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Gomiti fermi ai fianchi","tecnica":""},{"num":"4b","nome":"Push down ai cavi","serie":2,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Gomiti attaccati ai fianchi, estensione completa","tecnica":""},{"num":"5","nome":"Crunch ai cavi","serie":2,"rip":"12-15","rpe":"8","rec":45,"nota":"Stessa postazione del push down. In ginocchio, arrotola il busto: lavora con l'addome, non con le braccia","tecnica":""}]},"C":{"nome":"Pompaggio","durata":45,"riscaldamento":{"durata":"8'","testi":["4' Cyclette · 2' di mobilità (squat lenti, circonduzioni delle spalle) · Plank 1 × 30\" + Plank laterale 1 × 20\" per lato · avvicinamento alla pressa: 50% × 10, 75% × 5"]},"righe":[{"num":"1","nome":"Pressa 45°","serie":3,"rip":"10-12","rpe":"7-8","rec":120,"nota":"Piedi a larghezza spalle a metà pedana. Scendi solo finché il bacino resta appoggiato, non bloccare le ginocchia in alto","tecnica":""},{"num":"2a","nome":"Chest press alla macchina","serie":3,"rip":"10-12","rpe":"8-9","rec":60,"nota":"Impugnature all'altezza del petto medio, scapole contro lo schienale","tecnica":""},{"num":"2b","nome":"Pulley basso","serie":3,"rip":"10-12","rpe":"8-9","rec":60,"nota":"Busto fermo, tira al basso ventre e stringi le scapole per 1\"","tecnica":""},{"num":"3a","nome":"Leg curl sdraiato","serie":3,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Al 3° giro solo leg curl. Bacino schiacciato sul cuscino, discesa lenta","tecnica":""},{"num":"3b","nome":"Alzate laterali al cavo","serie":2,"rip":"12-15 per lato","rpe":"9","rec":45,"nota":"Cavo basso, un braccio alla volta senza pausa fra i lati, busto fermo","tecnica":""},{"num":"4a","nome":"Hammer curl","serie":2,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Presa neutra, gomiti fermi","tecnica":""},{"num":"4b","nome":"Estensioni tricipiti sopra la testa","serie":2,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Al cavo con la corda (o con un manubrio), gomiti stretti e puntati in alto","tecnica":""}]}}},{"id":"sc","nome":"Scarico","settimane":"Sett. 8","dal":"2027-01-11","al":"2027-01-17","intro":"Metà delle serie, carichi della settimana 7 meno il 10-15%, RPE 5-6. Devi uscire fresco. Se ti serve uno scarico anticipato, usa questa stessa scheda.","sessioni":{"A":{"nome":"Forza","durata":30,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore a ritmo facile · 2' di mobilità (10 squat lenti a corpo libero, 5 affondi con rotazione per lato, 10 circonduzioni delle spalle) · Face pull leggero 1 × 15 · Plank 1 × 30\" · avvicinamento allo squat: bilanciere scarico × 10, 50% × 6, 70% × 4, 85% × 2"]},"righe":[{"num":"1","nome":"Squat con bilanciere","serie":2,"rip":"6","rpe":"5-6","rec":120,"nota":"Carico della settimana 7 −10-15%","tecnica":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra"},{"num":"2","nome":"Panca piana con bilanciere","serie":2,"rip":"6","rpe":"5-6","rec":120,"nota":"","tecnica":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza"},{"num":"3","nome":"Rematore con bilanciere","serie":2,"rip":"8","rpe":"5-6","rec":90,"nota":"","tecnica":"1 serie di avvicinamento. Busto a ~45°, schiena neutra, tira verso l'ombelico senza slancio. Se la zona lombare cede dopo lo squat, usa il Rematore con manubrio"},{"num":"4a","nome":"Leg curl seduto","serie":2,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Discesa lenta (2-3\")"},{"num":"4b","nome":"Alzate laterali","serie":2,"rip":"12","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti morbidi, sali fino all'altezza delle spalle, senza slancio"}]},"B":{"nome":"Volume","durata":30,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore · 2' di mobilità per anche e femorali (10 good morning a corpo libero, 10 ponti glutei, 5 affondi con rotazione per lato) · Face pull leggero 1 × 15 · avvicinamento allo stacco rumeno: 50% × 8, 75% × 4"]},"righe":[{"num":"1","nome":"Stacco rumeno","serie":2,"rip":"8","rpe":"5-6","rec":120,"nota":"","tecnica":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra"},{"num":"2a","nome":"Panca inclinata con manubri","serie":2,"rip":"8","rpe":"5-6","rec":75,"nota":"","tecnica":"Panca a 30°, scendi controllato ai lati del petto"},{"num":"2b","nome":"Lat machine avanti","serie":2,"rip":"8","rpe":"5-6","rec":75,"nota":"","tecnica":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto"},{"num":"3","nome":"Bulgarian split squat","serie":2,"rip":"8 per gamba","rpe":"5-6","rec":90,"nota":"","tecnica":"Manubri in mano, piede dietro sulla panca. Comincia con la gamba più debole. Il recupero parte dopo aver fatto entrambe le gambe"},{"num":"4a","nome":"Curl con manubri","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti fermi ai fianchi"},{"num":"4b","nome":"Push down ai cavi","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti attaccati ai fianchi, estensione completa"},{"num":"5","nome":"Crunch ai cavi","serie":1,"rip":"12","rpe":"5-6","rec":45,"nota":"","tecnica":"Stessa postazione del push down. In ginocchio, arrotola il busto: lavora con l'addome, non con le braccia"}]},"C":{"nome":"Pompaggio","durata":30,"riscaldamento":{"durata":"8'","testi":["4' Cyclette · 2' di mobilità (squat lenti, circonduzioni delle spalle) · Plank 1 × 30\" + Plank laterale 1 × 20\" per lato · avvicinamento alla pressa: 50% × 10, 75% × 5"]},"righe":[{"num":"1","nome":"Pressa 45°","serie":2,"rip":"10","rpe":"5-6","rec":90,"nota":"","tecnica":"Piedi a larghezza spalle a metà pedana. Scendi solo finché il bacino resta appoggiato, non bloccare le ginocchia in alto"},{"num":"2a","nome":"Chest press alla macchina","serie":2,"rip":"10","rpe":"5-6","rec":60,"nota":"","tecnica":"Impugnature all'altezza del petto medio, scapole contro lo schienale"},{"num":"2b","nome":"Pulley basso","serie":2,"rip":"10","rpe":"5-6","rec":60,"nota":"","tecnica":"Busto fermo, tira al basso ventre e stringi le scapole per 1\""},{"num":"3a","nome":"Leg curl sdraiato","serie":2,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Bacino schiacciato sul cuscino, discesa lenta"},{"num":"3b","nome":"Alzate laterali al cavo","serie":1,"rip":"12 per lato","rpe":"5-6","rec":45,"nota":"","tecnica":"Cavo basso, un braccio alla volta senza pausa fra i lati, busto fermo"},{"num":"4a","nome":"Hammer curl","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Presa neutra, gomiti fermi"},{"num":"4b","nome":"Estensioni tricipiti sopra la testa","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Al cavo con la corda (o con un manubrio), gomiti stretti e puntati in alto"}]}}},{"id":"f3","nome":"Fase 3","settimane":"Sett. 9-11","dal":"2027-01-18","al":"2027-02-07","intro":"Intensificazione. In A e B carichi +5-10% rispetto alla settimana 7. RPE 8 in settimana 9, poi 8,5-9. In C l'ultima serie a macchina o ai cavi può arrivare al cedimento tecnico, mai con il bilanciere.","sessioni":{"A":{"nome":"Forza","durata":55,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore a ritmo facile · 2' di mobilità (10 squat lenti a corpo libero, 5 affondi con rotazione per lato, 10 circonduzioni delle spalle) · Face pull leggero 1 × 15 · Plank 1 × 30\" · avvicinamento allo squat: bilanciere scarico × 10, 50% × 6, 70% × 4, 85% × 2","Con una serie di avvicinamento in più"]},"righe":[{"num":"1","nome":"Squat con bilanciere","serie":4,"rip":"4-6","rpe":"8-8,5","rec":180,"nota":"Fermi di sicurezza sempre inseriti. Aumenti di +2,5 kg","tecnica":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra"},{"num":"2","nome":"Panca piana con bilanciere","serie":4,"rip":"4-6","rpe":"8-8,5","rec":180,"nota":"Fermi o assistenza obbligatori","tecnica":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza"},{"num":"3","nome":"Rematore con bilanciere","serie":3,"rip":"6-8","rpe":"8","rec":120,"nota":"Niente slancio anche con il carico più alto","tecnica":"1 serie di avvicinamento. Busto a ~45°, schiena neutra, tira verso l'ombelico senza slancio. Se la zona lombare cede dopo lo squat, usa il Rematore con manubrio"},{"num":"4a","nome":"Leg curl seduto","serie":2,"rip":"8-10","rpe":"8-9","rec":45,"nota":"","tecnica":"Discesa lenta (2-3\")"},{"num":"4b","nome":"Alzate laterali","serie":3,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Al 3° giro solo alzate.","tecnica":"Gomiti morbidi, sali fino all'altezza delle spalle, senza slancio"}]},"B":{"nome":"Volume","durata":50,"riscaldamento":{"durata":"8'","testi":["4' Cyclette o Vogatore · 2' di mobilità per anche e femorali (10 good morning a corpo libero, 10 ponti glutei, 5 affondi con rotazione per lato) · Face pull leggero 1 × 15 · avvicinamento allo stacco rumeno: 50% × 8, 75% × 4"]},"righe":[{"num":"1","nome":"Stacco rumeno","serie":3,"rip":"6-8","rpe":"8","rec":150,"nota":"La schiena neutra viene prima del carico","tecnica":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra"},{"num":"2a","nome":"Panca inclinata con manubri","serie":3,"rip":"6-8","rpe":"8-9","rec":90,"nota":"","tecnica":"Panca a 30°, scendi controllato ai lati del petto"},{"num":"2b","nome":"Lat machine avanti","serie":3,"rip":"6-8","rpe":"8-9","rec":90,"nota":"Oppure Trazioni alla sbarra zavorrate se ne fai almeno 8 a corpo libero","tecnica":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto"},{"num":"3","nome":"Bulgarian split squat","serie":2,"rip":"6-8 per gamba","rpe":"8","rec":120,"nota":"Manubri più pesanti; con le cinghie se la presa cede","tecnica":"Manubri in mano, piede dietro sulla panca. Comincia con la gamba più debole. Il recupero parte dopo aver fatto entrambe le gambe"},{"num":"4a","nome":"Curl con manubri","serie":2,"rip":"8-10","rpe":"8-9","rec":45,"nota":"","tecnica":"Gomiti fermi ai fianchi"},{"num":"4b","nome":"Push down ai cavi","serie":2,"rip":"8-10","rpe":"8-9","rec":45,"nota":"","tecnica":"Gomiti attaccati ai fianchi, estensione completa"},{"num":"5","nome":"Crunch ai cavi","serie":2,"rip":"10-12","rpe":"8-9","rec":45,"nota":"Più carico rispetto alla Fase 2","tecnica":"Stessa postazione del push down. In ginocchio, arrotola il busto: lavora con l'addome, non con le braccia"}]},"C":{"nome":"Pompaggio","durata":47,"riscaldamento":{"durata":"8'","testi":["4' Cyclette · 2' di mobilità (squat lenti, circonduzioni delle spalle) · Plank 1 × 30\" + Plank laterale 1 × 20\" per lato · avvicinamento alla pressa: 50% × 10, 75% × 5"]},"righe":[{"num":"1","nome":"Pressa 45°","serie":3,"rip":"10-12","rpe":"8-9","rec":120,"nota":"","tecnica":"Piedi a larghezza spalle a metà pedana. Scendi solo finché il bacino resta appoggiato, non bloccare le ginocchia in alto"},{"num":"2a","nome":"Chest press alla macchina","serie":3,"rip":"10-12","rpe":"9","rec":60,"nota":"Ultima serie fino al cedimento tecnico consentita","tecnica":"Impugnature all'altezza del petto medio, scapole contro lo schienale"},{"num":"2b","nome":"Pulley basso","serie":3,"rip":"10-12","rpe":"9","rec":60,"nota":"Ultima serie fino al cedimento tecnico consentita","tecnica":"Busto fermo, tira al basso ventre e stringi le scapole per 1\""},{"num":"3a","nome":"Leg curl sdraiato","serie":3,"rip":"10-12","rpe":"9","rec":45,"nota":"Al 3° giro solo leg curl.","tecnica":"Bacino schiacciato sul cuscino, discesa lenta"},{"num":"3b","nome":"Alzate laterali al cavo","serie":2,"rip":"12-15 per lato","rpe":"9-10","rec":45,"nota":"Ultima serie fino al cedimento tecnico","tecnica":"Cavo basso, un braccio alla volta senza pausa fra i lati, busto fermo"},{"num":"4a","nome":"Hammer curl","serie":2,"rip":"10-12","rpe":"9-10","rec":45,"nota":"Ultima serie fino al cedimento tecnico","tecnica":"Presa neutra, gomiti fermi"},{"num":"4b","nome":"Estensioni tricipiti sopra la testa","serie":2,"rip":"10-12","rpe":"9-10","rec":45,"nota":"Ultima serie fino al cedimento tecnico","tecnica":"Al cavo con la corda (o con un manubrio), gomiti stretti e puntati in alto"}]}}},{"id":"s12","nome":"Verifica","settimane":"Sett. 12","dal":"2027-02-08","al":"2027-02-14","intro":"Serie di verifica con il carico della settimana 11: più ripetizioni possibile, fermandoti a RPE 9. Annota carico e ripetizioni: 1RM stimato = carico × (1 + (ripetizioni + 1) / 30). Poi si prosegue in scarico. Con il semaforo giallo o rosso niente verifica.","sessioni":{"A":{"nome":"Forza","durata":35,"riscaldamento":{"durata":"8'","testi":["Avvicinamento completo: bilanciere scarico × 10, 50% × 5, 70% × 3, 85% × 1, 92% × 1"]},"righe":[{"num":"1a","nome":"Squat con bilanciere","serie":1,"rip":"il massimo, fermandoti a RPE 9","rpe":"9","rec":180,"nota":"Serie di verifica con il carico della settimana 11. Fermi di sicurezza inseriti","tecnica":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra"},{"num":"1b","nome":"Squat con bilanciere","serie":1,"rip":"5","rpe":"6","rec":120,"nota":"Carico −15%","tecnica":"Fermi di sicurezza inseriti. Respira e contrai l'addome prima di scendere, ginocchia nella direzione delle punte, almeno al parallelo con la schiena neutra"},{"num":"2a","nome":"Panca piana con bilanciere","serie":1,"rip":"il massimo, fermandoti a RPE 9","rpe":"9","rec":180,"nota":"Serie di verifica con il carico della settimana 11. Fermi o assistenza obbligatori","tecnica":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza"},{"num":"2b","nome":"Panca piana con bilanciere","serie":1,"rip":"5","rpe":"6","rec":120,"nota":"Carico −15%","tecnica":"2 serie di avvicinamento (50% × 8, 75% × 4). Scapole addotte, piedi a terra, gomiti a 45-70°, bilanciere sul basso sterno. Sempre con fermi o assistenza"},{"num":"3","nome":"Rematore con bilanciere","serie":2,"rip":"8","rpe":"5-6","rec":90,"nota":"Come nello scarico","tecnica":"1 serie di avvicinamento. Busto a ~45°, schiena neutra, tira verso l'ombelico senza slancio. Se la zona lombare cede dopo lo squat, usa il Rematore con manubrio"},{"num":"4a","nome":"Leg curl seduto","serie":2,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Discesa lenta (2-3\")"},{"num":"4b","nome":"Alzate laterali","serie":2,"rip":"12","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti morbidi, sali fino all'altezza delle spalle, senza slancio"}]},"B":{"nome":"Volume","durata":35,"riscaldamento":{"durata":"8'","testi":["Avvicinamento allo stacco rumeno: 50% × 6, 70% × 3, 85% × 1"]},"righe":[{"num":"1a","nome":"Stacco rumeno","serie":1,"rip":"il massimo, fermandoti a RPE 8-9","rpe":"8-9","rec":180,"nota":"Serie di verifica con il carico della settimana 11. Fermati appena la schiena perde la posizione neutra","tecnica":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra"},{"num":"1b","nome":"Stacco rumeno","serie":1,"rip":"6","rpe":"6","rec":120,"nota":"Carico −15%","tecnica":"Bilanciere vicino alle gambe, ginocchia appena flesse, bacino indietro finché senti tirare i femorali (di solito a metà tibia), schiena sempre neutra"},{"num":"2a","nome":"Lat machine avanti","serie":1,"rip":"il massimo, fermandoti a RPE 9","rpe":"9","rec":120,"nota":"Serie di verifica con il carico della settimana 11","tecnica":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto"},{"num":"2b","nome":"Lat machine avanti","serie":1,"rip":"8","rpe":"6","rec":90,"nota":"Carico −15%","tecnica":"Presa poco più larga delle spalle, tira al petto alto portando i gomiti verso i fianchi, busto fermo. Se fai almeno 8 Trazioni alla sbarra pulite, puoi usarle al posto"},{"num":"3","nome":"Panca inclinata con manubri","serie":2,"rip":"8","rpe":"5-6","rec":90,"nota":"","tecnica":"Panca a 30°, scendi controllato ai lati del petto"},{"num":"4","nome":"Bulgarian split squat","serie":2,"rip":"8 per gamba","rpe":"5-6","rec":90,"nota":"","tecnica":"Manubri in mano, piede dietro sulla panca. Comincia con la gamba più debole. Il recupero parte dopo aver fatto entrambe le gambe"},{"num":"5a","nome":"Curl con manubri","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti fermi ai fianchi"},{"num":"5b","nome":"Push down ai cavi","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Gomiti attaccati ai fianchi, estensione completa"},{"num":"6","nome":"Crunch ai cavi","serie":1,"rip":"12","rpe":"5-6","rec":45,"nota":"","tecnica":"Stessa postazione del push down. In ginocchio, arrotola il busto: lavora con l'addome, non con le braccia"}]},"C":{"nome":"Pompaggio","durata":30,"riscaldamento":{"durata":"8'","testi":["4' Cyclette · 2' di mobilità (squat lenti, circonduzioni delle spalle) · Plank 1 × 30\" + Plank laterale 1 × 20\" per lato · avvicinamento alla pressa: 50% × 10, 75% × 5"]},"righe":[{"num":"1","nome":"Pressa 45°","serie":2,"rip":"10","rpe":"5-6","rec":90,"nota":"","tecnica":"Piedi a larghezza spalle a metà pedana. Scendi solo finché il bacino resta appoggiato, non bloccare le ginocchia in alto"},{"num":"2a","nome":"Chest press alla macchina","serie":2,"rip":"10","rpe":"5-6","rec":60,"nota":"","tecnica":"Impugnature all'altezza del petto medio, scapole contro lo schienale"},{"num":"2b","nome":"Pulley basso","serie":2,"rip":"10","rpe":"5-6","rec":60,"nota":"","tecnica":"Busto fermo, tira al basso ventre e stringi le scapole per 1\""},{"num":"3a","nome":"Leg curl sdraiato","serie":2,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Bacino schiacciato sul cuscino, discesa lenta"},{"num":"3b","nome":"Alzate laterali al cavo","serie":1,"rip":"12 per lato","rpe":"5-6","rec":45,"nota":"","tecnica":"Cavo basso, un braccio alla volta senza pausa fra i lati, busto fermo"},{"num":"4a","nome":"Hammer curl","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Presa neutra, gomiti fermi"},{"num":"4b","nome":"Estensioni tricipiti sopra la testa","serie":1,"rip":"10","rpe":"5-6","rec":45,"nota":"","tecnica":"Al cavo con la corda (o con un manubrio), gomiti stretti e puntati in alto"}]}}}]};
+
+const $ = id => document.getElementById(id);
+const leggi = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+const scrivi = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* niente memoria: pazienza */ } };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* La fase di partenza è quella del calendario; poi vale l'ultima che hai scelto. */
+function faseDiOggi() {
+  const oggi = new Date().toISOString().slice(0, 10);
+  const f = DATI.fasi.find(f => oggi >= f.dal && oggi <= f.al);
+  if (f) return f.id;
+  return oggi < DATI.fasi[0].dal ? DATI.fasi[0].id : DATI.fasi[DATI.fasi.length - 1].id;
+}
+/* Le chiavi hanno un prefisso: su codemind-lab.github.io lo stesso archivio del
+   browser è condiviso con le altre app pubblicate lì. */
+const K = 'scheda-abc.';
+let fase = leggi(K + 'fase', null) || faseDiOggi();
+if (!DATI.fasi.some(f => f.id === fase)) fase = DATI.fasi[0].id;
+let sess = leggi(K + 'sess', 'A');
+
+const chiaveSerie = () => `${K}serie.${fase}.${sess}`;
+
+function fmtRec(s) {
+  if (!s) return '';
+  const m = Math.floor(s / 60), r = s % 60;
+  return m ? (r ? `${m}'${r}"` : `${m}'`) : `${r}"`;
+}
+const ICONA_OROLOGIO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>';
+const ICONA_SPUNTA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function render() {
+  const F = DATI.fasi.find(f => f.id === fase);
+  const S = F.sessioni[sess];
+  const fatte = leggi(chiaveSerie(), {});
+
+  $('fasi').innerHTML = DATI.fasi.map(f => `
+    <button class="fase" role="tab" type="button" data-fase="${f.id}" aria-selected="${f.id === fase}">
+      <b>${esc(f.nome)}</b><small>${esc(f.settimane)}</small>
+    </button>`).join('');
+  $('sessioni').innerHTML = ['A', 'B', 'C'].map(l => `
+    <button class="sess" role="tab" type="button" data-sess="${l}" aria-selected="${l === sess}">
+      <b>${l}</b><small>${esc(F.sessioni[l].nome)}</small>
+    </button>`).join('');
+
+  $('titolo').textContent = `Sessione ${sess} — ${S.nome}`;
+  const tot = S.righe.reduce((n, r) => n + r.serie, 0);
+  const spuntate = S.righe.reduce((n, r, i) => n + (fatte[i] || []).filter(Boolean).length, 0);
+  $('dati').innerHTML = `
+    <span class="dato">${esc(F.nome)} · ${esc(F.settimane)}</span>
+    <span class="dato">${tot} serie</span>
+    ${S.durata ? `<span class="dato">~${S.durata} min</span>` : ''}
+    <span class="dato ${spuntate === tot ? 'fatto' : ''}" id="contatore">${spuntate}/${tot} fatte</span>`;
+  $('intro').textContent = F.intro;
+
+  $('risc-durata').textContent = S.riscaldamento.durata;
+  $('risc-testo').innerHTML = S.riscaldamento.testi.map(esc).join('</p><p>');
+
+  /* Le coppie 4a/4b stanno nella stessa scheda: si alternano una serie per uno. */
+  const gruppi = [];
+  S.righe.forEach((r, i) => {
+    const m = /^(\d+)([ab])$/.exec(r.num);
+    const ultimo = gruppi[gruppi.length - 1];
+    if (m && m[2] === 'b' && ultimo && ultimo.base === m[1]) ultimo.voci.push(i);
+    else gruppi.push({ base: m ? m[1] : null, coppia: !!m, voci: [i] });
+  });
+
+  $('esercizi').innerHTML = gruppi.map(g => {
+    const schede = g.voci.map(i => scheda(S.righe[i], i, fatte[i] || [])).join('');
+    if (g.voci.length < 2) return `<li>${schede}</li>`;
+    const nomi = g.voci.map(i => S.righe[i].num).join(' ↔ ');
+    return `<li class="coppia"><div class="coppia-et">Serie alternate · ${nomi}</div>${schede}</li>`;
+  }).join('');
+}
+
+function scheda(r, i, fatte) {
+  const cerchi = Array.from({ length: r.serie }, (_, k) => `
+    <button class="set" type="button" data-es="${i}" data-set="${k}" aria-pressed="${!!fatte[k]}"
+      aria-label="${esc(r.nome)}, serie ${k + 1}">${fatte[k] ? ICONA_SPUNTA : k + 1}</button>`).join('');
+  const rip = /^\d/.test(r.rip) ? `<b class="sxr">${r.serie} × ${esc(r.rip)}</b>`
+                                : `<b class="sxr">${r.serie} <small>serie</small></b>`;
+  const ripTesto = /^\d/.test(r.rip) ? '' : `<p class="nota"><strong>${esc(r.rip)}</strong></p>`;
+  return `<div class="es">
+    <div class="es-testa"><span class="num">${esc(r.num)}</span><h3>${esc(r.nome)}</h3></div>
+    <div class="prescr">
+      ${rip}
+      <span class="chip rpe">RPE ${esc(r.rpe)}</span>
+      ${r.rec ? `<button class="chip rec" type="button" data-rec="${r.rec}" data-nome="${esc(r.nome)}">${ICONA_OROLOGIO}${fmtRec(r.rec)}</button>` : ''}
+    </div>
+    ${ripTesto}
+    <div class="serie">${cerchi}</div>
+    ${r.nota ? `<p class="nota">${esc(r.nota)}</p>` : ''}
+    ${r.tecnica ? `<details class="tec"><summary>Tecnica</summary><p>${esc(r.tecnica)}</p></details>` : ''}
+  </div>`;
+}
+
+/* ---------- timer del recupero ---------- */
+let timer = null;   // { fine, durata, nome }
+let tic = null;
+let audio = null;
+
+function suono() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch (e) { audio = null; }
+}
+function bip() {
+  if (!audio) return;
+  try {
+    [0, .22, .44].forEach(t => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(audio.destination);
+      g.gain.setValueAtTime(.0001, audio.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(.25, audio.currentTime + t + .02);
+      g.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + t + .18);
+      o.start(audio.currentTime + t); o.stop(audio.currentTime + t + .2);
+    });
+  } catch (e) { /* senza audio resta la scritta */ }
+  try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
+}
+
+function avvia(secondi, nome) {
+  suono();
+  timer = { fine: Date.now() + secondi * 1000, durata: secondi, nome };
+  $('timer').hidden = false;
+  $('timer').classList.remove('finito');
+  clearInterval(tic);
+  tic = setInterval(aggiorna, 250);
+  aggiorna();
+}
+function aggiorna() {
+  if (!timer) return;
+  const resto = Math.max(0, Math.ceil((timer.fine - Date.now()) / 1000));
+  const m = Math.floor(resto / 60), s = String(resto % 60).padStart(2, '0');
+  $('timer-tempo').textContent = resto ? `${m}:${s}` : 'Vai';
+  $('timer-et').textContent = resto ? `Recupero · ${timer.nome}` : `Recupero finito · ${timer.nome}`;
+  $('timer-barra').style.transform = `scaleX(${timer.durata ? resto / timer.durata : 0})`;
+  if (!resto && !$('timer').classList.contains('finito')) {
+    $('timer').classList.add('finito');
+    clearInterval(tic);
+    bip();
+    setTimeout(() => { if (timer && Date.now() >= timer.fine) ferma(); }, 6000);
+  }
+}
+function ferma() {
+  clearInterval(tic);
+  timer = null;
+  $('timer').hidden = true;
+}
+$('timer-stop').addEventListener('click', ferma);
+$('timer-piu').addEventListener('click', () => {
+  if (!timer) return;
+  const base = Math.max(Date.now(), timer.fine);
+  timer.fine = base + 30000;
+  timer.durata = Math.max(timer.durata, Math.ceil((timer.fine - Date.now()) / 1000));
+  $('timer').classList.remove('finito');
+  clearInterval(tic);
+  tic = setInterval(aggiorna, 250);
+  aggiorna();
+});
+
+/* ---------- clic ---------- */
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-fase]');
+  if (f) { fase = f.dataset.fase; scrivi(K + 'fase', fase); render(); return; }
+  const s = e.target.closest('[data-sess]');
+  if (s) { sess = s.dataset.sess; scrivi(K + 'sess', sess); render(); window.scrollTo({ top: 0 }); return; }
+
+  const c = e.target.closest('.set');
+  if (c) {
+    const i = +c.dataset.es, k = +c.dataset.set;
+    const fatte = leggi(chiaveSerie(), {});
+    fatte[i] = fatte[i] || [];
+    fatte[i][k] = !fatte[i][k];
+    scrivi(chiaveSerie(), fatte);
+    const r = DATI.fasi.find(x => x.id === fase).sessioni[sess].righe[i];
+    if (fatte[i][k] && r.rec) avvia(r.rec, r.nome);
+    render();
+    return;
+  }
+  const t = e.target.closest('.chip.rec');
+  if (t) { avvia(+t.dataset.rec, t.dataset.nome); return; }
+});
+
+$('azzera').addEventListener('click', () => { scrivi(chiaveSerie(), {}); ferma(); render(); });
+
+/* ---------- schermo sempre acceso (dove il telefono lo permette) ---------- */
+let blocco = null;
+async function chiediSchermo() {
+  try {
+    blocco = await navigator.wakeLock.request('screen');
+    $('schermo').setAttribute('aria-pressed', 'true');
+    avvisa('Lo schermo resta acceso finché la pagina è aperta.');
+    blocco.addEventListener('release', () => { if (!document.hidden) segnaSpento(); });
+  } catch (e) {
+    blocco = null;
+    $('schermo').setAttribute('aria-pressed', 'false');
+    avvisa('Qui non si può tenere lo schermo acceso: allunga il blocco automatico nelle impostazioni del telefono.');
+  }
+}
+let tAvviso = null;
+function avvisa(testo) {
+  $('avviso').textContent = testo;
+  $('avviso').hidden = false;
+  clearTimeout(tAvviso);
+  tAvviso = setTimeout(() => { $('avviso').hidden = true; }, 3500);
+}
+function segnaSpento() { blocco = null; $('schermo').setAttribute('aria-pressed', 'false'); }
+$('schermo').addEventListener('click', () => {
+  if (blocco) { blocco.release(); segnaSpento(); } else chiediSchermo();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && $('schermo').getAttribute('aria-pressed') === 'true' && !blocco) chiediSchermo();
+  if (!document.hidden) aggiorna();
+});
+
+render();
+</script>
+
+</body>
+</html>
