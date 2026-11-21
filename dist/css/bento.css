@@ -319,7 +319,8 @@ body .forma-editor-wrap { border: 0; border-radius: var(--raggio); background: v
 .kpi-lavoro .num small { font-size: 14px; font-weight: 500; }
 .kpi-lavoro .sotto { font-size: 13px; margin-top: 4px; }
 .t-corallo { background: var(--corallo); color: #fff; } .t-corallo .etichetta, .t-corallo .sotto, .t-corallo small { color: #FFE3DD; }
-.t-navy { background: var(--navy); color: #fff; } .t-navy .etichetta, .t-navy .sotto, .t-navy small { color: #9FB0C7; }
+.t-navy { background: var(--navy); color: #fff; }
+.t-navy .all-abc { display: block; width: fit-content; margin-top: 8px; color: #fff; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #ffffff66; } .t-navy .etichetta, .t-navy .sotto, .t-navy small { color: #9FB0C7; }
 .t-azzurro { background: #D9F3FB; color: var(--navy); } .t-lilla { background: #E8E4FB; color: var(--navy); }
 .t-azzurro .etichetta, .t-azzurro .sotto, .t-azzurro small, .t-lilla .etichetta, .t-lilla .sotto, .t-lilla small { color: #4F5D70; }
 html[data-theme="dark"] .t-navy { background: #13294A; }

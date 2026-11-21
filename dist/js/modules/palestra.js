@@ -104,7 +104,7 @@ function kpi(x) {
   return `<section class="kpi-lavoro pal-desk">
     <div class="k t-corallo"><div class="etichetta">Calorie</div><div class="num">${fmt(rg.tot.k)} <small>/ ${fmt(ob)} kcal</small></div>${barra(rg.tot.k, ob, '#fff')}<div class="sotto">${resto >= 0 ? `restano ${fmt(resto)}` : `oltre di ${fmt(-resto)}`} · ${pasti} pasti su 6 registrati</div></div>
     <div class="k t-azzurro"><div class="etichetta">Proteine</div><div class="num">${fmt(rg.tot.p)} <small>/ ${fmt(t.prot)} g</small></div>${barra(rg.tot.p, t.prot, 'var(--teal)')}<div class="sotto">${rg.tot.p >= t.prot ? 'obiettivo raggiunto' : `mancano ${fmt(t.prot - rg.tot.p)} g`}</div></div>
-    <div class="k t-navy"><div class="etichetta">Allenamento</div>${allenamento}</div>
+    <div class="k t-navy"><div class="etichetta">Allenamento</div>${allenamento}<a class="all-abc" href="scheda-abc/index.html">Scheda A·B·C →</a></div>
     <div class="k t-lilla"><div class="etichetta">Peso</div>${peso ? `<div class="num">${fmt(peso.peso, 1)} <small>kg</small></div><div class="sotto">${peso.delta != null ? `${peso.delta > 0 ? '+' : peso.delta < 0 ? '−' : ''}${fmt(Math.abs(peso.delta), 1)} in 2 settimane · ` : ''}obiettivo ${fmt(profilo.pesoObiettivo, 1)}</div>` : '<div class="num">—</div><div class="sotto"><a href="#/sport/misure">Registra il peso</a></div>'}</div>
   </section>`;
 }
