@@ -1,7 +1,7 @@
 import { clearForma } from './services/formaService.js?v=65';
 import { ripristinaOffline, ultimoUtente } from "./services/offline.js?v=75";
 import { startAppUpdates } from "./services/appUpdate.js?v=68";
-import { palestraPage, bindPalestra } from './modules/palestra.js?v=73';
+import { palestraPage, bindPalestra } from './modules/palestra.js?v=74';
 import { clearSport } from './services/sportService.js?v=65';
 import { universityData } from "./utils/university.js?v=65";
 import { openChecklistImport } from "./modules/checklistImport.js?v=65";

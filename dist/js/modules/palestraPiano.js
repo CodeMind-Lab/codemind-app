@@ -2,7 +2,7 @@
 // spesa), Misure e Report. Stesso stile Bento delle altre schede della sezione.
 import { state } from '../services/store.js?v=65';
 import * as P from '../services/palestraService.js?v=82';
-import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=73';
+import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=74';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';

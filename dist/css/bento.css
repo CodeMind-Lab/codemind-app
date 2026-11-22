@@ -887,3 +887,38 @@ html[data-theme="dark"] .fasce-voce.is-off { background: #10301F; color: #86EFAC
 .fasce-apri { margin-left: auto; color: var(--azzurro); font-size: 12.5px; font-weight: 600; text-decoration: none; }
 .obj-r em a { color: inherit; font-weight: 600; }
 @media (max-width: 600px) { .oggi .kpi.kpi-tre { grid-template-columns: 1fr; } .oggi .kpi.kpi-tre .k { grid-column: auto !important; } }
+
+/* Palestra · Settimana di allenamento: in cima alle Schede, un tocco per giorno */
+.sett-all .sa-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 10px; }
+.sett-all .sa-barra .spazio { flex: 1; }
+.sa-scheda { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--testo-2); }
+.sa-riepilogo { margin: 0; padding: 0 20px 12px; font-size: 13px; color: var(--testo-2); }
+.sa-riepilogo b { color: var(--testo); }
+.sa-griglia { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; padding: 0 20px 18px; }
+.sa-g { display: grid; gap: 8px; align-content: start; min-width: 0; padding: 10px; border-radius: 14px; background: var(--pannello-2); border: 2px solid transparent; }
+.sa-g.a { background: #FFE3DD; } html[data-theme="dark"] .sa-g.a { background: #3A1C18; }
+.sa-g.oggi { border-color: var(--corallo); }
+.sa-t { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.sa-t b { font-size: 14px; } .sa-t small { font-size: 11.5px; color: var(--testo-3); }
+.sa-t .pill { font-size: 10.5px; padding: 1px 7px; }
+.sa-scelte { display: flex; flex-wrap: wrap; gap: 4px; }
+.sa-scelte button { flex: 1 1 0; min-width: 34px; min-height: 38px; border: 0; border-radius: 10px; background: var(--pannello); color: var(--testo); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.sa-scelte button.riposo { flex-basis: 100%; min-height: 30px; font-size: 12.5px; font-weight: 500; color: var(--testo-2); }
+.sa-scelte button.on { background: var(--corallo); color: #fff; }
+.sa-scelte button.riposo.on { background: transparent; color: var(--testo); font-weight: 600; box-shadow: inset 0 0 0 1.5px var(--riga-forte); }
+.sa-scelte button:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.sa-nome { font-size: 11.5px; color: var(--testo-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .sa-griglia { grid-template-columns: 1fr; gap: 6px; }
+  .sa-g { grid-template-columns: 120px minmax(0, 1fr); align-items: center; }
+  .sa-scelte button.riposo { flex: 1.5 1 0; min-height: 40px; }
+  .sa-scelte button { min-height: 40px; }
+  .sa-nome { grid-column: 2; }
+}
+@media (max-width: 600px) {
+  .sett-all .sa-barra, .sa-riepilogo, .sa-griglia { padding-left: 14px; padding-right: 14px; }
+  .sa-g { grid-template-columns: 82px minmax(0, 1fr); padding: 8px; }
+  .sa-scheda { flex-basis: 100%; }
+  .sett-all .sa-barra .spazio { display: none; }
+  .sett-all .sa-barra .btn { flex: 1; white-space: nowrap; border-radius: 12px; }
+}

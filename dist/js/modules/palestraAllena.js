@@ -4,7 +4,7 @@
 // schede t:'s', la settimana di allenamento t:'pa'.
 import { state } from '../services/store.js?v=65';
 import * as P from '../services/palestraService.js?v=82';
-import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=73';
+import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, proponiSettimana, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=74';
 import { ID_ABC, PAGINA_ABC, estraiDati } from '../utils/schedaAbc.js?v=82';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
@@ -12,7 +12,7 @@ import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
 import { esc } from '../utils/helpers.js?v=65';
 import { openModal, closeModal, toast, confirmDelete } from '../utils/dom.js?v=65';
 
-let periodo = 'mese', filtroScheda = '', esercizioProg = '', schedaScelta = '', giornoScelto = 0;
+let periodo = 'mese', filtroScheda = '', esercizioProg = '', schedaScelta = '', giornoScelto = 0, schedaSett = '';
 let recupero = null, orologio = null, blocco = null;
 const aperti = new Set();
 const tz = () => state.timezone;
@@ -127,13 +127,31 @@ export function vistaSchede(a, d) {
       <form class="agg-es" id="pal-agg-es">${abc ? '<span class="spazio"></span>' : '<input name="nome" list="pal-nomi-es" placeholder="Aggiungi esercizio (es. rematore, squat)…" autocomplete="off"><button class="btn" type="submit">Aggiungi</button>'}${eser.length ? bottoneInizia(a, oggi(), s.id, g.n, 'btn pal-inizia-btn').replace('>Inizia<', `>Inizia ${esc(g.n)}<`) : ''}</form>` : ''}
       <datalist id="pal-nomi-es">${nomiEsercizi(a).map(n => `<option value="${esc(n)}">`).join('')}</datalist></section>`;
   }
+  return `<div class="pal-impila">${vistaSettimana(a, d, schede, piano)}<div class="layout-schede">${elenco}<div class="pal-impila">${editor}</div></div></div>`;
+}
+
+// Settimana di allenamento: si ripete ogni settimana. Per ogni giorno un tocco su
+// Riposo o su un giorno della scheda (A, B, C…); i turni sono quelli della settimana mostrata.
+const corto = n => String(n).split('·')[0].trim() || String(n);
+function vistaSettimana(a, d, schede, piano) {
   const lun = lunediDi(d), conGiorni = schede.filter(x => (x.giorni || []).length);
-  const opzioni = v => conGiorni.map(x => `<optgroup label="${esc(x.n)}">${x.giorni.map(gg => { const k = x.id + '|' + gg.n; return `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(gg.n)}</option>`; }).join('')}</optgroup>`).join('');
-  const settimana = `<section class="card"><div class="card-testa"><h2>Settimana di allenamento</h2><span class="gr">scegli per ogni giorno la scheda (es. A · Forza) · il turno è quello di questa settimana</span></div>
-    <div class="sett7">${piano.map((p, i) => { const data = shiftDate(lun, i), t = turnoDi(a, data, state.scheduleEntries, tz()), v = p.sid ? p.sid + '|' + p.gn : '';
-      const nomeScheda = p.sid ? schede.find(x => x.id === p.sid)?.n : '';
-      return `<label class="${v ? 'a' : ''}" title="${esc(nomeScheda ? nomeScheda + ' · ' + p.gn : 'Riposo')}"><b>${NOMI_GIORNI[i]}</b><select data-pal-sett-gs="${GIORNI_SETT[i]}"><option value="">Riposo</option>${opzioni(v)}</select><em>${t ? `<span class="pill ${PILL[t] || 'p-x'}">${esc(t === 'off' ? 'OFF' : shiftPresets[t]?.label || 'Turno')}</span>` : 'turno —'}</em></label>`; }).join('')}</div></section>`;
-  return `<div class="layout-schede">${elenco}<div class="pal-impila">${editor}${settimana}</div></div>`;
+  const testa = `<div class="card-testa"><h2>Settimana di allenamento</h2><span class="gr">si ripete ogni settimana · tocca Riposo o il giorno della scheda</span></div>`;
+  if (!conGiorni.length) return `<section class="card sett-all">${testa}<p class="vuoto-giornata">Crea prima una scheda con almeno un giorno: poi qui scegli in quali giorni allenarti.</p></section>`;
+  if (!conGiorni.some(x => x.id === schedaSett)) { const inUso = piano.find(p => p.sid && conGiorni.some(x => x.id === p.sid))?.sid; schedaSett = inUso || conGiorni[0].id; }
+  const sS = conGiorni.find(x => x.id === schedaSett), fatti = piano.filter(p => p.sid);
+  const riepilogo = fatti.length ? `<b>${fatti.length} allenament${fatti.length === 1 ? 'o' : 'i'}</b> · ${piano.map((p, i) => p.sid ? `${NOMI_GIORNI[i]} ${esc(corto(p.gn))}` : '').filter(Boolean).join(' · ')}` : 'Nessun allenamento: tutta la settimana è a riposo.';
+  const scelta = conGiorni.length > 1 ? `<label class="sa-scheda">Scheda <select class="pal-filtro-scheda" data-pal-sett-scheda aria-label="Scheda da usare">${conGiorni.map(x => `<option value="${esc(x.id)}" ${x.id === sS.id ? 'selected' : ''}>${esc(x.n)}</option>`).join('')}</select></label>` : `<span class="sa-scheda">Scheda <b>${esc(sS.n)}</b></span>`;
+  const giorni = piano.map((p, i) => {
+    const data = shiftDate(lun, i), tn = turnoDi(a, data, state.scheduleEntries, tz()), altra = p.sid && p.sid !== sS.id;
+    const pill = tn ? `<span class="pill ${PILL[tn] || 'p-x'}">${esc(tn === 'off' ? 'OFF' : shiftPresets[tn]?.label || 'Turno')}</span>` : '';
+    const bottoni = [`<button class="riposo ${!p.sid ? 'on' : ''}" data-pal-sett="${p.gs}" aria-pressed="${!p.sid}">Riposo</button>`,
+      ...sS.giorni.map(g => { const on = p.sid === sS.id && p.gn === g.n; return `<button class="${on ? 'on' : ''}" data-pal-sett="${p.gs}" data-sid="${esc(sS.id)}" data-gn="${esc(g.n)}" title="${esc(g.n)}" aria-pressed="${on}">${esc(corto(g.n))}</button>`; })].join('');
+    const nome = p.sid ? (altra ? `${esc(schede.find(x => x.id === p.sid)?.n || '')} · ${esc(p.gn)}` : esc(p.gn)) : '';
+    return `<div class="sa-g ${p.sid ? 'a' : ''} ${data === oggi() ? 'oggi' : ''}"><div class="sa-t"><b>${NOMI_GIORNI[i]}</b><small>${Number(data.slice(8))}/${Number(data.slice(5, 7))}</small>${pill}</div><div class="sa-scelte">${bottoni}</div>${nome ? `<small class="sa-nome" title="${nome}">${nome}</small>` : ''}</div>`;
+  }).join('');
+  return `<section class="card sett-all">${testa}
+    <div class="sa-barra">${scelta}<span class="spazio"></span><button class="btn" data-pal-sett-proponi title="OFF prima, mai il giorno di notte, niente giorni di fila se si può">Proponi dai turni</button><button class="btn" data-pal-sett-azzera>Tutto riposo</button></div>
+    <p class="sa-riepilogo">${riepilogo}</p><div class="sa-griglia">${giorni}</div></section>`;
 }
 
 // ------------------------------------------------------------ allenamento in corso
@@ -229,7 +247,18 @@ export function bindAllena(pagina, render, d) {
   su('[data-pal-togli-es]', b => b.onclick = () => prova(() => P.togliEsercizio(s, giornoScelto, Number(b.dataset.palTogliEs)), render));
   const agg = pagina.querySelector('#pal-agg-es');
   if (agg) agg.onsubmit = e => { e.preventDefault(); prova(() => P.aggiungiEsercizio(s, giornoScelto, agg.elements.nome.value), () => { render(); document.querySelector('#pal-agg-es input')?.focus(); }); };
-  su('[data-pal-sett-gs]', sel => sel.onchange = () => { const [sid, ...gn] = sel.value.split('|'); prova(() => P.impostaGiornoSettimana(sel.dataset.palSettGs, sid, gn.join('|')), render); });
+  // Settimana di allenamento
+  su('[data-pal-sett]', b => b.onclick = () => prova(() => P.impostaGiornoSettimana(b.dataset.palSett, b.dataset.sid || '', b.dataset.gn || ''), render));
+  su('[data-pal-sett-scheda]', sel => sel.onchange = () => { schedaSett = sel.value; render(); });
+  su('[data-pal-sett-proponi]', b => b.onclick = () => {
+    const sS = di(a, 's').find(x => x.id === schedaSett), lun = lunediDi(d);
+    if (!sS?.giorni?.length) return;
+    const turni = GIORNI_SETT.map((_, i) => turnoDi(a, shiftDate(lun, i), state.scheduleEntries, tz()));
+    const idx = proponiSettimana(turni, sS.giorni.length);
+    if (idx.every(k => k < 0)) return toast('Nessun giorno libero dai turni di questa settimana.');
+    prova(() => GIORNI_SETT.forEach((gs, i) => P.impostaGiornoSettimana(gs, idx[i] < 0 ? '' : sS.id, idx[i] < 0 ? '' : sS.giorni[idx[i]].n)), render, 'Settimana proposta dai turni: cambia pure i giorni con un tocco');
+  });
+  su('[data-pal-sett-azzera]', b => b.onclick = () => prova(() => GIORNI_SETT.forEach(gs => P.impostaGiornoSettimana(gs, '', '')), render, 'Settimana tutta a riposo'));
   // Allenamento in corso
   const sess = pagina.querySelector('.sessione');
   if (!sess) return;

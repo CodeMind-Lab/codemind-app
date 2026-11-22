@@ -9,7 +9,7 @@ import { state } from './store.js?v=65';
 import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
 import { ID_ABC, contenutoAbc, faseDelGiorno, uguale } from '../utils/schedaAbc.js?v=82';
-import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=73';
+import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=74';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
 export const statoSalvataggio = { stato: 'salvato', messaggio: '' };

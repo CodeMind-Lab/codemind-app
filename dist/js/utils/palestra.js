@@ -251,3 +251,25 @@ export function reportSettimane(a, lunedi, quante = 8) {
       allenamenti: ses.length, volume: vol, peso: pesi.length ? num(pesi[pesi.length - 1].peso) : null };
   });
 }
+
+// ------------------------------------------------------------ proposta della settimana
+// Distribuisce i giorni della scheda (A, B, C…) sulla settimana partendo dai turni:
+// prima i giorni OFF, poi apertura, poi chiusura/altro; mai il giorno di notte e meglio
+// non il giorno dopo. Evita due giorni di fila (anche domenica→lunedì) finché può.
+// turni: 7 valori da lunedì ('off', 'apertura', 'chiusura', 'notte', '' …).
+// Restituisce 7 indici nei giorni della scheda, -1 = riposo.
+export function proponiSettimana(turni, nGiorni) {
+  const fuori = new Array(7).fill(-1);
+  if (!(nGiorni > 0)) return fuori;
+  const costo = i => {
+    const t = turni[i] || '';
+    if (t === 'notte') return Infinity;
+    return (t === 'off' ? 0 : t === 'apertura' ? 1 : 2) + (turni[(i + 6) % 7] === 'notte' ? 1 : 0);
+  };
+  const candidati = [0, 1, 2, 3, 4, 5, 6].filter(i => costo(i) !== Infinity).sort((x, y) => costo(x) - costo(y) || x - y);
+  const scelti = [];
+  for (const i of candidati) if (scelti.length < nGiorni && !scelti.some(j => (i - j + 7) % 7 === 1 || (j - i + 7) % 7 === 1)) scelti.push(i);
+  for (const i of candidati) if (scelti.length < nGiorni && !scelti.includes(i)) scelti.push(i);
+  scelti.sort((x, y) => x - y).forEach((i, k) => { fuori[i] = k; });
+  return fuori;
+}

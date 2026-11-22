@@ -6,7 +6,7 @@ const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
 const A = await import('../dist/js/utils/schedaAbc.js?v=82');
-const U = await import('../dist/js/utils/palestra.js?v=73');
+const U = await import('../dist/js/utils/palestra.js?v=74');
 const { state } = await import('../dist/js/services/store.js?v=65');
 const P = await import('../dist/js/services/palestraService.js?v=82');
 

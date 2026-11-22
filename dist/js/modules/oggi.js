@@ -6,10 +6,10 @@
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
 import { archivio } from '../services/palestraService.js?v=82';
-import { riepilogoGiorno } from '../utils/palestra.js?v=73';
+import { riepilogoGiorno } from '../utils/palestra.js?v=74';
 import { entryForm, weekCompatta } from './agenda.js?v=65';
 import { cambiaAcqua } from '../services/palestraService.js?v=82';
-import { bottoneInizia, inizia } from './palestraAllena.js?v=82';
+import { bottoneInizia, inizia } from './palestraAllena.js?v=83';
 import { universityData } from '../utils/university.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';

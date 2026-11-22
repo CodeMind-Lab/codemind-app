@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
-const { macro, somma, riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, settimana, pesoAttuale, allenamentoDelGiorno, righePiano, gsDiData, lunediDi, prodottoDaOFF, slotOra } = await import('../dist/js/utils/palestra.js?v=73');
+const { macro, somma, riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, settimana, pesoAttuale, allenamentoDelGiorno, righePiano, gsDiData, lunediDi, prodottoDaOFF, slotOra } = await import('../dist/js/utils/palestra.js?v=74');
 const { state } = await import('../dist/js/services/store.js?v=65');
 const svc = await import('../dist/js/services/palestraService.js?v=82');
 
