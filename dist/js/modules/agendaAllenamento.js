@@ -5,15 +5,15 @@
 // Gli impegni "Palestra" con orario dell'Agenda seguono la scelta (titolo aggiornato solo se
 // generico, vedi titoloPalestra) e, se mancano, si creano da qui.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=84';
+import * as P from '../services/palestraService.js?v=85';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
-import { pianoDelGiorno, allenamentoDelGiorno, schedeDi, sessioniDel, statSessione, turnoDi, titoloPalestra } from '../utils/palestra.js?v=76';
+import { pianoDelGiorno, allenamentoDelGiorno, schedeDi, sessioniDel, statSessione, turnoDi, titoloPalestra } from '../utils/palestra.js?v=77';
 import { wallTime } from '../utils/agenda.js?v=65';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today } from '../utils/dates.js?v=65';
 import { esc } from '../utils/helpers.js?v=65';
 import { openModal, closeModal, toast } from '../utils/dom.js?v=65';
-import { inizia } from './palestraAllena.js?v=85';
+import { inizia } from './palestraAllena.js?v=86';
 
 const PILL = { apertura: 'p-a', chiusura: 'p-c', notte: 'p-n', off: 'p-off', custom: 'p-x' };
 const giornoLungo = d => new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));

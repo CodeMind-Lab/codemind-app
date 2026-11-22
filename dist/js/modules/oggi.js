@@ -5,12 +5,12 @@
 // obiettivi della settimana, pasti e allenamento. Le scadenze stanno nelle sezioni.
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
-import { archivio } from '../services/palestraService.js?v=84';
-import { riepilogoGiorno, allenamentoDelGiorno } from '../utils/palestra.js?v=76';
-import { entryForm, weekCompatta } from './agenda.js?v=68';
-import { bindAllenamentiAgenda } from './agendaAllenamento.js?v=2';
-import { cambiaAcqua } from '../services/palestraService.js?v=84';
-import { bottoneInizia, inizia } from './palestraAllena.js?v=85';
+import { archivio } from '../services/palestraService.js?v=85';
+import { riepilogoGiorno, allenamentoDelGiorno, obiettiviGiorno } from '../utils/palestra.js?v=77';
+import { entryForm, weekCompatta } from './agenda.js?v=69';
+import { bindAllenamentiAgenda } from './agendaAllenamento.js?v=3';
+import { cambiaAcqua } from '../services/palestraService.js?v=85';
+import { bottoneInizia, inizia } from './palestraAllena.js?v=86';
 import { universityData } from '../utils/university.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';
@@ -123,13 +123,14 @@ function forma() {
 }
 // Settimana tipo o settimana organizzata a parte: la regola sta in utils/palestra.js.
 const allenamentoDi = (f, data) => allenamentoDelGiorno(f.archivio, data);
-function pasti(data, f, off) {
+// ob: obiettivi del giorno (obiettiviGiorno: turno/OFF oppure allenamento/riposo).
+function pasti(data, f, ob) {
   if (!f) return `<section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#/sport">Collega Forma →</a></div><p class="vuoto-giornata">Collega Forma per vedere calorie e macro di oggi.</p></section>`;
   const n = nutritionToday(data) || { total: { k: 0, p: 0, c: 0, g: 0 }, rows: 0 };
-  const obiettivo = off ? f.target.kcalOff : f.target.kcal;
+  const t = ob || f.target, obiettivo = t.kcal;
   const giro = Math.min(100, Math.round(n.total.k / obiettivo * 100));
-  const macro = [['Proteine', n.total.p, f.target.prot, 'var(--c-palestra)'], ['Carboidrati', n.total.c, f.target.carb, 'var(--teal)'], ['Grassi', n.total.g, f.target.gras, 'var(--c-sviluppo)']];
-  return `<section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#/sport/cibo">Diario →</a></div><div class="pasti"><div class="kcal"><div class="anello" style="--giro:${giro}%"><div><b>${numero(n.total.k)}</b><small>di ${numero(obiettivo)}</small></div></div><div class="macro">${macro.map(([nome, v, t, c]) => `<div>${nome}${barra(v, t, c)}<span>${Math.round(v)}/${t} g</span></div>`).join('')}</div></div><p class="nota-pasti">${n.rows ? `${n.rows} alimenti registrati` : 'Ancora niente registrato oggi'} · obiettivo da giorno ${off ? 'di riposo' : 'di turno'}</p></div></section>`;
+  const macro = [['Proteine', n.total.p, t.prot, 'var(--c-palestra)'], ['Carboidrati', n.total.c, t.carb, 'var(--teal)'], ['Grassi', n.total.g, t.gras, 'var(--c-sviluppo)']];
+  return `<section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#/sport/cibo">Diario →</a></div><div class="pasti"><div class="kcal"><div class="anello" style="--giro:${giro}%"><div><b>${numero(n.total.k)}</b><small>di ${numero(obiettivo)}</small></div></div><div class="macro">${macro.map(([nome, v, t, c]) => `<div>${nome}${barra(v, t, c)}<span>${Math.round(v)}/${t} g</span></div>`).join('')}</div></div><p class="nota-pasti">${n.rows ? `${n.rows} alimenti registrati` : 'Ancora niente registrato oggi'} · obiettivo da giorno ${({ allenamento: 'di allenamento', riposo: 'di riposo', off: 'di riposo' })[t.chi] || 'di turno'}</p></div></section>`;
 }
 // Lavoro sviluppo: ore di sviluppo della settimana e prossima scadenza di un progetto.
 function sviluppo(data, tz) {
@@ -149,8 +150,8 @@ export function oggiPage() {
   const lun = weekStart(data);
   const turno = turnoDel(data), off = turno?.kind === 'off';
   const f = forma(), n = f ? nutritionToday(data) : null, a = f ? allenamentoDi(f, data) : null;
-  const kcalObiettivo = f ? (off ? f.target.kcalOff : f.target.kcal) : 0;
-  const acqua = f ? Number(f.item('g').find(g => g.d === data)?.acqua) || 0 : 0, acquaObiettivo = f ? Number(f.archivio.items.find(i => i.t === 'cfg')?.target?.acqua) || 2500 : 2500;
+  const ob = f ? obiettiviGiorno(f.archivio, { turno: off ? 'off' : 'turno', allena: !!a }) : null, kcalObiettivo = ob ? ob.kcal : 0;
+  const acqua = f ? Number(f.item('g').find(g => g.d === data)?.acqua) || 0 : 0, acquaObiettivo = ob ? Number(ob.acqua) || 2500 : 2500;
   const fatto = f && a ? f.item('w').some(w => w.d === data && w.fine && w.sid === a.scheda.id && w.gn === a.giorno.n) : false;
   return `<div class="oggi">
     <div class="testa"><div><h1>Oggi</h1><p>${esc(longDate(tz).replace(/^./, c => c.toUpperCase()))}</p></div></div>
@@ -160,7 +161,7 @@ export function oggiPage() {
       <div class="k all-k"><div class="etichetta">Allenamento</div>${a ? `<div class="num">${esc(a.giorno.n)}</div><div class="sotto all-r"><span>${esc(a.scheda.n || '')} · ${(a.giorno.eser || []).length} esercizi</span>${fatto ? '<b>fatto ✓</b>' : bottoneInizia(f.archivio, data, a.scheda.id, a.giorno.n, 'oggi-inizia')}</div>` : `<div class="num">${f ? 'Riposo' : '—'}</div><div class="sotto">${f ? 'Nessuna seduta in piano' : 'Apri Palestra'}</div>`}</div>
     </section>
     ${weekCompatta(Array.from({ length: 7 }, (_, i) => shiftDate(settimanaVista || lun, i)), data, true)}
-    <div class="griglia"><div class="col">${giornata(data, tz)}</div><div class="col">${obiettivi(data, tz)}${pasti(data, f, off)}${sviluppo(data, tz)}</div></div>
+    <div class="griglia"><div class="col">${giornata(data, tz)}</div><div class="col">${obiettivi(data, tz)}${pasti(data, f, ob)}${sviluppo(data, tz)}</div></div>
   </div>`;
 }
 

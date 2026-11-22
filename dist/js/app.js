@@ -1,7 +1,7 @@
 import { clearForma } from './services/formaService.js?v=65';
 import { ripristinaOffline, ultimoUtente } from "./services/offline.js?v=75";
 import { startAppUpdates } from "./services/appUpdate.js?v=68";
-import { palestraPage, bindPalestra } from './modules/palestra.js?v=76';
+import { palestraPage, bindPalestra } from './modules/palestra.js?v=77';
 import { clearSport } from './services/sportService.js?v=65';
 import { universityData } from "./utils/university.js?v=65";
 import { openChecklistImport } from "./modules/checklistImport.js?v=65";
@@ -13,7 +13,7 @@ import {
   clearNotebookDrafts,
 } from "./modules/notebook.js?v=65";
 import { quickAdd } from "./modules/quickAdd.js?v=65";
-import { oggiPage, bindOggi } from "./modules/oggi.js?v=74";
+import { oggiPage, bindOggi } from "./modules/oggi.js?v=75";
 import { schedeSviluppo, schedeNote } from "./modules/sezioni.js?v=70";
 import { hotelPage, bindHotel } from "./modules/hotel.js?v=70";
 import { sviluppoPage, bindSviluppo } from "./modules/sviluppo.js?v=70";
@@ -34,7 +34,7 @@ import {
   filteredTasks,
   filters,
 } from "./modules/tasks.js?v=65";
-import { agendaPage, bindAgenda, entryForm } from "./modules/agenda.js?v=68";
+import { agendaPage, bindAgenda, entryForm } from "./modules/agenda.js?v=69";
 import { clearAgenda, importLegacyWorkShifts } from "./services/agendaService.js?v=65";
 import { navigation } from "./modules/navigation.js?v=65";
 import { searchPage } from "./modules/search.js?v=65";

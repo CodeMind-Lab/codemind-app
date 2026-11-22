@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
-const U = await import('../dist/js/utils/palestra.js?v=76');
+const U = await import('../dist/js/utils/palestra.js?v=77');
 const { state } = await import('../dist/js/services/store.js?v=65');
-const P = await import('../dist/js/services/palestraService.js?v=84');
+const P = await import('../dist/js/services/palestraService.js?v=85');
 
 assert.equal(U.gruppoDi('Squat con bilanciere'), 'Gambe (Legs)'); assert.equal(U.nomeGruppo('Gambe (Legs)'), 'Gambe'); assert.equal(U.gruppoDi('Mio esercizio'), 'Altro');
 assert.equal(U.isCardio({ n: 'Corsa' }), true); assert.equal(U.isCardio({ n: 'Panca' }), false); assert.equal(U.isCardio({ n: 'Cyclette leggera' }), true);

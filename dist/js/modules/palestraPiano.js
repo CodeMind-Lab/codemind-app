@@ -1,8 +1,8 @@
 // Palestra, terza tappa: Piano settimanale dei pasti (giornate tipo, settimana, lista della
 // spesa), Misure e Report. Stesso stile Bento delle altre schede della sezione.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=84';
-import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=76';
+import * as P from '../services/palestraService.js?v=85';
+import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, obiettiviGiorno, giornataDelPiano, pianoAutomatico, allenamentoDelGiorno, leggiPianoAlimentare, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=77';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
@@ -17,42 +17,61 @@ const fmt = (n, dec = 0) => { if (!nf.has(dec)) nf.set(dec, new Intl.NumberForma
 const dataBreve = d => new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z'));
 const giornoMese = d => `${Number(d.slice(8))}/${Number(d.slice(5, 7))}`;
 const PILL = { apertura: 'p-a', chiusura: 'p-c', notte: 'p-n', off: 'p-off', custom: 'p-x' };
+const nomeTurno = tn => tn === 'off' ? 'OFF' : shiftPresets[tn]?.label || tn;
+const pillTurno = tn => tn ? `<span class="pill ${PILL[tn] || 'p-x'}">${esc(nomeTurno(tn))}</span>` : '';
+// La settimana mostrata: per ogni giorno turno, allenamento previsto e giornata tipo scelta
+// (dal turno se la scelta automatica è attiva, altrimenti dal giorno della settimana).
+function settimanaPasti(a, d) {
+  const lun = lunediDi(d);
+  return GIORNI_SETT.map((gs, i) => {
+    const data = shiftDate(lun, i), tn = turnoDi(a, data, state.scheduleEntries, tz()), g = giornataDelPiano(a, data, tn);
+    return { gs, d: data, tn, allena: !!allenamentoDelGiorno(a, data), g, gt: g?.id || '' };
+  });
+}
+const sceltePiano = (a, d) => pianoAutomatico(a) ? settimanaPasti(a, d) : pianoPasti(a);
+// Obiettivo di una giornata tipo: quella importata dice turno e allenamento, le altre solo OFF/turno.
+const obiettivoGiornata = (a, g) => obiettiviGiorno(a, { turno: g.turno || (g.tipo === 'off' ? 'off' : ''), allena: !!g.allena });
+const perGiornata = g => g.turno ? `${nomeTurno(g.turno)} · ${g.allena ? 'allenamento' : 'riposo'}` : TIPI[g.tipo || ''];
 const TIPI = { '': 'Qualsiasi giorno', on: 'Giorno di turno', off: 'Giorno OFF' };
 
 // ------------------------------------------------------------ Piano settimanale
 export function vistaPiano(a, d) {
-  const lista = giornate(a), piano = pianoPasti(a), t = cfg(a).target;
-  if (!lista.some(g => g.id === giornataScelta)) giornataScelta = piano.find(p => p.gt)?.gt || lista[0]?.id || '';
-  const g = lista.find(x => x.id === giornataScelta), usate = new Set(piano.map(p => p.gt).filter(Boolean));
-  const elenco = `<div class="sch-elenco">${lista.map(x => { const k = somma(x.righe || []).k; return `<button class="sch ${x.id === giornataScelta ? 'on' : ''}" data-pal-giornata="${esc(x.id)}"><b>${esc(x.n)}</b><small>${fmt(k)} kcal · ${(x.righe || []).length} alimenti${x.tipo ? ' · ' + (x.tipo === 'off' ? 'OFF' : 'turno') : ''}</small>${usate.has(x.id) ? '<span class="pill p-c">nel piano</span>' : ''}</button>`; }).join('')}<button class="nuova" data-pal-nuova-giornata>+ Nuova giornata</button><button class="nuova" data-pal-da-diario>Salva il diario di ${esc(dataBreve(d))} come giornata</button></div>`;
+  const lista = giornate(a), piano = pianoPasti(a), auto = pianoAutomatico(a), sett = settimanaPasti(a, d);
+  if (!lista.some(g => g.id === giornataScelta)) giornataScelta = (auto ? sett.find(s => s.d === d)?.gt : '') || piano.find(p => p.gt)?.gt || lista[0]?.id || '';
+  const g = lista.find(x => x.id === giornataScelta), usate = new Set((auto ? sett : piano).map(p => p.gt).filter(Boolean));
+  const elenco = `<div class="sch-elenco">${lista.map(x => { const k = somma(x.righe || []).k; return `<button class="sch ${x.id === giornataScelta ? 'on' : ''}" data-pal-giornata="${esc(x.id)}"><b>${esc(x.n)}</b><small>${fmt(k)} kcal · ${x.turno ? esc(perGiornata(x)) : `${(x.righe || []).length} alimenti${x.tipo ? ' · ' + (x.tipo === 'off' ? 'OFF' : 'turno') : ''}`}</small>${usate.has(x.id) ? `<span class="pill p-c">${auto ? 'questa settimana' : 'nel piano'}</span>` : ''}</button>`; }).join('')}<button class="nuova" data-pal-nuova-giornata>+ Nuova giornata</button><button class="nuova" data-pal-da-diario>Salva il diario di ${esc(dataBreve(d))} come giornata</button><button class="nuova" data-pal-importa-piano>Importa piano alimentare (.json)</button><input type="file" id="pal-piano-file" accept="application/json,.json" hidden></div>`;
   let editor = '<section class="card"><p class="vuoto-giornata">Crea una giornata tipo (es. "Giorno di turno", "Giorno OFF") e mettici i pasti: poi assegnala ai giorni della settimana.</p></section>';
   if (g) {
-    const righe = g.righe || [], tot = somma(righe), ob = g.tipo === 'off' ? t.kcalOff : t.kcal;
+    const righe = g.righe || [], tot = somma(righe), t = obiettivoGiornata(a, g), ob = t.kcal;
+    const infoPasto = id => { const x = (g.pasti || []).find(q => q.slot === id); return x ? `<p class="fascia-info">${[x.ora, x.l, x.dove].filter(Boolean).map(esc).join(' · ')} · <b>${esc(x.ric)}${x.var ? ' ' + esc(x.var) : ''}</b>${x.alt?.length ? ` · oppure ${esc(x.alt.join(', '))}` : ''}</p>` : ''; };
     const fasce = PASTI.map(p => { const rp = righe.map((r, i) => ({ r, i })).filter(x => x.r.slot === p.id); const tp = somma(rp.map(x => x.r));
-      return `<div class="fascia"><div class="fascia-t"><span class="fascia-nome">${esc(p.l)}</span><span class="tot">${rp.length ? `${fmt(tp.k)} kcal · ${fmt(tp.p)} g P` : '—'}</span><button class="piu" data-pal-agg-giornata="${p.id}" aria-label="Aggiungi a ${esc(p.l)}">+</button></div>
+      return `<div class="fascia"><div class="fascia-t"><span class="fascia-nome">${esc(p.l)}</span><span class="tot">${rp.length ? `${fmt(tp.k)} kcal · ${fmt(tp.p)} g P` : '—'}</span><button class="piu" data-pal-agg-giornata="${p.id}" aria-label="Aggiungi a ${esc(p.l)}">+</button></div>${infoPasto(p.id)}
       ${rp.length ? `<table class="dati pal-righe pal-righe-piano"><tbody>${rp.map(({ r, i }) => { const m = macro(r); return `<tr><td>${esc(r.n)}</td><td class="q"><input class="cella-g" data-pal-riga-gt="${i}" type="number" inputmode="decimal" step="any" min="1" value="${esc(r.q)}" aria-label="Grammi"> g</td><td class="n">${fmt(m.k)} kcal</td><td class="n nasc">${fmt(m.p, 1)} P</td><td class="n"><button class="x" data-pal-togli-gt="${i}" aria-label="Togli">✕</button></td></tr>`; }).join('')}</tbody></table>` : ''}</div>`; }).join('');
     editor = `<section class="card"><div class="card-testa"><h2>${esc(g.n)}</h2><span class="link-gruppo"><button class="link" data-pal-rinomina-giornata>Rinomina</button> · <button class="link" data-pal-duplica-giornata>Duplica</button> · <button class="link" data-pal-elimina-giornata>Elimina</button></span></div>
-      <div class="contenuto"><div class="riga2 totale"><span>${esc(TIPI[g.tipo || ''])} · obiettivo ${fmt(ob)} kcal</span><b>${fmt(tot.k)} kcal</b></div>
+      <div class="contenuto">${g.orari || g.nota ? `<p class="pal-nota-giornata">${g.orari ? `<b>${esc(g.orari)}</b>` : ''}${g.nota ? `<span>${esc(g.nota)}</span>` : ''}</p>` : ''}<div class="riga2 totale"><span>${esc(perGiornata(g))} · obiettivo ${fmt(ob)} kcal</span><b>${fmt(tot.k)} kcal</b></div>
       <div class="macro pal-macro-piano">${[['Proteine', tot.p, t.prot, 'var(--teal)'], ['Carboidrati', tot.c, t.carb, '#8F80EE'], ['Grassi', tot.g, t.gras, '#F5A524']].map(([n, v, m, c]) => `<div>${n}<div class="barra"><i style="width:${m ? Math.min(100, Math.round(v / m * 100)) : 0}%;background:${c}"></i></div><span>${fmt(v)} / ${fmt(m)} g</span></div>`).join('')}</div>
       ${fasce}</div></section>`;
   }
-  const lun = lunediDi(d), opzioni = lista.map(x => [x.id, `${x.n} · ${fmt(somma(x.righe || []).k)} kcal`]);
-  const settimana = `<section class="card"><div class="card-testa"><h2>Settimana dei pasti</h2><span class="gr">il turno è quello di questa settimana</span></div>
+  const lun = lunediDi(d), opzioni = lista.map(x => [x.id, `${x.n} · ${fmt(somma(x.righe || []).k)} kcal`]), conTurno = lista.some(x => x.turno);
+  const settimana = auto ? `<section class="card"><div class="card-testa"><h2>Settimana dei pasti</h2><span class="gr">scelta dal turno e dall'allenamento · settimana del ${giornoMese(lun)}</span><button class="link" data-pal-auto="0">Assegna a mano</button></div>
+    <div class="sett7 sett-auto">${sett.map((s, i) => `<button class="${s.g ? 'a' : ''} ${s.d === d ? 'oggi' : ''}" ${s.g ? `data-pal-giornata="${esc(s.g.id)}"` : 'disabled'} title="${s.g ? 'Apri la giornata' : 'Nessuna giornata per questo giorno'}"><b>${NOMI_GIORNI[i]} ${giornoMese(s.d)}</b><span>${s.g ? esc(s.g.n) : 'nessuna giornata'}</span><em>${pillTurno(s.tn) || 'turno —'}${s.allena ? '<span class="pill p-c">allenamento</span>' : ''}</em></button>`).join('')}</div>
+    <p class="subtext piccolo pal-nota-sett">Notte sempre a riposo. Se un giorno non ha il turno inserito vale la giornata assegnata a mano a quel giorno della settimana.</p></section>`
+  : `<section class="card"><div class="card-testa"><h2>Settimana dei pasti</h2><span class="gr">il turno è quello di questa settimana</span>${conTurno ? '<button class="link" data-pal-auto="1">Scegli dal turno</button>' : ''}</div>
     <div class="sett7">${piano.map((p, i) => { const data = shiftDate(lun, i), tn = turnoDi(a, data, state.scheduleEntries, tz());
       return `<label class="${p.gt ? 'a' : ''}"><b>${NOMI_GIORNI[i]}</b><select data-pal-piano-gs="${GIORNI_SETT[i]}"><option value="">Nessuna</option>${opzioni.map(([k, n]) => `<option value="${esc(k)}" ${k === p.gt ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select><em>${tn ? `<span class="pill ${PILL[tn] || 'p-x'}">${esc(tn === 'off' ? 'OFF' : shiftPresets[tn]?.label || 'Turno')}</span>` : 'turno —'}</em></label>`; }).join('')}</div></section>`;
-  return `<div class="layout-schede">${elenco}<div class="pal-impila">${editor}${settimana}${cartaSpesa(a)}</div></div>`;
+  return `<div class="layout-schede">${elenco}<div class="pal-impila">${editor}${settimana}${cartaSpesa(a, d)}</div></div>`;
 }
-function cartaSpesa(a) {
-  const scelti = a.settings?.spesaGiorni || GIORNI_SETT, presi = a.settings?.spesaPresi || {}, gruppi = spesa(a, scelti);
-  const voci = gruppi.flatMap(g => g.voci), mancano = voci.filter(v => !presi[v.n]).length, pieni = new Set(pianoPasti(a).filter(p => p.gt).map(p => p.gs));
+function cartaSpesa(a, d) {
+  const scelte = sceltePiano(a, d), scelti = a.settings?.spesaGiorni || GIORNI_SETT, presi = a.settings?.spesaPresi || {}, gruppi = spesa(a, scelti, scelte);
+  const voci = gruppi.flatMap(g => g.voci), mancano = voci.filter(v => !presi[v.n]).length, pieni = new Set(scelte.filter(p => p.gt).map(p => p.gs));
   return `<section class="card"><div class="card-testa"><h2>Lista della spesa</h2><span class="gr">${mancano} da comprare su ${voci.length}</span></div>
     <div class="barra-strumenti">${GIORNI_SETT.map((gs, i) => `<button class="chip ${scelti.includes(gs) ? 'on' : ''}" data-pal-spesa-gs="${gs}" ${pieni.has(gs) ? '' : 'disabled title="Nessuna giornata nel piano"'}>${NOMI_GIORNI[i]}</button>`).join('')}
       <span class="spazio"></span><button class="btn" data-pal-spesa-azzera>Azzera spunte</button><button class="btn" data-pal-csv-spesa>CSV</button><button class="btn" data-stampa>Stampa</button></div>
     <div class="contenuto">${gruppi.length ? gruppi.map(g => `<p class="pal-titoletto">${esc(g.cat)}</p>${g.voci.map(v => `<label class="spesa-r ${presi[v.n] ? 'preso' : ''}"><input type="checkbox" data-pal-preso="${esc(v.n)}" ${presi[v.n] ? 'checked' : ''}><span>${esc(v.n)}</span><b>${fmt(v.q)} g</b><small>${v.giorni.size} giorni</small></label>`).join('')}`).join('') : '<p class="subtext">Assegna le giornate ai giorni della settimana: qui compare quanto comprare.</p>'}</div></section>`;
 }
-function csvSpesa(a) {
+function csvSpesa(a, d) {
   const scelti = a.settings?.spesaGiorni || GIORNI_SETT, presi = a.settings?.spesaPresi || {};
-  scaricaCsv('lista-spesa.csv', [['Categoria', 'Alimento', 'Grammi', 'Giorni', 'Preso'], ...spesa(a, scelti).flatMap(g => g.voci.map(v => [g.cat, v.n, numeroCsv(v.q), v.giorni.size, presi[v.n] ? 'sì' : '']))]);
+  scaricaCsv('lista-spesa.csv', [['Categoria', 'Alimento', 'Grammi', 'Giorni', 'Preso'], ...spesa(a, scelti, sceltePiano(a, d)).flatMap(g => g.voci.map(v => [g.cat, v.n, numeroCsv(v.q), v.giorni.size, presi[v.n] ? 'sì' : '']))]);
 }
 
 // ------------------------------------------------------------ Misure
@@ -138,7 +157,29 @@ export function bindPiano(pagina, render, d, apriAggiungi) {
   su('[data-pal-spesa-gs]', b => b.onclick = () => { const scelti = a.settings?.spesaGiorni || GIORNI_SETT, gs = b.dataset.palSpesaGs; prova(() => P.impostaGiorniSpesa(scelti.includes(gs) ? scelti.filter(x => x !== gs) : [...scelti, gs]), render); });
   su('[data-pal-preso]', c => c.onchange = () => prova(() => P.segnaPreso(c.dataset.palPreso, c.checked), render));
   su('[data-pal-spesa-azzera]', b => b.onclick = () => prova(() => P.azzeraSpesa(), render));
-  su('[data-pal-csv-spesa]', b => b.onclick = () => csvSpesa(a));
+  su('[data-pal-csv-spesa]', b => b.onclick = () => csvSpesa(a, d));
+  su('[data-pal-auto]', b => b.onclick = () => prova(() => P.impostaPianoAutomatico(b.dataset.palAuto === '1'), render, b.dataset.palAuto === '1' ? 'Giornata scelta dal turno e dall\'allenamento' : 'Giornate assegnate a mano ai giorni della settimana'));
+  // Importazione del piano alimentare: anteprima, poi conferma.
+  const file = pagina.querySelector('#pal-piano-file');
+  su('[data-pal-importa-piano]', b => b.onclick = () => file?.click());
+  if (file) file.onchange = async () => {
+    const f = file.files[0]; file.value = '';
+    if (!f) return;
+    let dati, x;
+    try { dati = JSON.parse(await f.text()); x = leggiPianoAlimentare(dati); } catch (e) { toast(e instanceof SyntaxError ? 'Il file non è un JSON valido.' : e.message); return; }
+    const r = x.riepilogo, ob = x.target;
+    openModal('Importa piano alimentare', `<div class="pal-import"><p><b>${esc(x.nome)}</b></p>
+      <ul><li>${r.alimenti} alimenti con i valori per 100 g (aggiornano quelli con lo stesso nome)</li><li>${r.ricette} ricette${r.versioni ? ` + ${r.versioni} versioni PRE/POST` : ''}</li><li>${r.giornate.length} giornate tipo: ${r.giornate.map(g => `${esc(g.n)} <small>${fmt(g.kcal)} kcal</small>`).join(' · ')}</li>
+      ${ob ? `<li>Obiettivi: riposo ${fmt(ob.kcalOff)} kcal · allenamento ${fmt(ob.kcal)} kcal · proteine ${fmt(ob.prot)} g</li>` : ''}${x.automatico ? '<li>Giornata del giorno scelta dal turno e dall\'allenamento previsto</li>' : ''}</ul>
+      <p class="subtext piccolo">Il diario già scritto non cambia. Importare di nuovo lo stesso file aggiorna senza creare doppioni.</p>
+      <div class="form-actions"><button class="btn" data-no>Annulla</button><button class="btn primary" data-si>Importa</button></div><p class="form-error" role="alert"></p></div>`);
+    const m = document.querySelector('#modal');
+    m.querySelector('[data-no]').onclick = closeModal;
+    m.querySelector('[data-si]').onclick = () => {
+      try { const esito = P.importaPianoAlimentare(dati); giornataScelta = ''; closeModal(); toast(`Piano importato: ${esito.nuovi} voci nuove, ${esito.aggiornati} aggiornate`); render(); }
+      catch (e) { m.querySelector('.form-error').textContent = e.message; }
+    };
+  };
   // Misure
   const fm = pagina.querySelector('#pal-misura');
   if (fm) fm.onsubmit = e => { e.preventDefault(); try { P.salvaMisura(Object.fromEntries(new FormData(fm))); toast('Misura salvata'); render(); } catch (err) { fm.querySelector('.form-error').textContent = err.message; } };

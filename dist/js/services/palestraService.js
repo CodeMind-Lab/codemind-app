@@ -10,7 +10,7 @@ import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
 import { ID_ABC, contenutoAbc, faseDelGiorno, uguale } from '../utils/schedaAbc.js?v=82';
 import { shiftDate } from '../utils/dates.js?v=65';
-import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=76';
+import { leggiPianoAlimentare, righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=77';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
 export const statoSalvataggio = { stato: 'salvato', messaggio: '' };
@@ -131,8 +131,9 @@ export function aggiungiRicetta(d, slot, ricetta) {
   return modifica((a, ora) => { for (const r of righe) a.items.push(nuovaRiga(d, slot, r, r.q, ora)); return righe.length; });
 }
 // Un pasto dal piano: sostituisce quello già scritto (un doppio tocco non conta due volte).
-export function applicaPasto(arch, d, slot) {
-  const piano = righePiano(arch, d, slot);
+// turno: quello del giorno (turnoDi), serve alla scelta automatica della giornata.
+export function applicaPasto(arch, d, slot, turno) {
+  const piano = righePiano(arch, d, slot, turno);
   if (!piano.length) throw Error('Il piano non prevede niente per questo pasto.');
   return modifica((a, ora) => {
     for (const r of a.items.filter(x => x.t === 'l' && x.d === d && x.slot === slot)) togli(a, r.id, ora);
@@ -143,8 +144,8 @@ export function applicaPasto(arch, d, slot) {
   });
 }
 // Tutta la giornata dal piano: sostituisce le voci del giorno (la conferma la chiede la pagina).
-export function applicaPiano(arch, d) {
-  const piano = righePiano(arch, d);
+export function applicaPiano(arch, d, turno) {
+  const piano = righePiano(arch, d, undefined, turno);
   if (!piano.length) throw Error('Questo giorno della settimana non ha una giornata nel piano.');
   return modifica((a, ora) => {
     for (const r of a.items.filter(x => x.t === 'l' && x.d === d)) togli(a, r.id, ora);
@@ -165,8 +166,12 @@ export function impostaPassi(d, passi) {
 
 // ------------------------------------------------------------ obiettivi e alimenti
 export function salvaObiettivi(v) {
+  const base = v.base === 'allenamento' ? 'allenamento' : 'turno', all = base === 'allenamento';
+  const facoltativo = (x, max, cosa) => (x === undefined || x === null || x === '') ? undefined : numero(x, 0, max, cosa);
   const target = {
-    kcal: numero(v.kcal, 800, 6000, 'le kcal dei giorni di turno'), kcalOff: numero(v.kcalOff, 800, 6000, 'le kcal dei giorni OFF'),
+    base,
+    kcal: numero(v.kcal, 800, 6000, all ? 'le kcal dei giorni di allenamento' : 'le kcal dei giorni di turno'), kcalOff: numero(v.kcalOff, 800, 6000, all ? 'le kcal dei giorni di riposo' : 'le kcal dei giorni OFF'),
+    carbOff: facoltativo(v.carbOff, 1000, 'i carboidrati dei giorni di riposo'), grasOff: facoltativo(v.grasOff, 400, 'i grassi dei giorni di riposo'), acquaOff: facoltativo(v.acquaOff, 10000, "l'acqua dei giorni di riposo"),
     prot: numero(v.prot, 0, 500, 'le proteine'), carb: numero(v.carb, 0, 1000, 'i carboidrati'), gras: numero(v.gras, 0, 400, 'i grassi'),
     acqua: numero(v.acqua, 0, 10000, "l'acqua"), passi: numero(v.passi, 0, 100000, 'i passi'), olio: numero(v.olio, 0, 200, "l'olio"),
   };
@@ -175,6 +180,45 @@ export function salvaObiettivi(v) {
     let c = a.items.find(i => i.t === 'cfg');
     if (!c) { c = { id: 'cfg', t: 'cfg', target: { ...TARGET_DEFAULT }, profilo: { ...PROFILO_DEFAULT } }; a.items.push(c); }
     c.target = { ...(c.target || {}), ...target }; c.profilo = { ...(c.profilo || {}), ...profilo }; c.updatedAt = ora;
+    for (const k of ['carbOff', 'grasOff', 'acquaOff']) if (c.target[k] === undefined) delete c.target[k];
+  });
+}
+// Scelta automatica della giornata tipo dal turno e dall'allenamento del giorno.
+export function impostaPianoAutomatico(on) {
+  return modifica((a, ora) => {
+    let c = a.items.find(i => i.t === 'cfg');
+    if (!c) { c = { id: 'cfg', t: 'cfg', target: { ...TARGET_DEFAULT }, profilo: { ...PROFILO_DEFAULT } }; a.items.push(c); }
+    c.pianoTurni = !!on; c.updatedAt = ora;
+  });
+}
+
+// ------------------------------------------------------------ importazione del piano alimentare
+// Aggiunge o aggiorna (ID stabili imp-…): alimenti, ricette, giornate tipo, obiettivi.
+// Un tuo alimento con lo stesso nome viene aggiornato al suo posto. Il diario non si tocca.
+export function importaPianoAlimentare(dati) {
+  const x = leggiPianoAlimentare(dati);
+  return modifica((a, ora) => {
+    const conta = { nuovi: 0, aggiornati: 0 };
+    const metti = voce => {
+      const i = a.items.findIndex(v => v.id === voce.id);
+      if (i >= 0) { a.items[i] = { ...voce, updatedAt: ora }; conta.aggiornati++; }
+      else { a.items.push({ ...voce, updatedAt: ora }); conta.nuovi++; }
+      delete a.graves[voce.id];
+    };
+    for (const al of x.alimenti) {
+      const stesso = a.items.find(v => v.t === 'a' && v.id !== al.id && v.n.toLowerCase() === al.n.toLowerCase());
+      if (stesso) { Object.assign(stesso, { k: al.k, p: al.p, c: al.c, g: al.g, cat: al.cat, nt: al.nt || stesso.nt || '', updatedAt: ora }); conta.aggiornati++; }
+      else metti(al);
+    }
+    for (const r of x.ricette) metti(r);
+    for (const g of x.giornate) metti(g);
+    let c = a.items.find(i => i.t === 'cfg');
+    if (!c) { c = { id: 'cfg', t: 'cfg', target: { ...TARGET_DEFAULT }, profilo: { ...PROFILO_DEFAULT } }; a.items.push(c); }
+    if (x.target) c.target = { ...(c.target || {}), ...x.target };
+    if (x.profilo) c.profilo = { ...(c.profilo || {}), ...x.profilo };
+    if (x.automatico) c.pianoTurni = true;
+    c.updatedAt = ora;
+    return { ...x.riepilogo, nome: x.nome, ...conta };
   });
 }
 export function salvaAlimento(v, esistente) {

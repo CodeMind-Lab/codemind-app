@@ -3,7 +3,7 @@ import { formaModel,saveForma,syncFormaTurns,pendingForma,nutritionToday } from 
 import { FORMA_URL,FORMA_ORIGIN } from '../utils/sport.js?v=65';
 import { today } from '../utils/dates.js?v=65';
 import { weekStart } from '../utils/agenda.js?v=65';
-import { openWorkWeek } from './agenda.js?v=68';
+import { openWorkWeek } from './agenda.js?v=69';
 import { esc } from '../utils/helpers.js?v=65';
 import { toast } from '../utils/dom.js?v=65';
 const protocol='codemind-forma-workspace-v1',editorProtocol='codemind-forma-editor-v1';

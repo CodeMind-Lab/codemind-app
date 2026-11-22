@@ -4,12 +4,12 @@
 // ricerca e codice a barre. Allenamenti, schede, piano, misure e report usano ancora
 // la Forma classica finché non vengono rifatti. I dati sono sempre l'archivio di Forma.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=84';
-import { riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, ricette, porzioniDi, righePiano, allenamentoDelGiorno, ultimaSessione, sessioniDel, pesoAttuale, settimana, lunediDi, slotOra, macro, somma, prodottoDaOFF, di, PASTI, CATEGORIE } from '../utils/palestra.js?v=76';
+import * as P from '../services/palestraService.js?v=85';
+import { riepilogoGiorno, turnoDi, obiettivoKcal, obiettiviGiorno, giornataDelPiano, cfg, catalogo, cerca, recenti, ricette, porzioniDi, righePiano, allenamentoDelGiorno, ultimaSessione, sessioniDel, pesoAttuale, settimana, lunediDi, slotOra, macro, somma, prodottoDaOFF, di, PASTI, CATEGORIE } from '../utils/palestra.js?v=77';
 import { Scanner } from '../utils/scanner.js?v=73';
 import { formaClassica, bindFormaWorkspace } from './formaWorkspace.js?v=65';
-import { vistaPiano, vistaMisure, vistaReport, bindPiano } from './palestraPiano.js?v=74';
-import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=85';
+import { vistaPiano, vistaMisure, vistaReport, bindPiano } from './palestraPiano.js?v=75';
+import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=86';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
@@ -47,10 +47,13 @@ function quantita(r) {
 }
 
 // ------------------------------------------------------------ parti comuni
+// Il turno del giorno: serve agli obiettivi e alla giornata tipo scelta dal turno.
+const turnoG = (a, d) => turnoDi(a, d, state.scheduleEntries, tz());
+const OBIETTIVO_DA = { allenamento: 'giorno di allenamento', riposo: 'giorno di riposo', off: 'giorno OFF', turno: 'giorno di turno' };
 function testa(a, d) {
-  const turno = a ? turnoDi(a, d, state.scheduleEntries, tz()) : '';
+  const turno = a ? turnoG(a, d) : '', chi = a ? obiettiviGiorno(a, { turno, allena: !!allenamentoDelGiorno(a, d) }).chi : '';
   const pill = turno ? `<span class="pill ${PILL[turno] || 'p-x'}">${esc(etichettaTurno(turno))}</span>` : '<span class="pill p-x">turno non inserito</span>';
-  return `<div class="page-heading lavoro-testa pal-testa"><div><h1>Palestra<span class="solo-largo"> e alimentazione</span></h1><p class="subtext">${esc(dataLunga(d))} · ${pill}${a ? `<span class="solo-largo"> · obiettivo da giorno ${turno === 'off' ? 'OFF' : 'di turno'}</span>` : ''}</p></div>
+  return `<div class="page-heading lavoro-testa pal-testa"><div><h1>Palestra<span class="solo-largo"> e alimentazione</span></h1><p class="subtext">${esc(dataLunga(d))} · ${pill}${a ? `<span class="solo-largo"> · obiettivo da ${OBIETTIVO_DA[chi]}</span>` : ''}</p></div>
   ${a ? `<div class="mese-nav piccolo"><button class="icona-tonda" data-pal-giorno="-1" aria-label="Giorno precedente">‹</button><button class="pal-oggi" data-pal-oggi title="Torna a oggi">${d === oggi() ? 'Oggi' : esc(giornoBreve(d))}</button><button class="icona-tonda" data-pal-giorno="1" aria-label="Giorno successivo">›</button></div>
   <div class="azioni"><button class="btn" data-pal-scan>${ICONA_SCAN}<span>Scansiona</span></button><button class="btn primary pal-acc" data-pal-aggiungi>+ Alimento</button></div>` : ''}</div>`;
 }
@@ -78,15 +81,15 @@ function vuoto() {
 
 // ------------------------------------------------------------ pasti del giorno
 function fascia(a, d, p) {
-  const piano = righePiano(a, d, p.id);
+  const piano = righePiano(a, d, p.id, turnoG(a, d));
   const righe = p.righe.length ? `<table class="dati pal-righe"><tbody>${p.righe.map(r => { const m = macro(r); return `<tr data-pal-riga="${esc(r.id)}" tabindex="0" title="Modifica"><td>${esc(r.n)}</td><td class="q">${esc(quantita(r))}</td><td class="n">${fmt(m.k)} kcal</td><td class="n nasc">${m.p ? fmt(m.p, 1) + ' P' : '—'}</td></tr>`; }).join('')}</tbody></table>
     <button class="riassunto" data-pal-slot="${p.id}">${esc(p.righe.map(r => r.n).join(', '))}</button>` : '';
   const dalPiano = !p.righe.length && piano.length ? `<div class="vuota"><span>Dal piano: ${esc(piano.map(r => `${r.n} ${fmt(r.q)} g`).join(' + '))} · ${fmt(somma(piano).k)} kcal</span><button class="btn" data-pal-dal-piano="${p.id}">Aggiungi</button></div>` : '';
   return `<div class="fascia ${p.righe.length ? '' : 'senza'}"><div class="fascia-t"><button class="fascia-nome" data-pal-slot="${p.id}">${esc(p.l)}</button><span class="tot">${p.righe.length ? `${fmt(p.tot.k)} kcal · ${fmt(p.tot.p)} g P` : '—'}</span><button class="piu" data-pal-aggiungi="${p.id}" aria-label="Aggiungi a ${esc(p.l)}">+</button></div>${righe}${dalPiano}</div>`;
 }
 function cartaPasti(a, d, rg) {
-  const piano = righePiano(a, d);
-  return `<section class="card pal-pasti"><div class="card-testa"><h2>${d === oggi() ? 'Pasti di oggi' : 'Pasti del giorno'}</h2>${piano.length ? '<button class="link" data-pal-piano>Usa il piano della settimana →</button>' : ''}</div>
+  const turno = turnoG(a, d), piano = righePiano(a, d, undefined, turno), g = piano.length ? giornataDelPiano(a, d, turno) : null;
+  return `<section class="card pal-pasti"><div class="card-testa"><h2>${d === oggi() ? 'Pasti di oggi' : 'Pasti del giorno'}</h2>${g ? `<button class="link" data-pal-piano title="Giornata tipo del piano">Usa ${esc(g.n)} →</button>` : ''}</div>
     <div class="contenuto">${rg.perPasto.map(p => fascia(a, d, p)).join('')}</div></section>`;
 }
 
@@ -94,7 +97,8 @@ function cartaPasti(a, d, rg) {
 function datiGiorno(a, d) {
   const rg = riepilogoGiorno(a, d), turno = turnoDi(a, d, state.scheduleEntries, tz());
   const c = cfg(a), all = allenamentoDelGiorno(a, d), fatte = sessioniDel(a, d).filter(w => w.fine);
-  return { rg, turno, t: c.target, profilo: c.profilo, ob: obiettivoKcal(a, turno), all, fatte, peso: pesoAttuale(a, d) };
+  const t = obiettiviGiorno(a, { turno, allena: !!all });
+  return { rg, turno, t, profilo: c.profilo, ob: t.kcal, all, fatte, peso: pesoAttuale(a, d) };
 }
 function kpi(x) {
   const { rg, ob, t, all, fatte, peso, profilo } = x, resto = ob - rg.tot.k, pasti = rg.perPasto.filter(p => p.righe.length).length;
@@ -169,7 +173,7 @@ function vistaOggi(a, d) {
 }
 function righeSettimana(a, d) {
   return settimana(a, lunediDi(d)).map(g => {
-    const rg = riepilogoGiorno(a, g.d), turno = turnoDi(a, g.d, state.scheduleEntries, tz()), ob = obiettivoKcal(a, turno);
+    const rg = riepilogoGiorno(a, g.d), turno = turnoDi(a, g.d, state.scheduleEntries, tz()), ob = obiettivoKcal(a, turno, !!allenamentoDelGiorno(a, g.d));
     return { ...g, rg, turno, ob, diff: rg.righe.length ? rg.tot.k - ob : null };
   });
 }
@@ -193,13 +197,17 @@ function vistaCibo(a, d) {
   return `<div class="griglia-lavoro"><div class="col">${cartaPasti(a, d, rg)}</div><div class="col">${tot}</div></div>${tabella}`;
 }
 function vistaObiettivi(a) {
-  const { target: t, profilo: p } = cfg(a), miei = di(a, 'a').sort((x, y) => x.n.localeCompare(y.n, 'it'));
-  const campo = (nome, etichetta, v, extra = '') => `<label class="field">${etichetta}<input name="${nome}" type="number" inputmode="decimal" step="any" value="${esc(v)}" ${extra}></label>`;
+  const { target: t, profilo: p } = cfg(a), miei = di(a, 'a').sort((x, y) => x.n.localeCompare(y.n, 'it')), all = t.base === 'allenamento';
+  const campo = (nome, etichetta, v, extra = '', cls = '') => `<label class="field ${cls}">${etichetta}<input name="${nome}" type="number" inputmode="decimal" step="any" value="${esc(v)}" ${extra}></label>`;
+  // Le etichette cambiano con la base scelta (il CSS mostra quella giusta).
+  const etq = (turno, allena) => `<span class="se-turno">${turno}</span><span class="se-allena">${allena}</span>`;
   return `<div class="pal-impila"><section class="card"><div class="card-testa"><h2>Obiettivi giornalieri</h2></div><div class="contenuto">
-    <form id="pal-obiettivi" class="form-contratto"><fieldset><legend>Calorie e macro</legend>${campo('kcal', 'Kcal nei giorni di turno', t.kcal)}${campo('kcalOff', 'Kcal nei giorni OFF', t.kcalOff)}${campo('prot', 'Proteine (g)', t.prot)}${campo('carb', 'Carboidrati (g)', t.carb)}${campo('gras', 'Grassi (g)', t.gras)}${campo('olio', 'Olio massimo (g)', t.olio)}</fieldset>
-    <fieldset><legend>Giornata</legend>${campo('acqua', 'Acqua (ml)', t.acqua)}${campo('passi', 'Passi', t.passi)}</fieldset>
+    <form id="pal-obiettivi" class="form-contratto" data-base="${all ? 'allenamento' : 'turno'}"><fieldset><legend>Calorie e macro</legend>
+      <label class="field">Obiettivo in base a<select name="base" data-pal-base><option value="turno" ${all ? '' : 'selected'}>Turno / OFF</option><option value="allenamento" ${all ? 'selected' : ''}>Allenamento / riposo</option></select></label>
+      ${campo('kcal', etq('Kcal nei giorni di turno', 'Kcal nei giorni di allenamento'), t.kcal)}${campo('kcalOff', etq('Kcal nei giorni OFF', 'Kcal nei giorni di riposo'), t.kcalOff)}${campo('prot', 'Proteine (g)', t.prot)}${campo('carb', etq('Carboidrati (g)', 'Carboidrati allenamento (g)'), t.carb)}${campo('carbOff', 'Carboidrati riposo (g)', t.carbOff ?? '', 'placeholder="come allenamento"', 'solo-allena')}${campo('gras', etq('Grassi (g)', 'Grassi allenamento (g)'), t.gras)}${campo('grasOff', 'Grassi riposo (g)', t.grasOff ?? '', 'placeholder="come allenamento"', 'solo-allena')}${campo('olio', 'Olio massimo (g)', t.olio)}</fieldset>
+    <fieldset><legend>Giornata</legend>${campo('acqua', etq('Acqua (ml)', 'Acqua allenamento (ml)'), t.acqua)}${campo('acquaOff', 'Acqua riposo (ml)', t.acquaOff ?? '', 'placeholder="come allenamento"', 'solo-allena')}${campo('passi', 'Passi', t.passi)}</fieldset>
     <fieldset><legend>Profilo</legend><label class="field">Nome<input name="nome" value="${esc(p.nome)}" maxlength="60"></label>${campo('altezza', 'Altezza (cm)', p.altezza)}${campo('pesoObiettivo', 'Peso obiettivo (kg)', p.pesoObiettivo)}${campo('giroObiettivo', 'Giro vita obiettivo (cm)', p.giroObiettivo)}</fieldset>
-    <p class="subtext piccolo">L'obiettivo dei giorni OFF vale quando in Lavoro Hotel il giorno è segnato OFF.</p>
+    <p class="subtext piccolo"><span class="se-turno">L'obiettivo dei giorni OFF vale quando in Lavoro Hotel il giorno è segnato OFF.</span><span class="se-allena">Giorno di allenamento = c'è un allenamento previsto (Palestra → Schede o Agenda); gli altri sono di riposo. Proteine uguali tutti i giorni.</span></p>
     <div class="form-actions"><button class="btn primary" type="submit">Salva obiettivi</button></div><p class="form-error" role="alert"></p></form></div></section>
     <section class="card"><div class="card-testa"><h2>I tuoi alimenti</h2><button class="link" data-pal-nuovo-alimento>+ Nuovo</button></div>
     <div class="barra-strumenti"><input class="pal-filtro" id="pal-filtro-alimenti" type="search" placeholder="Filtra per nome o codice" aria-label="Filtra i tuoi alimenti"><span class="spazio"></span><span class="subtext piccolo">${miei.length} alimenti · valori per 100 g</span></div>
@@ -321,7 +329,7 @@ function apriRiga(id) {
 }
 // Sul telefono un pasto si apre in una finestra: righe, totale, aggiungi, dal piano.
 function apriPasto(d, slot) {
-  const a = P.archivio(), p = riepilogoGiorno(a, d).perPasto.find(x => x.id === slot), piano = righePiano(a, d, slot);
+  const a = P.archivio(), p = riepilogoGiorno(a, d).perPasto.find(x => x.id === slot), piano = righePiano(a, d, slot, turnoG(a, d));
   openModal(`${p.l} · ${giornoBreve(d)}`, `<div class="pal-agg">${p.righe.length ? `<div class="pal-risultati">${p.righe.map(r => { const m = macro(r); return `<button type="button" class="ris" data-pal-riga-modal="${esc(r.id)}"><span><b>${esc(r.n)}</b><small>${esc(quantita(r))}</small></span><span class="dx">${fmt(m.k)} kcal<br>${fmt(m.p, 1)} P</span></button>`; }).join('')}</div>
     <div class="riga2 totale"><span>Totale</span><b>${fmt(p.tot.k)} kcal · ${fmt(p.tot.p)} g P</b></div>` : '<p class="subtext">Ancora niente in questo pasto.</p>'}
     <div class="form-actions">${piano.length ? `<button type="button" class="btn" data-pal-dal-piano-modal>Dal piano (${fmt(somma(piano).k)} kcal)</button>` : ''}<button type="button" class="btn primary" data-pal-agg-modal>+ Aggiungi alimento</button></div></div>`);
@@ -331,7 +339,7 @@ function apriPasto(d, slot) {
   m.querySelector('[data-pal-dal-piano-modal]')?.addEventListener('click', () => dalPiano(d, slot));
 }
 function dalPiano(d, slot) {
-  try { const n = P.applicaPasto(P.archivio(), d, slot); closeModal(); toast(`${nomePasto(slot)} dal piano: ${n} alimenti`); renderPagina(); } catch (e) { toast(e.message); }
+  try { const n = P.applicaPasto(P.archivio(), d, slot, turnoG(P.archivio(), d)); closeModal(); toast(`${nomePasto(slot)} dal piano: ${n} alimenti`); renderPagina(); } catch (e) { toast(e.message); }
 }
 function apriPassi(d) {
   const g = riepilogoGiorno(P.archivio(), d);
@@ -423,7 +431,7 @@ export function bindPalestra(render) {
   su('[data-pal-riga]', r => { r.onclick = () => apriRiga(r.dataset.palRiga); r.onkeydown = e => { if (e.key === 'Enter') apriRiga(r.dataset.palRiga); }; });
   su('[data-pal-dal-piano]', b => b.onclick = () => dalPiano(d, b.dataset.palDalPiano));
   su('[data-pal-piano]', b => b.onclick = () => {
-    const fai = () => { const n = P.applicaPiano(P.archivio(), d); toast(`Giornata dal piano: ${n} alimenti`); render(); };
+    const fai = () => { const n = P.applicaPiano(P.archivio(), d, turnoG(P.archivio(), d)); toast(`Giornata dal piano: ${n} alimenti`); render(); };
     const gia = riepilogoGiorno(a, d).righe.length;
     if (!gia) { try { fai(); } catch (e) { toast(e.message); } return; }
     openModal('Usa il piano della settimana', `<p>Il diario di ${esc(giornoBreve(d))} ha già ${gia} voci. Le sostituisco con la giornata del piano?</p><div class="form-actions"><button class="btn" data-close-piano>Annulla</button><button class="btn primary" data-ok-piano>Sostituisci</button></div>`);
@@ -439,6 +447,7 @@ export function bindPalestra(render) {
   const filtro = pagina.querySelector('#pal-filtro-alimenti');
   if (filtro) filtro.oninput = () => { const t = filtro.value.trim().toLowerCase(); pagina.querySelectorAll('[data-pal-alimento]').forEach(r => { r.hidden = !!t && !r.dataset.cerca.includes(t); }); };
   const obiettivi = pagina.querySelector('#pal-obiettivi');
+  obiettivi?.querySelector('[data-pal-base]')?.addEventListener('change', e => { obiettivi.dataset.base = e.target.value; });
   if (obiettivi) obiettivi.onsubmit = e => { e.preventDefault(); try { P.salvaObiettivi(Object.fromEntries(new FormData(obiettivi))); toast('Obiettivi salvati'); render(); } catch (err) { obiettivi.querySelector('.form-error').textContent = err.message; } };
   su('[data-pal-inizia]', b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(d, sid, gn.join('|')); } catch (e) { toast(e.message); } });
   bindAllena(pagina, render, d);

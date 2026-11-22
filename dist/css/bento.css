@@ -996,3 +996,23 @@ html[data-theme="dark"] .allena-agenda .link { color: var(--azzurro); }
   .fasce-nav button { width: 36px; height: 36px; }
   .fasce-nav .fasce-nav-oggi { height: 36px; }
 }
+/* Piano alimentare: obiettivi turno/allenamento, giornate importate, settimana scelta dal turno */
+#pal-obiettivi .se-allena, #pal-obiettivi .solo-allena { display: none; }
+#pal-obiettivi[data-base="allenamento"] .se-allena { display: inline; }
+#pal-obiettivi[data-base="allenamento"] .solo-allena { display: grid; }
+#pal-obiettivi[data-base="allenamento"] .se-turno { display: none; }
+.fascia-info { margin: -2px 0 6px; font-size: 12px; color: var(--testo-3); line-height: 1.35; }
+.fascia-info b { color: var(--testo-2); font-weight: 600; }
+.pal-nota-giornata { display: grid; gap: 2px; margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--pannello-2); font-size: 12.5px; color: var(--testo-2); }
+.pal-nota-giornata b { color: var(--testo); font-weight: 600; }
+.sett7.sett-auto button { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 10px 8px; border: 2px solid transparent; border-radius: 14px; background: var(--pannello-2); color: var(--testo); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.sett7.sett-auto button.a { background: #FFE3DD; } html[data-theme="dark"] .sett7.sett-auto button.a { background: #3A1C18; }
+.sett7.sett-auto button.oggi { border-color: var(--corallo); }
+.sett7.sett-auto button:disabled { cursor: default; opacity: .7; }
+.sett7.sett-auto b { font-size: 12px; color: var(--testo-2); }
+.sett7.sett-auto span { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.sett7.sett-auto em { display: flex; flex-wrap: wrap; gap: 3px; font-style: normal; font-size: 11px; color: var(--testo-3); }
+.pal-nota-sett { padding: 0 20px 16px; margin: 0; }
+.pal-import ul { margin: 8px 0 12px; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; }
+.pal-import small { color: var(--testo-3); }
+@media (max-width: 600px) { .pal-nota-sett { padding: 0 14px 14px; } .sett7.sett-auto { grid-template-columns: 1fr 1fr; } }

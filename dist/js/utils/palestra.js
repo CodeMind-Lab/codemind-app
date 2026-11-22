@@ -59,7 +59,19 @@ export function turnoDi(a, d, voci = [], tz = 'Europe/Rome') {
   const m = /^cm-work-(\w+)$/.exec(id);
   return m ? m[1] : (tn?.n || '').toLowerCase();
 }
-export const obiettivoKcal = (a, turno) => { const t = cfg(a).target; return turno === 'off' ? t.kcalOff : t.kcal; };
+// Obiettivi del giorno. Due modi (cfg.target.base):
+//   'turno' (predefinito, come Forma): kcal nei giorni di turno, kcalOff nei giorni OFF;
+//   'allenamento' (piano alimentare): kcal/carb/gras/acqua nei giorni di allenamento,
+//   kcalOff/carbOff/grasOff/acquaOff nei giorni di riposo. Le proteine restano uguali.
+export function obiettiviGiorno(a, { turno = '', allena = false } = {}) {
+  const t = cfg(a).target;
+  if (t.base === 'allenamento') {
+    return allena ? { ...t, chi: 'allenamento' }
+      : { ...t, kcal: t.kcalOff, carb: t.carbOff ?? t.carb, gras: t.grasOff ?? t.gras, acqua: t.acquaOff ?? t.acqua, chi: 'riposo' };
+  }
+  return turno === 'off' ? { ...t, kcal: t.kcalOff, chi: 'off' } : { ...t, chi: 'turno' };
+}
+export const obiettivoKcal = (a, turno, allena = false) => obiettiviGiorno(a, { turno, allena }).kcal;
 
 export function slotOra(ora) {
   const h = ora ?? new Date().getHours();
@@ -68,11 +80,22 @@ export function slotOra(ora) {
 
 // ------------------------------------------------------------ piano settimanale
 // Il giorno della settimana (t:'p') punta a una giornata tipo (t:'gt') con le righe.
-export function giornataDelPiano(a, d) {
+// Con la scelta automatica (cfg.pianoTurni) vince la giornata con lo stesso turno e lo stesso
+// allenamento/riposo del giorno; se non c'è (turno non inserito) resta il giorno della settimana.
+// turno: quello di turnoDi(); undefined = non noto (si usa solo la settimana).
+export const pianoAutomatico = a => !!(a?.items || []).find(i => i.t === 'cfg')?.pianoTurni;
+const TURNI_PIANO = ['apertura', 'chiusura', 'notte', 'off'];
+export function giornataAuto(a, turno, allena) {
+  if (!TURNI_PIANO.includes(turno)) return null;
+  const vuole = turno === 'notte' ? false : !!allena, conTurno = di(a, 'gt').filter(g => g.turno === turno);
+  return conTurno.find(g => !!g.allena === vuole) || conTurno.find(g => !g.allena) || conTurno[0] || null;
+}
+export function giornataDelPiano(a, d, turno) {
+  if (turno !== undefined && pianoAutomatico(a)) { const g = giornataAuto(a, turno, !!allenamentoDelGiorno(a, d)); if (g) return g; }
   const p = di(a, 'p').find(x => x.gs === gsDiData(d));
   return p?.gt ? di(a, 'gt').find(x => x.id === p.gt) || null : null;
 }
-export const righePiano = (a, d, slot) => (giornataDelPiano(a, d)?.righe || []).filter(r => !slot || r.slot === slot);
+export const righePiano = (a, d, slot, turno) => (giornataDelPiano(a, d, turno)?.righe || []).filter(r => !slot || r.slot === slot);
 
 // L'allenamento previsto (t:'pa' punta a una giornata di una scheda t:'s').
 // Due livelli: la settimana tipo (voci con gs, valgono ogni settimana) e i giorni di una
@@ -237,9 +260,11 @@ export const pianoAllenamento = a => GIORNI_SETT.map(gs => { const p = tipoDi(a,
 export const giornate = a => di(a, 'gt').sort((x, y) => String(x.n || '').localeCompare(String(y.n || ''), 'it', { numeric: true }));
 export const pianoPasti = a => GIORNI_SETT.map(gs => { const p = di(a, 'p').find(x => x.gs === gs); return { gs, gt: p?.gt || '' }; });
 // Somma per alimento sui giorni scelti: se lunedì e giovedì vogliono 60 g di riso, ne servono 120.
-export function spesa(a, giorni) {
+// scelte: [{gs, gt}] per giorno (predefinito il piano della settimana; con la scelta
+// automatica la pagina passa le giornate decise dai turni della settimana).
+export function spesa(a, giorni, scelte = pianoPasti(a)) {
   const per = new Map(), cat = new Map(catalogo(a).map(x => [x.n.toLowerCase(), x.cat]));
-  for (const { gs, gt } of pianoPasti(a)) {
+  for (const { gs, gt } of scelte) {
     if (!giorni.includes(gs) || !gt) continue;
     for (const r of di(a, 'gt').find(x => x.id === gt)?.righe || []) {
       const k = r.n.toLowerCase(), v = per.get(k) || { n: r.n, q: 0, giorni: new Set(), cat: cat.get(k) || 'Altro' };
@@ -305,4 +330,88 @@ export function titoloPalestra(titolo, nomiGiorni, gn) {
   if (!m || (m[1] && !nomiGiorni.includes(m[1].trim()))) return null;
   const nuovo = gn ? `Palestra · ${gn}` : 'Palestra';
   return nuovo === String(titolo).trim() ? null : nuovo;
+}
+
+// ------------------------------------------------------------ importazione del piano alimentare
+// File JSON "codemind-piano-alimentare" v1 (alimenti per 100 g, ricette con versione PRE/POST,
+// giornate tipo per turno e allenamento, obiettivi). Qui si controlla tutto e si preparano le voci
+// dell'archivio con ID stabili (imp-…): importare di nuovo lo stesso file aggiorna, non duplica.
+const SLOT_PASTI = PASTI.map(p => p.id);
+const CAT_RICETTE = ['colazione', 'spuntino', 'pasto'];
+const idSicuro = v => /^[a-z0-9][a-z0-9-]{0,40}$/.test(String(v || ''));
+function testoImp(v, max, cosa) { const s = String(v ?? '').trim(); if (!s) throw Error(`Manca ${cosa}.`); return s.slice(0, max); }
+function numImp(v, min, max, cosa) { const n = Number(v); if (!Number.isFinite(n) || n < min || n > max) throw Error(`Valore non valido: ${cosa}.`); return n; }
+export function leggiPianoAlimentare(dati) {
+  if (!dati || dati.formato !== 'codemind-piano-alimentare') throw Error('Questo file non è un piano alimentare di CodeMind.');
+  if (dati.versione !== 1) throw Error('Versione del piano non supportata.');
+  const nome = testoImp(dati.nome, 120, 'il nome del piano');
+  // alimenti
+  const alimenti = new Map();
+  for (const x of dati.alimenti || []) {
+    if (!idSicuro(x.id) || alimenti.has(x.id)) throw Error(`Alimento con codice non valido o doppio: ${x.id}`);
+    const n = testoImp(x.n, 80, `il nome dell'alimento ${x.id}`);
+    const v = { k: numImp(x.k, 0, 900, `kcal di ${n}`), p: numImp(x.p, 0, 100, `proteine di ${n}`), c: numImp(x.c, 0, 100, `carboidrati di ${n}`), g: numImp(x.g, 0, 100, `grassi di ${n}`) };
+    if (v.p + v.c + v.g > 101) throw Error(`I macro di ${n} superano 100 g.`);
+    alimenti.set(x.id, { id: 'imp-a-' + x.id, t: 'a', n, ...v, cat: CATEGORIE.includes(x.cat) ? x.cat : 'Altro', nt: String(x.nt || '').slice(0, 120) });
+  }
+  if (!alimenti.size) throw Error('Il piano non contiene alimenti.');
+  const riga = (r, dove) => {
+    const al = alimenti.get(r.a);
+    if (!al) throw Error(`${dove}: alimento sconosciuto "${r.a}".`);
+    return { n: al.n, q: numImp(r.q, 1, 2000, `grammi di ${al.n} in ${dove}`), k: al.k, p: al.p, c: al.c, g: al.g };
+  };
+  // ricette (e la loro versione PRE/POST come ricetta a parte)
+  const ricette = new Map(), voceRicette = [];
+  for (const r of dati.ricette || []) {
+    if (!/^[A-Z]\d{1,2}$/.test(String(r.id || '')) || ricette.has(r.id)) throw Error(`Ricetta con codice non valido o doppio: ${r.id}`);
+    const n = testoImp(r.n, 90, `il nome della ricetta ${r.id}`), dove = `${r.id} ${n}`;
+    const righe = (r.righe || []).map(x => riga(x, dove));
+    if (!righe.length) throw Error(`La ricetta ${dove} è vuota.`);
+    const base = { id: 'imp-r-' + r.id, t: 'r', n: `${r.id} · ${n}`, cod: r.id, cat: CAT_RICETTE.includes(r.cat) ? r.cat : 'pasto', min: Number(r.min) || 0,
+      tag: (r.tag || []).map(String).slice(0, 4), liberi: String(r.liberi || '').slice(0, 200), passi: (r.passi || []).map(s => String(s).slice(0, 400)).slice(0, 8), righe };
+    const out = { base, varianti: {} };
+    for (const v of r.varianti || []) {
+      const tipo = String(v.tipo || '').toUpperCase();
+      if (!['PRE', 'POST'].includes(tipo)) throw Error(`${dove}: la versione deve essere PRE o POST.`);
+      const vr = (v.righe || []).map(x => riga(x, `${dove} ${tipo}`));
+      if (!vr.length) throw Error(`${dove}: la versione ${tipo} è vuota.`);
+      out.varianti[tipo] = { ...base, id: `${base.id}-${tipo.toLowerCase()}`, n: `${r.id} ${tipo} · ${n}`, var: tipo, nota: String(v.nota || '').slice(0, 120), righe: vr };
+    }
+    ricette.set(r.id, out);
+    voceRicette.push(base, ...Object.values(out.varianti));
+  }
+  // giornate tipo: le righe sono quelle delle ricette consigliate, con la fascia del pasto
+  const giornate = [];
+  for (const g of dati.giornate || []) {
+    if (!idSicuro(g.id) || giornate.some(x => x.id === 'imp-gt-' + g.id)) throw Error(`Giornata con codice non valido o doppio: ${g.id}`);
+    const n = testoImp(g.n, 80, `il nome della giornata ${g.id}`);
+    if (!TURNI_PIANO.includes(g.turno)) throw Error(`${n}: turno non valido (apertura, chiusura, notte, off).`);
+    const pasti = [], righe = [];
+    for (const p of g.pasti || []) {
+      if (!SLOT_PASTI.includes(p.slot)) throw Error(`${n}: pasto "${p.slot}" non valido.`);
+      if (pasti.some(x => x.slot === p.slot)) throw Error(`${n}: due pasti nella stessa fascia (${p.slot}).`);
+      const r = ricette.get(p.ricetta);
+      if (!r) throw Error(`${n}: ricetta ${p.ricetta} non trovata.`);
+      const vers = p.variante ? r.varianti[String(p.variante).toUpperCase()] : r.base;
+      if (!vers) throw Error(`${n}: la ricetta ${p.ricetta} non ha la versione ${p.variante}.`);
+      for (const alt of p.alternative || []) if (!ricette.has(alt)) throw Error(`${n}: alternativa ${alt} non trovata.`);
+      pasti.push({ slot: p.slot, ora: String(p.ora || '').slice(0, 5), l: String(p.l || '').slice(0, 40), dove: String(p.dove || '').slice(0, 20), ric: p.ricetta, var: vers.var || '', alt: (p.alternative || []).slice(0, 5) });
+      for (const x of vers.righe) righe.push({ slot: p.slot, ...x, ric: p.ricetta });
+    }
+    if (!righe.length) throw Error(`La giornata ${n} è vuota.`);
+    giornate.push({ id: 'imp-gt-' + g.id, t: 'gt', n, tipo: g.turno === 'off' ? 'off' : 'on', turno: g.turno, allena: !!g.allena, orari: String(g.orari || '').slice(0, 120), nota: String(g.nota || '').slice(0, 300), pasti, righe });
+  }
+  // obiettivi (allenamento e riposo) e profilo
+  let target = null;
+  if (dati.obiettivi) {
+    const o = dati.obiettivi, al = o.allenamento || {}, ri = o.riposo || {};
+    target = { base: 'allenamento', kcal: numImp(al.kcal, 800, 6000, 'kcal allenamento'), kcalOff: numImp(ri.kcal, 800, 6000, 'kcal riposo'),
+      prot: numImp(al.prot, 0, 500, 'proteine'), carb: numImp(al.carb, 0, 1000, 'carboidrati allenamento'), carbOff: numImp(ri.carb, 0, 1000, 'carboidrati riposo'),
+      gras: numImp(al.gras, 0, 400, 'grassi allenamento'), grasOff: numImp(ri.gras, 0, 400, 'grassi riposo') };
+    if (al.acqua != null) target.acqua = numImp(al.acqua, 0, 10000, 'acqua allenamento');
+    if (ri.acqua != null) target.acquaOff = numImp(ri.acqua, 0, 10000, 'acqua riposo');
+  }
+  const profilo = dati.profilo?.altezza != null ? { altezza: numImp(dati.profilo.altezza, 100, 250, "l'altezza") } : null;
+  return { nome, alimenti: [...alimenti.values()], ricette: voceRicette, giornate, target, profilo, automatico: dati.automatico !== false && giornate.some(g => g.turno),
+    riepilogo: { alimenti: alimenti.size, ricette: ricette.size, versioni: voceRicette.length - ricette.size, giornate: giornate.map(g => ({ n: g.n, kcal: r0(somma(g.righe).k) })) } };
 }

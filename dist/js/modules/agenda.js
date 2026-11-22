@@ -12,8 +12,8 @@ import { calendarWeek, calendarHourHeight, minuteLabel, scalaOre, oreConImpegni,
 let selectedWeek, view = 'week', categoryFilter = '';
 const calendarScroll = new Map();
 import { bindCalendarInteractions } from './agendaInteractions.js?v=65';
-import { rigaAllenamentiFasce, rigaAllenamentiOre, bindAllenamentiAgenda } from './agendaAllenamento.js?v=2';
-import { nomeSettimana, dateSettimana } from '../utils/palestra.js?v=76';
+import { rigaAllenamentiFasce, rigaAllenamentiOre, bindAllenamentiAgenda } from './agendaAllenamento.js?v=3';
+import { nomeSettimana, dateSettimana } from '../utils/palestra.js?v=77';
 let calendarTimer, calendarDispose, lastMove;
 let previewWeek, previewDate, previewFocusDate;
 const dayLabel = date => new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'));
