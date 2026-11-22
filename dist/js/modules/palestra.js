@@ -4,12 +4,12 @@
 // ricerca e codice a barre. Allenamenti, schede, piano, misure e report usano ancora
 // la Forma classica finché non vengono rifatti. I dati sono sempre l'archivio di Forma.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=73';
+import * as P from '../services/palestraService.js?v=82';
 import { riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, ricette, porzioniDi, righePiano, allenamentoDelGiorno, ultimaSessione, sessioniDel, pesoAttuale, settimana, lunediDi, slotOra, macro, somma, prodottoDaOFF, di, PASTI, CATEGORIE } from '../utils/palestra.js?v=73';
 import { Scanner } from '../utils/scanner.js?v=73';
 import { formaClassica, bindFormaWorkspace } from './formaWorkspace.js?v=65';
 import { vistaPiano, vistaMisure, vistaReport, bindPiano } from './palestraPiano.js?v=73';
-import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=73';
+import { vistaAllena, vistaSchede, vistaSessione, bindAllena, bottoneInizia, inizia } from './palestraAllena.js?v=82';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';

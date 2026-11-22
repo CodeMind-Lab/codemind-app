@@ -3,8 +3,9 @@
 // 07-palestra-iphone.html). Le sessioni sono le voci t:'w' dell'archivio di Forma, le
 // schede t:'s', la settimana di allenamento t:'pa'.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=73';
+import * as P from '../services/palestraService.js?v=82';
 import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=73';
+import { ID_ABC, PAGINA_ABC, estraiDati } from '../utils/schedaAbc.js?v=82';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
@@ -36,6 +37,20 @@ export function bottoneInizia(a, d, sid, gn, cls = 'btn') {
   const aperta = di(a, 'w').find(w => !w.fine && w.d === d && w.sid === sid && w.gn === gn);
   return aperta ? `<a class="${cls}" href="#/sport/sessione/${esc(aperta.id)}">Riprendi</a>` : `<button class="${cls}" data-pal-inizia="${esc(sid)}|${esc(gn)}">Inizia</button>`;
 }
+// La Scheda A·B·C si legge dalla sua pagina una volta sola per apertura dell'app
+// (offline arriva dalla cache del service worker); poi si porta nell'archivio.
+let datiAbc = null;
+function caricaAbc() {
+  datiAbc ||= fetch(PAGINA_ABC, { cache: 'no-cache' }).then(r => { if (!r.ok) throw Error('Pagina Scheda A·B·C non raggiungibile.'); return r.text(); }).then(estraiDati).catch(e => { datiAbc = null; throw e; });
+  return datiAbc;
+}
+let sincronizzando = false;
+function sincronizzaAbc(render) {
+  if (sincronizzando) return;
+  sincronizzando = true;
+  caricaAbc().then(dati => { if (P.sincronizzaSchedaAbc(dati, oggi())) render(); }).catch(() => {}).finally(() => { sincronizzando = false; });
+}
+const primaAbc = l => [...l.filter(s => s.abc), ...l.filter(s => !s.abc)];
 export function inizia(d, sid, gn) {
   const w = P.avviaAllenamento(d, sid, gn);
   location.hash = '#/sport/sessione/' + w.id;
@@ -86,32 +101,38 @@ function csvAllena(a, d) {
 
 // ------------------------------------------------------------ Schede
 export function vistaSchede(a, d) {
-  const schede = schedeDi(a), piano = pianoAllenamento(a);
+  const schede = primaAbc(schedeDi(a)), piano = pianoAllenamento(a);
   if (!schede.some(s => s.id === schedaScelta)) { const inUso = piano.find(p => p.sid); schedaScelta = inUso?.sid || schede[0]?.id || ''; giornoScelto = 0; }
   const s = schede.find(x => x.id === schedaScelta), usate = new Set(piano.map(p => p.sid).filter(Boolean));
-  const elenco = `<div class="sch-elenco">${schede.map(x => `<button class="sch ${x.id === schedaScelta ? 'on' : ''}" data-pal-scheda="${esc(x.id)}"><b>${esc(x.n)}</b><small>${(x.giorni || []).length} giorni · ${(x.giorni || []).reduce((t, g) => t + (g.eser || []).length, 0)} esercizi</small>${usate.has(x.id) ? '<span class="pill p-c">in uso</span>' : ''}</button>`).join('')}<button class="nuova" data-pal-nuova-scheda>+ Nuova scheda</button></div>`;
+  const elenco = `<div class="sch-elenco">${schede.map(x => `<button class="sch ${x.id === schedaScelta ? 'on' : ''}" data-pal-scheda="${esc(x.id)}"><b>${esc(x.n)}</b><small>${x.abc ? `${esc(x.abc.nome)} · ${esc(x.abc.settimane)} · ` : ''}${(x.giorni || []).length} giorni · ${(x.giorni || []).reduce((t, g) => t + (g.eser || []).length, 0)} esercizi</small>${usate.has(x.id) ? '<span class="pill p-c">in uso</span>' : ''}</button>`).join('')}<button class="nuova" data-pal-nuova-scheda>+ Nuova scheda</button></div>`;
   let editor = '<section class="card"><p class="vuoto-giornata">Crea la tua prima scheda: poi aggiungi i giorni e gli esercizi.</p></section>';
   if (s) {
     const giorni = s.giorni || []; if (giornoScelto >= giorni.length) giornoScelto = Math.max(0, giorni.length - 1);
     const g = giorni[giornoScelto], eser = g?.eser || [], recDef = Number(a.settings?.recDefault) || 90;
-    const cella = (ei, campo, v, tipo = 'text', extra = '') => `<input class="cella" data-pal-es="${ei}" data-campo="${campo}" type="${tipo}" ${tipo === 'number' ? 'inputmode="decimal" step="any" min="0"' : ''} value="${esc(v ?? '')}" ${extra}>`;
+    const abc = !!s.abc, fissa = v => `<span class="cella-fissa">${esc(v ?? '') || '—'}</span>`;
+    const cella = (ei, campo, v, tipo = 'text', extra = '') => abc && campo !== 'peso' ? fissa(campo === 'rec' && v ? fmtRec(v) : v) : `<input class="cella" data-pal-es="${ei}" data-campo="${campo}" type="${tipo}" ${tipo === 'number' ? 'inputmode="decimal" step="any" min="0"' : ''} value="${esc(v ?? '')}" ${extra}>`;
+    const ordine = ei => abc ? '<td></td>' : `<td class="ordine"><button data-pal-su="${ei}" aria-label="Sposta su">↑</button><button data-pal-giu="${ei}" aria-label="Sposta giù">↓</button></td>`;
+    const togli = ei => abc ? '<td></td>' : `<td class="n"><button class="x" data-pal-togli-es="${ei}" aria-label="Togli">✕</button></td>`;
     const righe = eser.map((e, ei) => isCardio(e)
-      ? `<tr><td class="ordine"><button data-pal-su="${ei}" aria-label="Sposta su">↑</button><button data-pal-giu="${ei}" aria-label="Sposta giù">↓</button></td><td>${cella(ei, 'n', e.n, 'text', 'list="pal-nomi-es"')}<span class="gr">Cardio</span></td><td class="n">—</td><td class="n">${cella(ei, 'min', e.min, 'number', 'placeholder="min"')}</td><td class="n">—</td><td class="n">—</td><td>${cella(ei, 'note', e.note)}</td><td class="n"><button class="x" data-pal-togli-es="${ei}" aria-label="Togli">✕</button></td></tr>`
-      : `<tr><td class="ordine"><button data-pal-su="${ei}" aria-label="Sposta su">↑</button><button data-pal-giu="${ei}" aria-label="Sposta giù">↓</button></td><td>${cella(ei, 'n', e.n, 'text', 'list="pal-nomi-es"')}<span class="gr">${esc(nomeGruppo(e.gruppo || gruppoDi(e.n)))}</span></td><td class="n">${cella(ei, 'serie', e.serie ?? 3, 'number')}</td><td class="n">${cella(ei, 'rip', e.rip ?? '')}</td><td class="n">${cella(ei, 'peso', e.peso ?? '', 'number')}</td><td class="n">${cella(ei, 'rec', e.rec ?? '', 'number', `placeholder="${recDef}"`)}</td><td>${cella(ei, 'note', e.note)}</td><td class="n"><button class="x" data-pal-togli-es="${ei}" aria-label="Togli">✕</button></td></tr>`).join('');
+      ? `<tr>${ordine(ei)}<td>${cella(ei, 'n', e.n, 'text', 'list="pal-nomi-es"')}<span class="gr">Cardio</span></td><td class="n">—</td><td class="n">${cella(ei, 'min', e.min, 'number', 'placeholder="min"')}</td><td class="n">—</td><td class="n">—</td><td>${cella(ei, 'note', e.note)}</td>${togli(ei)}</tr>`
+      : `<tr>${ordine(ei)}<td>${cella(ei, 'n', e.n, 'text', 'list="pal-nomi-es"')}<span class="gr">${esc(nomeGruppo(e.gruppo || gruppoDi(e.n)))}</span></td><td class="n">${cella(ei, 'serie', e.serie ?? 3, 'number')}</td><td class="n">${cella(ei, 'rip', e.rip ?? '')}</td><td class="n">${cella(ei, 'peso', e.peso ?? '', 'number')}</td><td class="n">${cella(ei, 'rec', e.rec ?? '', 'number', `placeholder="${recDef}"`)}</td><td>${cella(ei, 'note', e.note)}</td>${togli(ei)}</tr>`).join('');
     const serie = eser.reduce((t, e) => t + (isCardio(e) ? 0 : Number(e.serie) || 0), 0);
     const minuti = eser.reduce((t, e) => t + (isCardio(e) ? Number(e.min) || 0 : (Number(e.serie) || 3) * (recSecondi(e.rec, recDef) + 45) / 60), 0);
-    editor = `<section class="card"><div class="card-testa"><h2>${esc(s.n)}</h2><span class="link-gruppo"><button class="link" data-pal-rinomina-scheda>Rinomina</button> · <button class="link" data-pal-duplica-scheda>Duplica</button> · <button class="link" data-pal-elimina-scheda>Elimina</button></span></div>
-      <div class="giorni-sch">${giorni.map((x, i) => `<button class="chip ${i === giornoScelto ? 'on' : ''}" data-pal-giorno-sch="${i}">${esc(x.n)}</button>`).join('')}<button class="chip add" data-pal-nuovo-giorno>+ Giorno</button></div>
-      ${g ? `<div class="barra-strumenti"><button class="link" data-pal-rinomina-giorno>Rinomina giorno</button><button class="link" data-pal-elimina-giorno>Elimina giorno</button><span class="spazio"></span><span class="subtext piccolo">Recupero in secondi · le modifiche si salvano da sole</span></div>
+    editor = `<section class="card"><div class="card-testa"><h2>${esc(s.n)}</h2>${abc ? `<span class="link-gruppo"><a class="link" href="${PAGINA_ABC}">Apri la pagina</a> · <button class="link" data-pal-duplica-scheda>Duplica</button></span></div>
+      <p class="subtext abc-nota">Sincronizzata con la Scheda A·B·C: ora è <b>${esc(s.abc.nome)}</b> (${esc(s.abc.settimane)}) e cambia da sola quando cambia la fase. Qui scrivi solo i kg; per modificarla liberamente, duplicala.</p>` : `<span class="link-gruppo"><button class="link" data-pal-rinomina-scheda>Rinomina</button> · <button class="link" data-pal-duplica-scheda>Duplica</button> · <button class="link" data-pal-elimina-scheda>Elimina</button></span></div>`}
+      <div class="giorni-sch">${giorni.map((x, i) => `<button class="chip ${i === giornoScelto ? 'on' : ''}" data-pal-giorno-sch="${i}">${esc(x.n)}</button>`).join('')}${abc ? '' : '<button class="chip add" data-pal-nuovo-giorno>+ Giorno</button>'}</div>
+      ${g ? `<div class="barra-strumenti">${abc ? '' : '<button class="link" data-pal-rinomina-giorno>Rinomina giorno</button><button class="link" data-pal-elimina-giorno>Elimina giorno</button>'}<span class="spazio"></span><span class="subtext piccolo">${abc ? 'Kg: si salvano da soli e restano al cambio di fase' : 'Recupero in secondi · le modifiche si salvano da sole'}</span></div>
       <div class="table-wrap"><table class="dati pal-editor"><thead><tr><th></th><th>Esercizio</th><th class="n">Serie</th><th class="n">Rip</th><th class="n">Kg</th><th class="n">Rec.</th><th>Note</th><th></th></tr></thead><tbody>${righe || '<tr><td colspan="8" class="vuoto-tabella">Nessun esercizio: aggiungilo qui sotto.</td></tr>'}</tbody>
-      ${eser.length ? `<tfoot><tr><td></td><td>${eser.length} esercizi</td><td class="n">${serie}</td><td colspan="4" class="gr">circa ${Math.round(minuti / 5) * 5} min</td><td></td></tr></tfoot>` : ''}</table></div>
-      <form class="agg-es" id="pal-agg-es"><input name="nome" list="pal-nomi-es" placeholder="Aggiungi esercizio (es. rematore, squat)…" autocomplete="off"><button class="btn" type="submit">Aggiungi</button>${eser.length ? bottoneInizia(a, oggi(), s.id, g.n, 'btn pal-inizia-btn').replace('>Inizia<', `>Inizia ${esc(g.n)}<`) : ''}</form>` : ''}
+      ${eser.length ? `<tfoot><tr><td></td><td>${eser.length} esercizi</td><td class="n">${serie}</td><td colspan="4" class="gr">circa ${abc && Number(s.abc.durate?.[g.n[0]]) ? Number(s.abc.durate[g.n[0]]) : Math.round(minuti / 5) * 5} min${abc ? ' nel piano' : ''}</td><td></td></tr></tfoot>` : ''}</table></div>
+      <form class="agg-es" id="pal-agg-es">${abc ? '<span class="spazio"></span>' : '<input name="nome" list="pal-nomi-es" placeholder="Aggiungi esercizio (es. rematore, squat)…" autocomplete="off"><button class="btn" type="submit">Aggiungi</button>'}${eser.length ? bottoneInizia(a, oggi(), s.id, g.n, 'btn pal-inizia-btn').replace('>Inizia<', `>Inizia ${esc(g.n)}<`) : ''}</form>` : ''}
       <datalist id="pal-nomi-es">${nomiEsercizi(a).map(n => `<option value="${esc(n)}">`).join('')}</datalist></section>`;
   }
-  const lun = lunediDi(d), opzioni = schede.flatMap(x => (x.giorni || []).map(gg => [x.id + '|' + gg.n, (schede.length > 1 ? x.n + ' · ' : '') + gg.n]));
-  const settimana = `<section class="card"><div class="card-testa"><h2>Settimana di allenamento</h2><span class="gr">il turno è quello di questa settimana</span></div>
+  const lun = lunediDi(d), conGiorni = schede.filter(x => (x.giorni || []).length);
+  const opzioni = v => conGiorni.map(x => `<optgroup label="${esc(x.n)}">${x.giorni.map(gg => { const k = x.id + '|' + gg.n; return `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(gg.n)}</option>`; }).join('')}</optgroup>`).join('');
+  const settimana = `<section class="card"><div class="card-testa"><h2>Settimana di allenamento</h2><span class="gr">scegli per ogni giorno la scheda (es. A · Forza) · il turno è quello di questa settimana</span></div>
     <div class="sett7">${piano.map((p, i) => { const data = shiftDate(lun, i), t = turnoDi(a, data, state.scheduleEntries, tz()), v = p.sid ? p.sid + '|' + p.gn : '';
-      return `<label class="${v ? 'a' : ''}"><b>${NOMI_GIORNI[i]}</b><select data-pal-sett-gs="${GIORNI_SETT[i]}"><option value="">Riposo</option>${opzioni.map(([k, n]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select><em>${t ? `<span class="pill ${PILL[t] || 'p-x'}">${esc(t === 'off' ? 'OFF' : shiftPresets[t]?.label || 'Turno')}</span>` : 'turno —'}</em></label>`; }).join('')}</div></section>`;
+      const nomeScheda = p.sid ? schede.find(x => x.id === p.sid)?.n : '';
+      return `<label class="${v ? 'a' : ''}" title="${esc(nomeScheda ? nomeScheda + ' · ' + p.gn : 'Riposo')}"><b>${NOMI_GIORNI[i]}</b><select data-pal-sett-gs="${GIORNI_SETT[i]}"><option value="">Riposo</option>${opzioni(v)}</select><em>${t ? `<span class="pill ${PILL[t] || 'p-x'}">${esc(t === 'off' ? 'OFF' : shiftPresets[t]?.label || 'Turno')}</span>` : 'turno —'}</em></label>`; }).join('')}</div></section>`;
   return `<div class="layout-schede">${elenco}<div class="pal-impila">${editor}${settimana}</div></div>`;
 }
 
@@ -182,6 +203,7 @@ function chiediNome(titolo, etichetta, valore, salva) {
 
 export function bindAllena(pagina, render, d) {
   const a = P.archivio(), su = (sel, fn) => pagina.querySelectorAll(sel).forEach(fn);
+  if (a) sincronizzaAbc(render);
   // Allenamenti
   su('[data-pal-periodo]', b => b.onclick = () => { periodo = b.dataset.palPeriodo; render(); });
   su('[data-pal-filtro-scheda]', s => s.onchange = () => { filtroScheda = s.value; render(); });

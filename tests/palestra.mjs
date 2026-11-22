@@ -5,7 +5,7 @@ globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
 const { macro, somma, riepilogoGiorno, turnoDi, obiettivoKcal, cfg, catalogo, cerca, recenti, settimana, pesoAttuale, allenamentoDelGiorno, righePiano, gsDiData, lunediDi, prodottoDaOFF, slotOra } = await import('../dist/js/utils/palestra.js?v=73');
 const { state } = await import('../dist/js/services/store.js?v=65');
-const svc = await import('../dist/js/services/palestraService.js?v=73');
+const svc = await import('../dist/js/services/palestraService.js?v=82');
 
 // --- calcoli puri
 assert.deepEqual(macro({ q: 150, k: 100, p: 23, c: 0, g: 1.2 }), { k: 150, p: 34.5, c: 0, g: 1.7999999999999998 });

@@ -680,6 +680,12 @@ table.pal-editor td:nth-child(2) .cella { min-width: 130px; font-weight: 600; ba
 table.pal-editor td:nth-child(2) .gr { display: block; }
 table.pal-editor td:nth-child(7) .cella { min-width: 80px; }
 table.pal-editor td { white-space: normal; }
+/* Scheda A·B·C: righe in sola lettura (solo i kg si scrivono) e nota della fase */
+table.pal-editor .cella-fissa { display: block; font-size: 13.5px; padding: 6px 4px; color: var(--testo); }
+table.pal-editor td:nth-child(2) .cella-fissa { font-weight: 600; padding-left: 0; }
+table.pal-editor td.n .cella-fissa { text-align: center; }
+table.pal-editor td:nth-child(7) .cella-fissa { color: var(--testo-2); font-size: 12.5px; }
+.abc-nota { margin: -4px 20px 12px; font-size: 13px; }
 .ordine button { padding: 2px 2px; }
 .ordine { white-space: nowrap; width: 54px; }
 .ordine button, table.pal-editor .x { border: 0; background: none; color: var(--testo-3); cursor: pointer; font-size: 14px; padding: 2px 4px; }

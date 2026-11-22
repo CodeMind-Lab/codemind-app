@@ -8,6 +8,7 @@
 import { state } from './store.js?v=65';
 import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
+import { ID_ABC, contenutoAbc, faseDelGiorno, uguale } from '../utils/schedaAbc.js?v=82';
 import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=73';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
@@ -280,6 +281,9 @@ export const eliminaSessione = wid => modifica((a, ora) => togli(a, wid, ora));
 
 // ------------------------------------------------------------ schede (t:'s')
 function schedaIn(a, sid) { const s = a.items.find(x => x.id === sid && x.t === 's'); if (!s) throw Error('Scheda non trovata.'); s.giorni = s.giorni || []; return s; }
+// La Scheda A·B·C arriva dalla sua pagina: qui si cambiano solo i kg.
+const BLOCCATA = 'La Scheda A·B·C si aggiorna dalla sua pagina: qui puoi cambiare solo i kg. Per modificarla liberamente, duplicala.';
+function modificabile(s) { if (s.abc) throw Error(BLOCCATA); return s; }
 function giornoScheda(s, gi) { const g = s.giorni[gi]; if (!g) throw Error('Giorno non trovato.'); g.eser = g.eser || []; return g; }
 export function creaScheda(nome) {
   const n = testoBreve(nome, 80, 'il nome della scheda');
@@ -287,18 +291,18 @@ export function creaScheda(nome) {
 }
 export function rinominaScheda(sid, nome) {
   const n = testoBreve(nome, 80, 'il nome della scheda');
-  return modifica((a, ora) => { const s = schedaIn(a, sid); s.n = n; s.updatedAt = ora; for (const w of a.items.filter(x => x.t === 'w' && x.sid === sid && !x.fine)) { w.sn = n; w.updatedAt = ora; } });
+  return modifica((a, ora) => { const s = modificabile(schedaIn(a, sid)); s.n = n; s.updatedAt = ora; for (const w of a.items.filter(x => x.t === 'w' && x.sid === sid && !x.fine)) { w.sn = n; w.updatedAt = ora; } });
 }
 export function duplicaScheda(sid) {
-  return modifica((a, ora) => { const s = schedaIn(a, sid), c = { ...structuredClone(s), id: idNuovo(), n: (s.n + ' (copia)').slice(0, 80), updatedAt: ora }; a.items.push(c); return c; });
+  return modifica((a, ora) => { const s = schedaIn(a, sid), c = { ...structuredClone(s), id: idNuovo(), n: (s.n + ' (copia)').slice(0, 80), updatedAt: ora }; delete c.abc; a.items.push(c); return c; });
 }
 // Il piano della settimana che puntava alla scheda torna a "riposo"; le sessioni fatte restano.
 export function eliminaScheda(sid) {
-  return modifica((a, ora) => { togli(a, sid, ora); for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid)) { p.sid = ''; p.gn = ''; p.updatedAt = ora; } });
+  return modifica((a, ora) => { modificabile(schedaIn(a, sid)); togli(a, sid, ora); for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid)) { p.sid = ''; p.gn = ''; p.updatedAt = ora; } });
 }
 export function aggiungiGiorno(sid, nome) {
   return modifica((a, ora) => {
-    const s = schedaIn(a, sid), n = String(nome || '').trim().slice(0, 60) || `Giorno ${s.giorni.length + 1}`;
+    const s = modificabile(schedaIn(a, sid)), n = String(nome || '').trim().slice(0, 60) || `Giorno ${s.giorni.length + 1}`;
     if (s.giorni.some(g => g.n === n)) throw Error('Questa scheda ha già un giorno con questo nome.');
     s.giorni.push({ n, eser: [] }); s.updatedAt = ora; return s.giorni.length - 1;
   });
@@ -306,7 +310,7 @@ export function aggiungiGiorno(sid, nome) {
 export function rinominaGiorno(sid, gi, nome) {
   const n = testoBreve(nome, 60, 'il nome del giorno');
   return modifica((a, ora) => {
-    const s = schedaIn(a, sid), g = giornoScheda(s, gi), vecchio = g.n;
+    const s = modificabile(schedaIn(a, sid)), g = giornoScheda(s, gi), vecchio = g.n;
     if (s.giorni.some((x, i) => i !== gi && x.n === n)) throw Error('Questa scheda ha già un giorno con questo nome.');
     g.n = n; s.updatedAt = ora;
     for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid && x.gn === vecchio)) { p.gn = n; p.updatedAt = ora; }
@@ -314,7 +318,7 @@ export function rinominaGiorno(sid, gi, nome) {
 }
 export function eliminaGiorno(sid, gi) {
   return modifica((a, ora) => {
-    const s = schedaIn(a, sid), g = giornoScheda(s, gi);
+    const s = modificabile(schedaIn(a, sid)), g = giornoScheda(s, gi);
     s.giorni.splice(gi, 1); s.updatedAt = ora;
     for (const p of a.items.filter(x => x.t === 'pa' && x.sid === sid && x.gn === g.n)) { p.sid = ''; p.gn = ''; p.updatedAt = ora; }
   });
@@ -322,7 +326,7 @@ export function eliminaGiorno(sid, gi) {
 export function aggiungiEsercizio(sid, gi, nome) {
   const n = testoBreve(nome, 120, "il nome dell'esercizio");
   return modifica((a, ora) => {
-    const s = schedaIn(a, sid), g = giornoScheda(s, gi), gruppo = gruppoDi(n);
+    const s = modificabile(schedaIn(a, sid)), g = giornoScheda(s, gi), gruppo = gruppoDi(n);
     g.eser.push(isCardio({ n, gruppo }) ? { n, gruppo, cardio: true, min: 30, km: '' } : { n, gruppo, serie: 3, rip: 10, peso: '', rec: recDi(a) });
     s.updatedAt = ora;
   });
@@ -331,6 +335,7 @@ export function aggiornaEsercizio(sid, gi, ei, campi) {
   return modifica((a, ora) => {
     const s = schedaIn(a, sid), e = giornoScheda(s, gi).eser[ei];
     if (!e) throw Error('Esercizio non trovato.');
+    if (s.abc && Object.keys(campi).some(k => k !== 'peso')) throw Error(BLOCCATA);
     if ('n' in campi) { e.n = testoBreve(campi.n, 120, "il nome dell'esercizio"); e.gruppo = gruppoDi(e.n); }
     if ('serie' in campi) e.serie = Math.round(numero(campi.serie, 1, 20, 'le serie'));
     if ('rip' in campi) e.rip = String(campi.rip ?? '').trim().slice(0, 20);
@@ -343,12 +348,12 @@ export function aggiornaEsercizio(sid, gi, ei, campi) {
 }
 export function spostaEsercizio(sid, gi, ei, verso) {
   return modifica((a, ora) => {
-    const s = schedaIn(a, sid), l = giornoScheda(s, gi).eser, j = ei + verso;
+    const s = modificabile(schedaIn(a, sid)), l = giornoScheda(s, gi).eser, j = ei + verso;
     if (j < 0 || j >= l.length) return;
     [l[ei], l[j]] = [l[j], l[ei]]; s.updatedAt = ora;
   });
 }
-export const togliEsercizio = (sid, gi, ei) => modifica((a, ora) => { const s = schedaIn(a, sid); giornoScheda(s, gi).eser.splice(ei, 1); s.updatedAt = ora; });
+export const togliEsercizio = (sid, gi, ei) => modifica((a, ora) => { const s = modificabile(schedaIn(a, sid)); giornoScheda(s, gi).eser.splice(ei, 1); s.updatedAt = ora; });
 
 // ------------------------------------------------------------ settimana di allenamento (t:'pa')
 export function impostaGiornoSettimana(gs, sid, gn) {
@@ -359,6 +364,27 @@ export function impostaGiornoSettimana(gs, sid, gn) {
     if (!p) { p = { id: 'allena-' + gs, t: 'pa', gs }; a.items.push(p); delete a.graves[p.id]; }
     p.sid = sid || ''; p.gn = sid ? gn : ''; p.updatedAt = ora;
   });
+}
+
+// ------------------------------------------------------------ Scheda A·B·C
+// Porta nell'archivio la fase del calendario della pagina A·B·C (dati = estraiDati(html)).
+// Scrive solo se qualcosa è cambiato; restituisce true quando ha scritto. Il contenuto
+// dipende solo dai dati e dalla data, così due dispositivi scrivono la stessa cosa.
+export function sincronizzaSchedaAbc(dati, d) {
+  const a = archivio();
+  if (!a || state.mode === 'signed_out') return false;
+  const fase = faseDelGiorno(dati, data(d)), prima = a.items.find(x => x.id === ID_ABC);
+  const voluto = contenutoAbc(fase, prima);
+  if (prima && prima.t === 's' && uguale({ n: prima.n, abc: prima.abc, giorni: prima.giorni }, voluto)) return false;
+  modifica((x, ora) => {
+    const i = x.items.findIndex(v => v.id === ID_ABC);
+    const s = { id: ID_ABC, t: 's', ...voluto, updatedAt: ora };
+    if (i >= 0) x.items[i] = s; else x.items.push(s);
+    delete x.graves[ID_ABC];
+    // Un giorno della settimana che puntava a un giorno sparito dalla scheda torna a riposo.
+    for (const p of x.items.filter(v => v.t === 'pa' && v.sid === ID_ABC && !s.giorni.some(g => g.n === v.gn))) { p.sid = ''; p.gn = ''; p.updatedAt = ora; }
+  });
+  return true;
 }
 
 // ------------------------------------------------------------ giornate tipo (t:'gt') e piano (t:'p')
