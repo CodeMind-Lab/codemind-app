@@ -1,8 +1,8 @@
 // Palestra, terza tappa: Piano settimanale dei pasti (giornate tipo, settimana, lista della
 // spesa), Misure e Report. Stesso stile Bento delle altre schede della sezione.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=83';
-import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=75';
+import * as P from '../services/palestraService.js?v=84';
+import { giornate, pianoPasti, spesa, misure, reportSettimane, somma, macro, turnoDi, lunediDi, cfg, pesoAttuale, GIORNI_SETT, NOMI_GIORNI, PASTI, di } from '../utils/palestra.js?v=76';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';

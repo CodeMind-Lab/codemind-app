@@ -296,3 +296,13 @@ export function dateSettimana(lunedi) {
   const dom = shiftDate(lunedi, 6), g = d => Number(d.slice(8));
   return lunedi.slice(5, 7) === dom.slice(5, 7) ? `${g(lunedi)}–${g(dom)} ${mese(dom)}` : `${g(lunedi)} ${mese(lunedi)} – ${g(dom)} ${mese(dom)}`;
 }
+
+// Titolo dell'impegno Palestra in Agenda quando cambia l'allenamento del giorno. Si aggiorna
+// solo se è "Palestra" o "Palestra · <un giorno di scheda>": un titolo scritto a mano resta.
+// Restituisce il nuovo titolo, o null se non va toccato.
+export function titoloPalestra(titolo, nomiGiorni, gn) {
+  const m = /^Palestra(?:\s*·\s*(.+))?$/.exec(String(titolo || '').trim());
+  if (!m || (m[1] && !nomiGiorni.includes(m[1].trim()))) return null;
+  const nuovo = gn ? `Palestra · ${gn}` : 'Palestra';
+  return nuovo === String(titolo).trim() ? null : nuovo;
+}

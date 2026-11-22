@@ -945,3 +945,38 @@ html[data-theme="dark"] .sa-stato .link { color: var(--azzurro); }
   .sa-stato > span:not(.pill):not(.spazio) { flex-basis: 100%; }
   .sa-stato.propria .link { flex: 1 1 0; padding: 8px 6px; border-radius: 10px; text-align: center; }
 }
+/* Agenda ↔ Palestra: riga Allenamento (viste Fasce e Ore, settimana di Oggi) e finestra di scelta */
+.allena-chip { display: block; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.allena-chip.is-previsto { background: #FFE3DD; color: #B3321C; }
+.allena-chip.is-fatto { background: #DDF3EE; color: #15803D; }
+.allena-chip.is-corso { background: var(--corallo); color: #fff; }
+.allena-chip.is-riposo { background: transparent; color: var(--testo-3); font-weight: 500; border: 1px dashed var(--riga-forte); }
+html[data-theme="dark"] .allena-chip.is-previsto { background: #3A1C18; color: #FFB4A6; }
+html[data-theme="dark"] .allena-chip.is-fatto { background: #12302A; color: #6EE7B7; }
+.allena-chip:hover { filter: brightness(.96); } .allena-chip:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.fasce-cella.allena { min-height: 0; padding: 2px 4px; background: transparent; }
+.fasce-cella.allena.is-today { background: transparent; }
+.fasce-etichetta.allena { background: #FFF1EE; } html[data-theme="dark"] .fasce-etichetta.allena { background: #2A1714; }
+.calendar-corner.allena-angolo { border-top: 1px solid var(--line); }
+.calendar-allena { padding: 4px 5px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 0; }
+.calendar-allena:last-child { border-right: 0; }
+.calendar-allena.is-today { background: var(--accent-soft); }
+.calendar-allena .allena-chip { min-height: 26px; padding: 4px; font-size: 11px; text-align: center; }
+.allena-modale { display: grid; gap: 12px; }
+.allena-info { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--testo-2); }
+.allena-fatto { margin: 0; padding: 8px 12px; border-radius: 10px; background: #DDF3EE; color: #15803D; font-size: 13px; }
+.allena-opzioni { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.allena-opz { display: grid; gap: 2px; align-content: center; min-height: 56px; padding: 10px 12px; border: 1.5px solid var(--riga); border-radius: 12px; background: var(--pannello); color: var(--testo); font: inherit; text-align: left; cursor: pointer; }
+.allena-opz b { font-size: 15px; } .allena-opz small { font-size: 12px; color: var(--testo-3); }
+.allena-opz:hover { border-color: var(--riga-forte); }
+.allena-opz.on { border-color: var(--corallo); background: #FFE3DD; } html[data-theme="dark"] .allena-opz.on { background: #3A1C18; }
+.allena-opz:first-child.on { border-color: var(--testo-2); background: var(--pannello-2); }
+.allena-azioni { flex-wrap: wrap; gap: 8px; } .allena-azioni a.btn { text-decoration: none; }
+@media (max-width: 600px) { .allena-opzioni { grid-template-columns: 1fr 1fr; } .allena-azioni .btn { flex: 1 1 auto; text-align: center; } }
+.allena-chip small { margin-left: 6px; font-weight: 500; opacity: .8; }
+.calendar-allena .allena-chip small { display: none; }
+.allena-agenda { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--pannello-2); font-size: 13px; color: var(--testo-2); }
+.allena-agenda b { color: var(--testo); } .allena-agenda .link { font: inherit; font-weight: 600; color: var(--teal); background: none; border: 0; padding: 0; cursor: pointer; }
+html[data-theme="dark"] .allena-agenda .link { color: var(--azzurro); }
+.fasce-etichetta.allena .corto { display: none; }
+@media (max-width: 600px) { .fasce-etichetta.allena .lungo, .fasce-etichetta.allena small { display: none; } .fasce-etichetta.allena .corto { display: inline; } }

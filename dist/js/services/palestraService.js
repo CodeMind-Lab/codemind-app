@@ -10,7 +10,7 @@ import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
 import { ID_ABC, contenutoAbc, faseDelGiorno, uguale } from '../utils/schedaAbc.js?v=82';
 import { shiftDate } from '../utils/dates.js?v=65';
-import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=75';
+import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=76';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
 export const statoSalvataggio = { stato: 'salvato', messaggio: '' };
@@ -384,6 +384,11 @@ export function impostaSettimana(lunedi, giorni) {
   const date = giorniDi(lunedi);
   if (!Array.isArray(giorni) || giorni.length !== 7) throw Error('Servono i 7 giorni della settimana.');
   return modifica((a, ora) => date.forEach((d, i) => giornoData(a, d, giorni[i]?.sid || '', giorni[i]?.gn || '', ora)));
+}
+// Un giorno torna come la settimana tipo (toglie la scelta fatta solo per quella data).
+export function togliGiornoData(d) {
+  if (!DATA.test(d)) throw Error('Data non valida.');
+  return modifica((a, ora) => { for (const p of a.items.filter(x => x.t === 'pa' && x.d === d)) togli(a, p.id, ora); });
 }
 // La settimana torna come la settimana tipo.
 export function tornaSettimanaTipo(lunedi) {

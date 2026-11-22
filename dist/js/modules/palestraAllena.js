@@ -3,8 +3,8 @@
 // 07-palestra-iphone.html). Le sessioni sono le voci t:'w' dell'archivio di Forma, le
 // schede t:'s', la settimana di allenamento t:'pa'.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=83';
-import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, pianoSettimana, nomeSettimana, dateSettimana, proponiSettimana, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=75';
+import * as P from '../services/palestraService.js?v=84';
+import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, pianoSettimana, nomeSettimana, dateSettimana, proponiSettimana, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=76';
 import { ID_ABC, PAGINA_ABC, estraiDati } from '../utils/schedaAbc.js?v=82';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';

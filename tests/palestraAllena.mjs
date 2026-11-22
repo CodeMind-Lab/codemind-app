@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
-const U = await import('../dist/js/utils/palestra.js?v=75');
+const U = await import('../dist/js/utils/palestra.js?v=76');
 const { state } = await import('../dist/js/services/store.js?v=65');
-const P = await import('../dist/js/services/palestraService.js?v=83');
+const P = await import('../dist/js/services/palestraService.js?v=84');
 
 assert.equal(U.gruppoDi('Squat con bilanciere'), 'Gambe (Legs)'); assert.equal(U.nomeGruppo('Gambe (Legs)'), 'Gambe'); assert.equal(U.gruppoDi('Mio esercizio'), 'Altro');
 assert.equal(U.isCardio({ n: 'Corsa' }), true); assert.equal(U.isCardio({ n: 'Panca' }), false); assert.equal(U.isCardio({ n: 'Cyclette leggera' }), true);
@@ -65,6 +65,31 @@ assert.equal(U.pianoSettimana(P.archivio(), '2026-11-23').some(p => p.proprio), 
 assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-12-04'), null, 'le altre settimane organizzate a parte restano');
 P.tornaSettimanaTipo('2026-11-30'); P.impostaGiornoSettimana('ven', s.id, 'Push');
 assert.equal(P.archivio().items.filter(x => x.t === 'pa' && x.d).length, 0);
+// Titolo dell'impegno Palestra in Agenda: cambia solo se è generico o un giorno di scheda.
+const nomiG = ['A · Forza', 'B · Volume'];
+assert.equal(U.titoloPalestra('Palestra', nomiG, 'A · Forza'), 'Palestra · A · Forza');
+assert.equal(U.titoloPalestra('Palestra · A · Forza', nomiG, 'B · Volume'), 'Palestra · B · Volume');
+assert.equal(U.titoloPalestra('Palestra · A · Forza', nomiG, ''), 'Palestra');
+assert.equal(U.titoloPalestra('Palestra · A · Forza', nomiG, 'A · Forza'), null);
+assert.equal(U.titoloPalestra('Palestra · gambe con Marco', nomiG, 'A · Forza'), null);
+assert.equal(U.titoloPalestra('Corsa al parco', nomiG, 'A · Forza'), null);
+// Agenda: la riga Allenamento legge lo stesso piano e scrive solo per la data scelta.
+{
+  globalThis.location ??= { hash: '' };
+  const AG = await import('../dist/js/modules/agendaAllenamento.js?v=2');
+  const giorni = Array.from({ length: 7 }, (_, i) => `2026-11-${16 + i}`);
+  const riga = () => [...AG.rigaAllenamentiFasce(giorni, '2026-11-22').matchAll(/data-agenda-allena="([\d-]+)"[^>]*>([^<]*)</g)].map(m => [m[1].slice(8), m[2]]);
+  assert.equal(riga().length, 7);
+  assert.deepEqual(riga().find(x => x[0] === '20'), ['20', 'Push'], 'venerdì dalla settimana tipo');
+  P.impostaGiornoData('2026-11-18', s.id, 'Pull A');
+  assert.deepEqual(riga().find(x => x[0] === '18'), ['18', 'Pull A'], 'scelta dall\'Agenda');
+  assert.equal(U.pianoSettimana(P.archivio(), '2026-11-16')[2].gn, 'Pull A', 'la stessa scelta in Palestra');
+  assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-11-25'), null, 'solo quella data, non ogni mercoledì');
+  P.togliGiornoData('2026-11-18');
+  assert.deepEqual(riga().find(x => x[0] === '18'), ['18', 'Riposo']);
+  assert.throws(() => P.togliGiornoData('ieri'), /Data non valida/);
+  assert.match(AG.rigaAllenamentiOre(giorni, '2026-11-22'), /calendar-allena is-today/);
+}
 // Sessione dal giorno della scheda: serie pronte con ripetizioni minime e peso.
 const w = P.avviaAllenamento('2026-11-20', s.id, 'Push');
 assert.equal(w.eser.length, 3); assert.equal(w.eser[1].sets.length, 4); assert.deepEqual(w.eser[1].sets[0], { r: 8, w: 60, ok: false }); assert.deepEqual(w.eser[2].sets, []);

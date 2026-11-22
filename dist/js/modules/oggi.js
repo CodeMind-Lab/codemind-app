@@ -5,11 +5,12 @@
 // obiettivi della settimana, pasti e allenamento. Le scadenze stanno nelle sezioni.
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
-import { archivio } from '../services/palestraService.js?v=83';
-import { riepilogoGiorno, allenamentoDelGiorno } from '../utils/palestra.js?v=75';
-import { entryForm, weekCompatta } from './agenda.js?v=65';
-import { cambiaAcqua } from '../services/palestraService.js?v=83';
-import { bottoneInizia, inizia } from './palestraAllena.js?v=84';
+import { archivio } from '../services/palestraService.js?v=84';
+import { riepilogoGiorno, allenamentoDelGiorno } from '../utils/palestra.js?v=76';
+import { entryForm, weekCompatta } from './agenda.js?v=67';
+import { bindAllenamentiAgenda } from './agendaAllenamento.js?v=2';
+import { cambiaAcqua } from '../services/palestraService.js?v=84';
+import { bottoneInizia, inizia } from './palestraAllena.js?v=85';
 import { universityData } from '../utils/university.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';
@@ -162,6 +163,7 @@ export function oggiPage() {
 }
 
 export function bindOggi(render) {
+  bindAllenamentiAgenda(render, entryForm);
   document.querySelectorAll('[data-oggi-acqua]').forEach(b => b.onclick = () => { try { cambiaAcqua(today(state.timezone), Number(b.dataset.oggiAcqua)); render(); } catch (e) { toast(e.message); } });
   document.querySelectorAll('.oggi [data-pal-inizia]').forEach(b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(today(state.timezone), sid, gn.join('|')); } catch (e) { toast(e.message); } });
   document.querySelectorAll('[data-oggi-fatto]').forEach(b => b.onclick = async e => {

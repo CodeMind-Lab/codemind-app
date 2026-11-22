@@ -6,7 +6,7 @@
 // Nell'archivio di Forma diventa una scheda normale (t:'s') con id fisso e tre giorni
 // dal nome fisso ("A · Forza", "B · Volume", "C · Pompaggio"): la settimana di
 // allenamento la può usare come tutte le altre e non si rompe quando cambia la fase.
-import { gruppoDi } from './palestra.js?v=75';
+import { gruppoDi } from './palestra.js?v=76';
 
 export const ID_ABC = 'scheda-abc';
 export const NOME_ABC = 'Scheda A·B·C';

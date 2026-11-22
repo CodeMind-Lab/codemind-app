@@ -1,7 +1,7 @@
 import { sportDashboardPanel } from './sport.js?v=65';
 import {dashboardAgendaGoals,activeTimerPanel} from './agendaProductivity.js?v=65';
 import { universityData } from "../utils/university.js?v=65";
-import { agendaSummaryLink, agendaTodayPanel, bindAgendaPreview, agendaWeeklyChart, openWorkWeek } from './agenda.js?v=65';
+import { agendaSummaryLink, agendaTodayPanel, bindAgendaPreview, agendaWeeklyChart, openWorkWeek } from './agenda.js?v=67';
 import { weeklyShifts, bindWeeklyShifts } from './shifts.js?v=65';
 import { favoriteIds, toggleFavorite, todayItems, saveCapture, dashboardOwner } from "../services/dashboardService.js?v=65";
 import { state, activeTasks } from "../services/store.js?v=65";
