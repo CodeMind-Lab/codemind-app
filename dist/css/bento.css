@@ -922,3 +922,26 @@ html[data-theme="dark"] .fasce-voce.is-off { background: #10301F; color: #86EFAC
   .sett-all .sa-barra .spazio { display: none; }
   .sett-all .sa-barra .btn { flex: 1; white-space: nowrap; border-radius: 12px; }
 }
+/* Settimana di allenamento: frecce per cambiare settimana e stato (tipo / a parte) */
+.sett-all .card-testa { flex-wrap: wrap; }
+.sa-nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.sa-freccia { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--pannello-2); color: var(--testo); font-size: 20px; line-height: 1; cursor: pointer; }
+.sa-freccia:hover { background: var(--riga); }
+.sa-nav-t { display: grid; min-width: 150px; text-align: center; line-height: 1.25; }
+.sa-nav-t b { font-size: 14px; } .sa-nav-t small { font-size: 12px; color: var(--testo-3); }
+.sa-nav .link { order: -1; font-size: 12.5px; }
+.sa-stato { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 20px 12px; padding: 8px 12px; border-radius: 12px; background: var(--pannello-2); font-size: 12.5px; color: var(--testo-2); }
+.sa-stato.propria { background: #FFF1EE; } html[data-theme="dark"] .sa-stato.propria { background: #2A1714; }
+.sa-stato .spazio { flex: 1; }
+.sa-stato .link { padding: 5px 10px; border: 0; border-radius: 999px; background: var(--pannello); color: var(--teal); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.sa-stato .link:hover { background: var(--riga); }
+html[data-theme="dark"] .sa-stato .link { color: var(--azzurro); }
+@media (max-width: 600px) {
+  .sa-nav { margin-left: 0; width: 100%; justify-content: space-between; flex-wrap: wrap; }
+  .sa-nav-t { flex: 1; min-width: 0; }
+  .sa-nav .link { order: 5; flex-basis: 100%; text-align: center; }
+  .sa-stato { margin: 0 14px 10px; }
+  .sa-stato .spazio { display: none; }
+  .sa-stato > span:not(.pill):not(.spazio) { flex-basis: 100%; }
+  .sa-stato.propria .link { flex: 1 1 0; padding: 8px 6px; border-radius: 10px; text-align: center; }
+}

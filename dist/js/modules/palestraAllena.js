@@ -3,8 +3,8 @@
 // 07-palestra-iphone.html). Le sessioni sono le voci t:'w' dell'archivio di Forma, le
 // schede t:'s', la settimana di allenamento t:'pa'.
 import { state } from '../services/store.js?v=65';
-import * as P from '../services/palestraService.js?v=82';
-import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, proponiSettimana, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=74';
+import * as P from '../services/palestraService.js?v=83';
+import { statSessione, sessioni, progressi, eserciziFatti, seriePerGruppo, nomiEsercizi, schedeDi, pianoAllenamento, pianoSettimana, nomeSettimana, dateSettimana, proponiSettimana, allenamentoDelGiorno, ultimaSessione, isCardio, nomeGruppo, gruppoDi, fmtRec, recSecondi, turnoDi, lunediDi, GIORNI_SETT, NOMI_GIORNI, di } from '../utils/palestra.js?v=75';
 import { ID_ABC, PAGINA_ABC, estraiDati } from '../utils/schedaAbc.js?v=82';
 import { shiftPresets } from '../utils/workShifts.js?v=65';
 import { today, shiftDate } from '../utils/dates.js?v=65';
@@ -12,7 +12,7 @@ import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
 import { esc } from '../utils/helpers.js?v=65';
 import { openModal, closeModal, toast, confirmDelete } from '../utils/dom.js?v=65';
 
-let periodo = 'mese', filtroScheda = '', esercizioProg = '', schedaScelta = '', giornoScelto = 0, schedaSett = '';
+let periodo = 'mese', filtroScheda = '', esercizioProg = '', schedaScelta = '', giornoScelto = 0, schedaSett = '', lunSett = '';
 let recupero = null, orologio = null, blocco = null;
 const aperti = new Set();
 const tz = () => state.timezone;
@@ -61,7 +61,7 @@ export function vistaAllena(a, d) {
   const [da, al, quando] = intervallo(d), lista = sessioni(a, da, al, filtroScheda), stats = lista.map(w => ({ w, s: statSessione(w) }));
   const fatte = stats.filter(x => x.w.fine), tot = fatte.reduce((t, x) => ({ serie: t.serie + x.s.serie, vol: t.vol + x.s.volume, dur: t.dur + x.s.dur, max: Math.max(t.max, x.s.max) }), { serie: 0, vol: 0, dur: 0, max: 0 });
   const conDurata = fatte.filter(x => x.s.dur), media = conDurata.length ? Math.round(conDurata.reduce((t, x) => t + x.s.dur, 0) / conDurata.length) : 0;
-  const lun = lunediDi(d), settimana = sessioni(a, lun, shiftDate(lun, 6)).filter(w => w.fine).length, previsti = pianoAllenamento(a).filter(p => p.sid).length;
+  const lun = lunediDi(d), settimana = sessioni(a, lun, shiftDate(lun, 6)).filter(w => w.fine).length, previsti = pianoSettimana(a, lun).filter(p => p.sid).length;
   // record: il carico più alto di questo periodo, con l'esercizio
   let record = null;
   for (const { w } of fatte) for (const e of w.eser || []) for (const s of e.sets || []) if (s.ok && Number(s.w) > (record?.kg || 0)) record = { kg: Number(s.w), r: s.r, n: e.n };
@@ -103,7 +103,7 @@ function csvAllena(a, d) {
 export function vistaSchede(a, d) {
   const schede = primaAbc(schedeDi(a)), piano = pianoAllenamento(a);
   if (!schede.some(s => s.id === schedaScelta)) { const inUso = piano.find(p => p.sid); schedaScelta = inUso?.sid || schede[0]?.id || ''; giornoScelto = 0; }
-  const s = schede.find(x => x.id === schedaScelta), usate = new Set(piano.map(p => p.sid).filter(Boolean));
+  const s = schede.find(x => x.id === schedaScelta), usate = new Set([...piano, ...pianoSettimana(a, lunediDi(d))].map(p => p.sid).filter(Boolean));
   const elenco = `<div class="sch-elenco">${schede.map(x => `<button class="sch ${x.id === schedaScelta ? 'on' : ''}" data-pal-scheda="${esc(x.id)}"><b>${esc(x.n)}</b><small>${x.abc ? `${esc(x.abc.nome)} · ${esc(x.abc.settimane)} · ` : ''}${(x.giorni || []).length} giorni · ${(x.giorni || []).reduce((t, g) => t + (g.eser || []).length, 0)} esercizi</small>${usate.has(x.id) ? '<span class="pill p-c">in uso</span>' : ''}</button>`).join('')}<button class="nuova" data-pal-nuova-scheda>+ Nuova scheda</button></div>`;
   let editor = '<section class="card"><p class="vuoto-giornata">Crea la tua prima scheda: poi aggiungi i giorni e gli esercizi.</p></section>';
   if (s) {
@@ -127,30 +127,37 @@ export function vistaSchede(a, d) {
       <form class="agg-es" id="pal-agg-es">${abc ? '<span class="spazio"></span>' : '<input name="nome" list="pal-nomi-es" placeholder="Aggiungi esercizio (es. rematore, squat)…" autocomplete="off"><button class="btn" type="submit">Aggiungi</button>'}${eser.length ? bottoneInizia(a, oggi(), s.id, g.n, 'btn pal-inizia-btn').replace('>Inizia<', `>Inizia ${esc(g.n)}<`) : ''}</form>` : ''}
       <datalist id="pal-nomi-es">${nomiEsercizi(a).map(n => `<option value="${esc(n)}">`).join('')}</datalist></section>`;
   }
-  return `<div class="pal-impila">${vistaSettimana(a, d, schede, piano)}<div class="layout-schede">${elenco}<div class="pal-impila">${editor}</div></div></div>`;
+  return `<div class="pal-impila">${vistaSettimana(a, d, schede)}<div class="layout-schede">${elenco}<div class="pal-impila">${editor}</div></div></div>`;
 }
 
-// Settimana di allenamento: si ripete ogni settimana. Per ogni giorno un tocco su
-// Riposo o su un giorno della scheda (A, B, C…); i turni sono quelli della settimana mostrata.
+// Settimana di allenamento. Con le frecce scegli la settimana: se non l'hai organizzata a
+// parte vale la settimana tipo (quella che si ripete); il primo tocco la organizza solo per
+// quella settimana. "Usa come settimana tipo" la fa valere per tutte le altre.
 const corto = n => String(n).split('·')[0].trim() || String(n);
-function vistaSettimana(a, d, schede, piano) {
-  const lun = lunediDi(d), conGiorni = schede.filter(x => (x.giorni || []).length);
-  const testa = `<div class="card-testa"><h2>Settimana di allenamento</h2><span class="gr">si ripete ogni settimana · tocca Riposo o il giorno della scheda</span></div>`;
+const settimanaMostrata = d => lunSett || lunediDi(d);
+function vistaSettimana(a, d, schede) {
+  const lun = settimanaMostrata(d), lunOggi = lunediDi(oggi()), conGiorni = schede.filter(x => (x.giorni || []).length);
+  const nav = `<div class="sa-nav"><button class="sa-freccia" data-pal-sett-vai="-1" aria-label="Settimana precedente">‹</button><div class="sa-nav-t"><b>${esc(nomeSettimana(lun, lunOggi))}</b><small>${esc(dateSettimana(lun))}</small></div><button class="sa-freccia" data-pal-sett-vai="1" aria-label="Settimana successiva">›</button>${lun !== lunOggi ? '<button class="link" data-pal-sett-vai="0">Torna a questa settimana</button>' : ''}</div>`;
+  const testa = `<div class="card-testa"><h2>Settimana di allenamento</h2>${nav}</div>`;
   if (!conGiorni.length) return `<section class="card sett-all">${testa}<p class="vuoto-giornata">Crea prima una scheda con almeno un giorno: poi qui scegli in quali giorni allenarti.</p></section>`;
+  const piano = pianoSettimana(a, lun), propria = piano.some(p => p.proprio);
   if (!conGiorni.some(x => x.id === schedaSett)) { const inUso = piano.find(p => p.sid && conGiorni.some(x => x.id === p.sid))?.sid; schedaSett = inUso || conGiorni[0].id; }
   const sS = conGiorni.find(x => x.id === schedaSett), fatti = piano.filter(p => p.sid);
   const riepilogo = fatti.length ? `<b>${fatti.length} allenament${fatti.length === 1 ? 'o' : 'i'}</b> · ${piano.map((p, i) => p.sid ? `${NOMI_GIORNI[i]} ${esc(corto(p.gn))}` : '').filter(Boolean).join(' · ')}` : 'Nessun allenamento: tutta la settimana è a riposo.';
+  const stato = propria
+    ? `<div class="sa-stato propria"><span class="pill p-c">Organizzata a parte</span><span>vale solo per questa settimana</span><span class="spazio"></span><button class="link" data-pal-sett-tipo>Usa come settimana tipo</button><button class="link" data-pal-sett-ripristina>Torna alla settimana tipo</button></div>`
+    : `<div class="sa-stato"><span class="pill p-x">Settimana tipo</span><span>si ripete ogni settimana · tocca un giorno per organizzare solo questa</span></div>`;
   const scelta = conGiorni.length > 1 ? `<label class="sa-scheda">Scheda <select class="pal-filtro-scheda" data-pal-sett-scheda aria-label="Scheda da usare">${conGiorni.map(x => `<option value="${esc(x.id)}" ${x.id === sS.id ? 'selected' : ''}>${esc(x.n)}</option>`).join('')}</select></label>` : `<span class="sa-scheda">Scheda <b>${esc(sS.n)}</b></span>`;
   const giorni = piano.map((p, i) => {
-    const data = shiftDate(lun, i), tn = turnoDi(a, data, state.scheduleEntries, tz()), altra = p.sid && p.sid !== sS.id;
+    const tn = turnoDi(a, p.d, state.scheduleEntries, tz()), altra = p.sid && p.sid !== sS.id;
     const pill = tn ? `<span class="pill ${PILL[tn] || 'p-x'}">${esc(tn === 'off' ? 'OFF' : shiftPresets[tn]?.label || 'Turno')}</span>` : '';
-    const bottoni = [`<button class="riposo ${!p.sid ? 'on' : ''}" data-pal-sett="${p.gs}" aria-pressed="${!p.sid}">Riposo</button>`,
-      ...sS.giorni.map(g => { const on = p.sid === sS.id && p.gn === g.n; return `<button class="${on ? 'on' : ''}" data-pal-sett="${p.gs}" data-sid="${esc(sS.id)}" data-gn="${esc(g.n)}" title="${esc(g.n)}" aria-pressed="${on}">${esc(corto(g.n))}</button>`; })].join('');
+    const bottoni = [`<button class="riposo ${!p.sid ? 'on' : ''}" data-pal-sett="${p.d}" aria-pressed="${!p.sid}">Riposo</button>`,
+      ...sS.giorni.map(g => { const on = p.sid === sS.id && p.gn === g.n; return `<button class="${on ? 'on' : ''}" data-pal-sett="${p.d}" data-sid="${esc(sS.id)}" data-gn="${esc(g.n)}" title="${esc(g.n)}" aria-pressed="${on}">${esc(corto(g.n))}</button>`; })].join('');
     const nome = p.sid ? (altra ? `${esc(schede.find(x => x.id === p.sid)?.n || '')} · ${esc(p.gn)}` : esc(p.gn)) : '';
-    return `<div class="sa-g ${p.sid ? 'a' : ''} ${data === oggi() ? 'oggi' : ''}"><div class="sa-t"><b>${NOMI_GIORNI[i]}</b><small>${Number(data.slice(8))}/${Number(data.slice(5, 7))}</small>${pill}</div><div class="sa-scelte">${bottoni}</div>${nome ? `<small class="sa-nome" title="${nome}">${nome}</small>` : ''}</div>`;
+    return `<div class="sa-g ${p.sid ? 'a' : ''} ${p.d === oggi() ? 'oggi' : ''}"><div class="sa-t"><b>${NOMI_GIORNI[i]}</b><small>${Number(p.d.slice(8))}/${Number(p.d.slice(5, 7))}</small>${pill}</div><div class="sa-scelte">${bottoni}</div>${nome ? `<small class="sa-nome" title="${nome}">${nome}</small>` : ''}</div>`;
   }).join('');
-  return `<section class="card sett-all">${testa}
-    <div class="sa-barra">${scelta}<span class="spazio"></span><button class="btn" data-pal-sett-proponi title="OFF prima, mai il giorno di notte, niente giorni di fila se si può">Proponi dai turni</button><button class="btn" data-pal-sett-azzera>Tutto riposo</button></div>
+  return `<section class="card sett-all">${testa}${stato}
+    <div class="sa-barra">${scelta}<span class="spazio"></span><button class="btn" data-pal-sett-proponi title="Usa i turni di questa settimana: OFF prima, mai il giorno di notte, niente giorni di fila se si può">Proponi dai turni</button><button class="btn" data-pal-sett-azzera>Tutto riposo</button></div>
     <p class="sa-riepilogo">${riepilogo}</p><div class="sa-griglia">${giorni}</div></section>`;
 }
 
@@ -247,18 +254,22 @@ export function bindAllena(pagina, render, d) {
   su('[data-pal-togli-es]', b => b.onclick = () => prova(() => P.togliEsercizio(s, giornoScelto, Number(b.dataset.palTogliEs)), render));
   const agg = pagina.querySelector('#pal-agg-es');
   if (agg) agg.onsubmit = e => { e.preventDefault(); prova(() => P.aggiungiEsercizio(s, giornoScelto, agg.elements.nome.value), () => { render(); document.querySelector('#pal-agg-es input')?.focus(); }); };
-  // Settimana di allenamento
-  su('[data-pal-sett]', b => b.onclick = () => prova(() => P.impostaGiornoSettimana(b.dataset.palSett, b.dataset.sid || '', b.dataset.gn || ''), render));
+  // Settimana di allenamento: ogni modifica vale solo per la settimana mostrata.
+  const lunS = settimanaMostrata(d);
+  su('[data-pal-sett-vai]', b => b.onclick = () => { const v = Number(b.dataset.palSettVai); lunSett = v ? shiftDate(lunS, 7 * v) : lunediDi(oggi()); render(); });
+  su('[data-pal-sett]', b => b.onclick = () => prova(() => P.impostaGiornoData(b.dataset.palSett, b.dataset.sid || '', b.dataset.gn || ''), render));
   su('[data-pal-sett-scheda]', sel => sel.onchange = () => { schedaSett = sel.value; render(); });
   su('[data-pal-sett-proponi]', b => b.onclick = () => {
-    const sS = di(a, 's').find(x => x.id === schedaSett), lun = lunediDi(d);
+    const sS = di(a, 's').find(x => x.id === schedaSett);
     if (!sS?.giorni?.length) return;
-    const turni = GIORNI_SETT.map((_, i) => turnoDi(a, shiftDate(lun, i), state.scheduleEntries, tz()));
+    const turni = GIORNI_SETT.map((_, i) => turnoDi(a, shiftDate(lunS, i), state.scheduleEntries, tz()));
     const idx = proponiSettimana(turni, sS.giorni.length);
     if (idx.every(k => k < 0)) return toast('Nessun giorno libero dai turni di questa settimana.');
-    prova(() => GIORNI_SETT.forEach((gs, i) => P.impostaGiornoSettimana(gs, idx[i] < 0 ? '' : sS.id, idx[i] < 0 ? '' : sS.giorni[idx[i]].n)), render, 'Settimana proposta dai turni: cambia pure i giorni con un tocco');
+    prova(() => P.impostaSettimana(lunS, idx.map(k => k < 0 ? {} : { sid: sS.id, gn: sS.giorni[k].n })), render, turni.every(x => !x) ? 'Nessun turno inserito per questa settimana: ho messo giorni alterni' : 'Settimana proposta dai turni: cambia pure i giorni con un tocco');
   });
-  su('[data-pal-sett-azzera]', b => b.onclick = () => prova(() => GIORNI_SETT.forEach(gs => P.impostaGiornoSettimana(gs, '', '')), render, 'Settimana tutta a riposo'));
+  su('[data-pal-sett-azzera]', b => b.onclick = () => prova(() => P.impostaSettimana(lunS, Array.from({ length: 7 }, () => ({}))), render, 'Settimana tutta a riposo'));
+  su('[data-pal-sett-tipo]', b => b.onclick = () => prova(() => P.usaComeTipo(lunS), render, 'Ora è la settimana tipo: vale per tutte le settimane non organizzate a parte'));
+  su('[data-pal-sett-ripristina]', b => b.onclick = () => prova(() => P.tornaSettimanaTipo(lunS), render, 'Questa settimana torna come la settimana tipo'));
   // Allenamento in corso
   const sess = pagina.querySelector('.sessione');
   if (!sess) return;

@@ -75,8 +75,19 @@ export function giornataDelPiano(a, d) {
 export const righePiano = (a, d, slot) => (giornataDelPiano(a, d)?.righe || []).filter(r => !slot || r.slot === slot);
 
 // L'allenamento previsto (t:'pa' punta a una giornata di una scheda t:'s').
+// Due livelli: la settimana tipo (voci con gs, valgono ogni settimana) e i giorni di una
+// settimana organizzata a parte (voci con la data d e senza gs: Forma classica cerca per gs
+// e non le vede). Il giorno con la data vince, anche quando è riposo (sid vuoto).
+const tipoDi = (a, gs) => di(a, 'pa').find(x => !x.d && x.gs === gs);
+export const pianoDelGiorno = (a, d) => di(a, 'pa').find(x => x.d === d) || tipoDi(a, gsDiData(d)) || null;
+export function pianoSettimana(a, lunedi) {
+  return GIORNI_SETT.map((gs, i) => {
+    const d = shiftDate(lunedi, i), proprio = di(a, 'pa').find(x => x.d === d), p = proprio || tipoDi(a, gs);
+    return { gs, d, sid: p?.sid || '', gn: p?.gn || '', proprio: !!proprio };
+  });
+}
 export function allenamentoDelGiorno(a, d) {
-  const p = di(a, 'pa').find(x => x.gs === gsDiData(d));
+  const p = pianoDelGiorno(a, d);
   if (!p?.sid || !p.gn) return null;
   const scheda = di(a, 's').find(x => x.id === p.sid);
   const giorno = scheda?.giorni?.find(g => g.n === p.gn);
@@ -219,7 +230,7 @@ export function nomiEsercizi(a) {
   return [...nomi].sort((x, y) => x.localeCompare(y, 'it'));
 }
 export const schedeDi = a => di(a, 's').sort((x, y) => String(x.n).localeCompare(String(y.n), 'it'));
-export const pianoAllenamento = a => GIORNI_SETT.map(gs => { const p = di(a, 'pa').find(x => x.gs === gs); return { gs, sid: p?.sid || '', gn: p?.gn || '' }; });
+export const pianoAllenamento = a => GIORNI_SETT.map(gs => { const p = tipoDi(a, gs); return { gs, sid: p?.sid || '', gn: p?.gn || '' }; });
 
 // ------------------------------------------------------------ piano dei pasti e spesa
 // Giornate tipo (t:'gt'): "Giorno on", "Giorno off"… ogni giorno della settimana (t:'p') ne punta una.
@@ -272,4 +283,16 @@ export function proponiSettimana(turni, nGiorni) {
   for (const i of candidati) if (scelti.length < nGiorni && !scelti.includes(i)) scelti.push(i);
   scelti.sort((x, y) => x - y).forEach((i, k) => { fuori[i] = k; });
   return fuori;
+}
+
+// Nome della settimana rispetto a quella di oggi ("Prossima settimana", "Tra 3 settimane"…)
+// e intervallo di date ("23–29 nov", "30 nov – 6 dic").
+export function nomeSettimana(lunedi, lunediOggi) {
+  const n = Math.round((Date.parse(lunedi + 'T12:00:00Z') - Date.parse(lunediOggi + 'T12:00:00Z')) / 604800000);
+  return n === 0 ? 'Questa settimana' : n === 1 ? 'Prossima settimana' : n === -1 ? 'Settimana scorsa' : n > 1 ? `Tra ${n} settimane` : `${-n} settimane fa`;
+}
+export function dateSettimana(lunedi) {
+  const mese = d => new Intl.DateTimeFormat('it-IT', { month: 'short', timeZone: 'UTC' }).format(new Date(d + 'T12:00:00Z')).replace('.', '');
+  const dom = shiftDate(lunedi, 6), g = d => Number(d.slice(8));
+  return lunedi.slice(5, 7) === dom.slice(5, 7) ? `${g(lunedi)}–${g(dom)} ${mese(dom)}` : `${g(lunedi)} ${mese(lunedi)} – ${g(dom)} ${mese(dom)}`;
 }

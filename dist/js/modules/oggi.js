@@ -5,11 +5,11 @@
 // obiettivi della settimana, pasti e allenamento. Le scadenze stanno nelle sezioni.
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
-import { archivio } from '../services/palestraService.js?v=82';
-import { riepilogoGiorno } from '../utils/palestra.js?v=74';
+import { archivio } from '../services/palestraService.js?v=83';
+import { riepilogoGiorno, allenamentoDelGiorno } from '../utils/palestra.js?v=75';
 import { entryForm, weekCompatta } from './agenda.js?v=65';
-import { cambiaAcqua } from '../services/palestraService.js?v=82';
-import { bottoneInizia, inizia } from './palestraAllena.js?v=83';
+import { cambiaAcqua } from '../services/palestraService.js?v=83';
+import { bottoneInizia, inizia } from './palestraAllena.js?v=84';
 import { universityData } from '../utils/university.js?v=65';
 import { today, shiftDate, longDate } from '../utils/dates.js?v=65';
 import { wallTime, weekStart, summary, goalProgress } from '../utils/agenda.js?v=65';
@@ -18,7 +18,6 @@ import { esc, icon } from '../utils/helpers.js?v=65';
 import { toast } from '../utils/dom.js?v=65';
 
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
-const SETTIMANA_FORMA = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
 // Colore di ogni blocco, per categoria dell'agenda.
 const CLASSE = { work: 'lavoro', study: 'studio', dev: 'sviluppo', gym: 'palestra', sleep: 'sonno', relax: 'relax', personal: 'personale' };
 const ETICHETTA = { work: 'Lavoro Hotel', study: 'Studio', dev: 'Sviluppo', gym: 'Palestra', sleep: 'Sonno', relax: 'Relax', personal: 'Personale' };
@@ -121,14 +120,8 @@ function forma() {
   const cfg = item('cfg')[0] || {};
   return { archivio: a, item, target: { kcal: 2000, kcalOff: 1900, prot: 130, carb: 200, gras: 65, ...(cfg.target || {}) } };
 }
-function allenamentoDi(f, data) {
-  const gs = SETTIMANA_FORMA[(new Date(data + 'T12:00:00Z').getUTCDay() + 6) % 7];
-  const piano = f.item('pa').find(p => p.gs === gs);
-  if (!piano?.sid || !piano?.gn) return null;
-  const scheda = f.item('s').find(s => s.id === piano.sid);
-  const giorno = scheda?.giorni?.find(g => g.n === piano.gn);
-  return giorno ? { scheda, giorno } : null;
-}
+// Settimana tipo o settimana organizzata a parte: la regola sta in utils/palestra.js.
+const allenamentoDi = (f, data) => allenamentoDelGiorno(f.archivio, data);
 function pasti(data, f, off) {
   if (!f) return `<section class="card"><div class="card-testa"><h2>Pasti di oggi</h2><a class="link" href="#/sport">Collega Forma →</a></div><p class="vuoto-giornata">Collega Forma per vedere calorie e macro di oggi.</p></section>`;
   const n = nutritionToday(data) || { total: { k: 0, p: 0, c: 0, g: 0 }, rows: 0 };

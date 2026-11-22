@@ -6,9 +6,9 @@ const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
 const A = await import('../dist/js/utils/schedaAbc.js?v=82');
-const U = await import('../dist/js/utils/palestra.js?v=74');
+const U = await import('../dist/js/utils/palestra.js?v=75');
 const { state } = await import('../dist/js/services/store.js?v=65');
-const P = await import('../dist/js/services/palestraService.js?v=82');
+const P = await import('../dist/js/services/palestraService.js?v=83');
 
 // Dati dalla pagina vera, con stringhe che contengono graffe e virgolette.
 const html = readFileSync(new URL('../dist/scheda-abc/index.html', import.meta.url), 'utf8');

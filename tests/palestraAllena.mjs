@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 const memoria = new Map();
 globalThis.localStorage = { getItem: k => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, String(v)), removeItem: k => memoria.delete(k) };
 Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
-const U = await import('../dist/js/utils/palestra.js?v=74');
+const U = await import('../dist/js/utils/palestra.js?v=75');
 const { state } = await import('../dist/js/services/store.js?v=65');
-const P = await import('../dist/js/services/palestraService.js?v=82');
+const P = await import('../dist/js/services/palestraService.js?v=83');
 
 assert.equal(U.gruppoDi('Squat con bilanciere'), 'Gambe (Legs)'); assert.equal(U.nomeGruppo('Gambe (Legs)'), 'Gambe'); assert.equal(U.gruppoDi('Mio esercizio'), 'Altro');
 assert.equal(U.isCardio({ n: 'Corsa' }), true); assert.equal(U.isCardio({ n: 'Panca' }), false); assert.equal(U.isCardio({ n: 'Cyclette leggera' }), true);
@@ -41,6 +41,30 @@ assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-11-20').giorno.n, 'Push 
 assert.throws(() => P.impostaGiornoSettimana('ven', s.id, 'Gambe'), /non trovato/);
 P.rinominaGiorno(s.id, 1, 'Push');
 assert.equal(U.pianoAllenamento(P.archivio()).find(p => p.gs === 'ven').gn, 'Push');
+// Settimane organizzate a parte (lunedì 23/11, 30/11, 7/12): il giorno con la data vince sulla settimana tipo.
+assert.equal(U.nomeSettimana('2026-11-30', '2026-11-23'), 'Prossima settimana'); assert.equal(U.nomeSettimana('2026-11-16', '2026-11-23'), 'Settimana scorsa'); assert.equal(U.nomeSettimana('2026-12-14', '2026-11-23'), 'Tra 3 settimane');
+assert.equal(U.dateSettimana('2026-11-23'), '23–29 nov'); assert.equal(U.dateSettimana('2026-11-30'), '30 nov – 6 dic');
+P.impostaGiornoData('2026-11-27', s.id, 'Pull A');
+assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-11-27').giorno.n, 'Pull A');
+assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-11-20').giorno.n, 'Push');
+assert.equal(U.pianoAllenamento(P.archivio()).find(p => p.gs === 'ven').gn, 'Push');
+P.impostaGiornoData('2026-12-04', '', '');
+assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-12-04'), null);
+assert.deepEqual(U.pianoSettimana(P.archivio(), '2026-11-23').map(p => [p.d.slice(8), p.gn, p.proprio]).filter(x => x[1]), [['27', 'Pull A', true]]);
+assert.ok(P.archivio().items.filter(x => x.t === 'pa' && x.d).every(x => !('gs' in x)), 'Forma classica cerca per gs: le voci con la data non lo hanno');
+assert.throws(() => P.impostaGiornoData('27/11', s.id, 'Push'), /Data non valida/);
+P.impostaSettimana('2026-12-07', [{ sid: s.id, gn: 'Push' }, {}, {}, {}, {}, {}, {}]);
+assert.deepEqual(U.pianoSettimana(P.archivio(), '2026-12-07').map(p => p.gn), ['Push', '', '', '', '', '', '']);
+assert.throws(() => P.impostaSettimana('2026-12-07', [{}]), /7 giorni/);
+P.tornaSettimanaTipo('2026-12-07');
+assert.equal(U.pianoSettimana(P.archivio(), '2026-12-07').some(p => p.proprio), false);
+assert.equal(U.pianoSettimana(P.archivio(), '2026-12-07')[4].gn, 'Push');
+P.usaComeTipo('2026-11-23');
+assert.equal(U.pianoAllenamento(P.archivio()).find(p => p.gs === 'ven').gn, 'Pull A');
+assert.equal(U.pianoSettimana(P.archivio(), '2026-11-23').some(p => p.proprio), false);
+assert.equal(U.allenamentoDelGiorno(P.archivio(), '2026-12-04'), null, 'le altre settimane organizzate a parte restano');
+P.tornaSettimanaTipo('2026-11-30'); P.impostaGiornoSettimana('ven', s.id, 'Push');
+assert.equal(P.archivio().items.filter(x => x.t === 'pa' && x.d).length, 0);
 // Sessione dal giorno della scheda: serie pronte con ripetizioni minime e peso.
 const w = P.avviaAllenamento('2026-11-20', s.id, 'Push');
 assert.equal(w.eser.length, 3); assert.equal(w.eser[1].sets.length, 4); assert.deepEqual(w.eser[1].sets[0], { r: 8, w: 60, ok: false }); assert.deepEqual(w.eser[2].sets, []);

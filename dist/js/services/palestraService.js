@@ -9,7 +9,8 @@ import { state } from './store.js?v=65';
 import { salvaCopiaOffline } from './offline.js?v=75';
 import { formaModel, saveForma, pendingForma, scartaPendingForma } from './formaService.js?v=65';
 import { ID_ABC, contenutoAbc, faseDelGiorno, uguale } from '../utils/schedaAbc.js?v=82';
-import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=74';
+import { shiftDate } from '../utils/dates.js?v=65';
+import { righePiano, di, TARGET_DEFAULT, PROFILO_DEFAULT, CATEGORIE, PASTI, codiceValido, gruppoDi, isCardio, ripNumero, GIORNI_SETT } from '../utils/palestra.js?v=75';
 
 let locale = null, versione = 0, timer = null, inCorso = null;
 export const statoSalvataggio = { stato: 'salvato', messaggio: '' };
@@ -360,9 +361,46 @@ export function impostaGiornoSettimana(gs, sid, gn) {
   if (!GIORNI_SETT.includes(gs)) throw Error('Giorno della settimana non valido.');
   return modifica((a, ora) => {
     if (sid) { const s = schedaIn(a, sid); if (!s.giorni.some(g => g.n === gn)) throw Error('Giorno della scheda non trovato.'); }
-    let p = a.items.find(x => x.t === 'pa' && x.gs === gs);
+    let p = a.items.find(x => x.t === 'pa' && !x.d && x.gs === gs);
     if (!p) { p = { id: 'allena-' + gs, t: 'pa', gs }; a.items.push(p); delete a.graves[p.id]; }
     p.sid = sid || ''; p.gn = sid ? gn : ''; p.updatedAt = ora;
+  });
+}
+
+// Settimane organizzate a parte: una voce t:'pa' per data (id allena-AAAA-MM-GG, senza gs).
+// Valgono solo per quel giorno e hanno la precedenza sulla settimana tipo.
+const DATA = /^\d{4}-\d{2}-\d{2}$/;
+function giornoData(a, d, sid, gn, ora) {
+  if (!DATA.test(d)) throw Error('Data non valida.');
+  if (sid) { const s = schedaIn(a, sid); if (!s.giorni.some(g => g.n === gn)) throw Error('Giorno della scheda non trovato.'); }
+  let p = a.items.find(x => x.t === 'pa' && x.d === d);
+  if (!p) { p = { id: 'allena-' + d, t: 'pa', d }; a.items.push(p); delete a.graves[p.id]; }
+  p.sid = sid || ''; p.gn = sid ? gn : ''; p.updatedAt = ora;
+}
+const giorniDi = lunedi => { if (!DATA.test(lunedi)) throw Error('Settimana non valida.'); return GIORNI_SETT.map((_, i) => shiftDate(lunedi, i)); };
+export const impostaGiornoData = (d, sid, gn) => modifica((a, ora) => giornoData(a, d, sid, gn, ora));
+// Tutta la settimana in un colpo: giorni = 7 voci { sid, gn } da lunedì ({} = riposo).
+export function impostaSettimana(lunedi, giorni) {
+  const date = giorniDi(lunedi);
+  if (!Array.isArray(giorni) || giorni.length !== 7) throw Error('Servono i 7 giorni della settimana.');
+  return modifica((a, ora) => date.forEach((d, i) => giornoData(a, d, giorni[i]?.sid || '', giorni[i]?.gn || '', ora)));
+}
+// La settimana torna come la settimana tipo.
+export function tornaSettimanaTipo(lunedi) {
+  const date = new Set(giorniDi(lunedi));
+  return modifica((a, ora) => { for (const p of a.items.filter(x => x.t === 'pa' && date.has(x.d))) togli(a, p.id, ora); });
+}
+// La settimana mostrata diventa la settimana tipo (per tutte le settimane non organizzate a parte).
+export function usaComeTipo(lunedi) {
+  const date = giorniDi(lunedi);
+  return modifica((a, ora) => {
+    const piano = date.map((d, i) => a.items.find(x => x.t === 'pa' && x.d === d) || a.items.find(x => x.t === 'pa' && !x.d && x.gs === GIORNI_SETT[i]));
+    GIORNI_SETT.forEach((gs, i) => {
+      let p = a.items.find(x => x.t === 'pa' && !x.d && x.gs === gs);
+      if (!p) { p = { id: 'allena-' + gs, t: 'pa', gs }; a.items.push(p); delete a.graves[p.id]; }
+      p.sid = piano[i]?.sid || ''; p.gn = p.sid ? piano[i].gn : ''; p.updatedAt = ora;
+    });
+    for (const p of a.items.filter(x => x.t === 'pa' && date.includes(x.d))) togli(a, p.id, ora);
   });
 }
 
