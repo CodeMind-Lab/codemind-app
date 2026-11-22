@@ -13,6 +13,7 @@ let selectedWeek, view = 'week', categoryFilter = '';
 const calendarScroll = new Map();
 import { bindCalendarInteractions } from './agendaInteractions.js?v=65';
 import { rigaAllenamentiFasce, rigaAllenamentiOre, bindAllenamentiAgenda } from './agendaAllenamento.js?v=2';
+import { nomeSettimana, dateSettimana } from '../utils/palestra.js?v=76';
 let calendarTimer, calendarDispose, lastMove;
 let previewWeek, previewDate, previewFocusDate;
 const dayLabel = date => new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'));
@@ -140,6 +141,12 @@ const sceltaVista = () => `<div class="vista-agenda" role="group" aria-label="Vi
 // Tre fasce fisse al posto delle 24 ore, come i turni dell'hotel (scelte il 20/11/2026):
 // mattina 7:30–15:30, pomeriggio 15:30–23:30, sera 23:30–7:30.
 const FASCE = [['Mattina', 450, 930], ['Pomeriggio', 930, 1410], ['Sera', 1410, 1890]];
+// Frecce della settimana nella pagina Oggi: si cambia settimana senza aprire l'Agenda
+// (i pulsanti data-oggi-sett li lega bindOggi; "Apri Agenda" apre la stessa settimana).
+function navOggi(lunedi, now) {
+  const lunOggi = weekStart(now);
+  return `<div class="fasce-nav" role="group" aria-label="Cambia settimana"><button data-oggi-sett="-1" aria-label="Settimana precedente">‹</button><span><b>${esc(nomeSettimana(lunedi, lunOggi))}</b><small>${esc(dateSettimana(lunedi))}</small></span><button data-oggi-sett="1" aria-label="Settimana successiva">›</button>${lunedi !== lunOggi ? '<button class="fasce-nav-oggi" data-oggi-sett="0">Torna a oggi</button>' : ''}</div>`;
+}
 export function weekCompatta(days, now, perOggi = false) {
   const model = calendarWeek(state.scheduleEntries, days, state.timezone, categoryFilter);
   const conflictIds = new Set(agendaConflicts(state.scheduleEntries, days[0], days.at(-1), state.timezone).flatMap(c => [c.a.id, c.b.id]));
@@ -151,7 +158,7 @@ export function weekCompatta(days, now, perOggi = false) {
   const voce = x => { const e = x.entry, orario = `${minuteLabel(x.startMinute)}–${x.endMinute === 1440 ? '24:00' : minuteLabel(x.endMinute)}`;
     return `<button class="fasce-voce ${lavoro(e) ? 'is-lavoro' : ''} ${e.is_completed ? 'is-done' : ''} ${conflictIds.has(e.id) ? 'is-conflict' : ''}" data-compatta-evento="${e.id}" style="${stile(e)}" title="${esc(e.title)} · ${orario}"><b>${e.is_completed ? '✓ ' : ''}${x.continuation ? '↳ ' : ''}${esc(lavoro(e) ? e.title.replace(/^Lavoro\s*·\s*/, '') : e.title)}</b><time>${orario}</time></button>`; };
   const celle = fascia => model.map(day => `<div class="fasce-cella ${day.date === now ? 'is-today' : ''}">${day.timed.filter(x => x.entry.kind !== 'commute' && nellaFascia(x, fascia)).sort((a, b) => a.startMinute - b.startMinute).map(voce).join('')}</div>`).join('');
-  return `<section class="panel agenda-week-panel calendar-panel agenda-fasce ${perOggi ? 'fasce-oggi' : ''}" aria-label="Settimana per fasce"><div class="calendar-panel-bar"><span><i class="calendar-planned-dot"></i>${perOggi ? 'La settimana' : 'Impegni della settimana'}</span>${perOggi ? '<a class="fasce-apri" href="#/today">Apri Agenda →</a>' : `${sceltaVista()}<div class="calendar-tools"><button class="calendar-colors-button" data-agenda-colors>Colori</button></div>`}</div>
+  return `<section class="panel agenda-week-panel calendar-panel agenda-fasce ${perOggi ? 'fasce-oggi' : ''}" aria-label="Settimana per fasce"><div class="calendar-panel-bar"><span><i class="calendar-planned-dot"></i>${perOggi ? 'La settimana' : 'Impegni della settimana'}</span>${perOggi ? `${navOggi(days[0], now)}<a class="fasce-apri" href="#/today" data-fasce-apri="${days[0]}">Apri Agenda →</a>` : `${sceltaVista()}<div class="calendar-tools"><button class="calendar-colors-button" data-agenda-colors>Colori</button></div>`}</div>
     <div class="fasce-scroll"><div class="fasce-griglia">
       <div class="fasce-angolo"></div>${model.map(day => `<header class="fasce-giorno ${day.date === now ? 'is-today' : ''}"><span>${weekday(day.date)}</span><time datetime="${day.date}">${Number(day.date.slice(-2))}</time><button data-agenda-new data-date="${day.date}" aria-label="Aggiungi impegno ${dayLabel(day.date)}">＋</button></header>`).join('')}
       <div class="fasce-etichetta piccola">Senza orario</div>${model.map(day => `<div class="fasce-cella senza-ora ${day.date === now ? 'is-today' : ''}">${day.untimed.map(e => `<button class="fasce-voce ${e.kind === 'off' ? 'is-off' : ''} ${e.is_completed ? 'is-done' : ''}" data-compatta-evento="${e.id}" style="${stile(e)}" title="${esc(e.title)}"><b>${e.kind === 'off' ? '☀ ' : ''}${esc(e.title)}</b></button>`).join('')}</div>`).join('')}
@@ -377,6 +384,7 @@ export function bindAgenda(render) {
   document.querySelector('[data-agenda-shifts]')?.addEventListener('click', () => openWorkWeek(render));
   document.querySelectorAll('[data-agenda-vista]').forEach(b => b.onclick = () => { vistaAgenda = b.dataset.agendaVista; try { localStorage.setItem('cm-agenda-vista', vistaAgenda); } catch { /* resta per questa sessione */ } render(); });
   document.querySelectorAll('[data-compatta-evento]').forEach(b => b.onclick = () => eventDetails(b.dataset.compattaEvento, render));
+  document.querySelectorAll('[data-fasce-apri]').forEach(a => a.onclick = () => { selectedWeek = a.dataset.fasceApri; view = 'week'; categoryFilter = ''; calendarScroll.delete(selectedWeek); });
   bindAllenamentiAgenda(render, entryForm);
   document.querySelectorAll('[data-agenda-new]').forEach(b => b.onclick = () => entryForm(null, render, { kind: b.dataset.kind, date: b.dataset.date, backlog: b.hasAttribute('data-backlog') }));
   document.querySelectorAll('[data-agenda-edit]').forEach(b => b.onclick = () => entryForm(state.scheduleEntries.find(e => e.id === b.dataset.agendaEdit), render));

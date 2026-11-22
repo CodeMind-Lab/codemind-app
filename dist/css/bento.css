@@ -980,3 +980,19 @@ html[data-theme="dark"] .allena-chip.is-fatto { background: #12302A; color: #6EE
 html[data-theme="dark"] .allena-agenda .link { color: var(--azzurro); }
 .fasce-etichetta.allena .corto { display: none; }
 @media (max-width: 600px) { .fasce-etichetta.allena .lungo, .fasce-etichetta.allena small { display: none; } .fasce-etichetta.allena .corto { display: inline; } }
+/* Oggi · La settimana: frecce per cambiare settimana senza aprire l'Agenda */
+.fasce-nav { display: flex; align-items: center; gap: 6px; margin-left: auto; color: #ecf7fc; }
+.fasce-nav > span { display: grid; min-width: 132px; text-align: center; line-height: 1.2; }
+.fasce-nav b { font-size: 12.5px; color: #fff; } .fasce-nav small { font-size: 10.5px; color: rgba(236, 247, 252, .7); }
+.fasce-nav button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fff; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.fasce-nav button:hover { background: rgba(255, 255, 255, .2); }
+.fasce-nav button:focus-visible { outline: 2px solid var(--azzurro); outline-offset: 2px; }
+.fasce-nav .fasce-nav-oggi { width: auto; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--azzurro); }
+.fasce-oggi .calendar-panel-bar .fasce-apri { margin-left: 12px; }
+@media (max-width: 600px) {
+  .fasce-oggi .calendar-panel-bar { flex-wrap: wrap; }
+  .fasce-nav { order: 3; flex-basis: 100%; justify-content: space-between; margin-left: 0; }
+  .fasce-nav > span { flex: 1; min-width: 0; }
+  .fasce-nav button { width: 36px; height: 36px; }
+  .fasce-nav .fasce-nav-oggi { height: 36px; }
+}

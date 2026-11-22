@@ -7,7 +7,7 @@ import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
 import { archivio } from '../services/palestraService.js?v=84';
 import { riepilogoGiorno, allenamentoDelGiorno } from '../utils/palestra.js?v=76';
-import { entryForm, weekCompatta } from './agenda.js?v=67';
+import { entryForm, weekCompatta } from './agenda.js?v=68';
 import { bindAllenamentiAgenda } from './agendaAllenamento.js?v=2';
 import { cambiaAcqua } from '../services/palestraService.js?v=84';
 import { bottoneInizia, inizia } from './palestraAllena.js?v=85';
@@ -142,6 +142,8 @@ function sviluppo(data, tz) {
   </div></section>`;
 }
 
+// Settimana mostrata nel riquadro "La settimana" (lunedì); vuota = quella di oggi.
+let settimanaVista = '';
 export function oggiPage() {
   const tz = state.timezone, data = today(tz);
   const lun = weekStart(data);
@@ -157,13 +159,20 @@ export function oggiPage() {
       <div class="k kcal-k"><div class="etichetta">Calorie e acqua</div>${f ? `<div class="num">${numero(n?.total.k || 0)} <small>/ ${numero(kcalObiettivo)} kcal</small></div>${barra(n?.total.k || 0, kcalObiettivo, 'var(--azzurro)')}<div class="sotto acqua-r">💧 ${numero(acqua)} / ${numero(acquaObiettivo)} ml<span><button data-oggi-acqua="250">+250</button><button data-oggi-acqua="500">+500</button></span></div>` : `<div class="num">—</div><div class="sotto"><a href="#/sport">Apri Palestra</a></div>`}</div>
       <div class="k all-k"><div class="etichetta">Allenamento</div>${a ? `<div class="num">${esc(a.giorno.n)}</div><div class="sotto all-r"><span>${esc(a.scheda.n || '')} · ${(a.giorno.eser || []).length} esercizi</span>${fatto ? '<b>fatto ✓</b>' : bottoneInizia(f.archivio, data, a.scheda.id, a.giorno.n, 'oggi-inizia')}</div>` : `<div class="num">${f ? 'Riposo' : '—'}</div><div class="sotto">${f ? 'Nessuna seduta in piano' : 'Apri Palestra'}</div>`}</div>
     </section>
-    ${weekCompatta(Array.from({ length: 7 }, (_, i) => shiftDate(lun, i)), data, true)}
+    ${weekCompatta(Array.from({ length: 7 }, (_, i) => shiftDate(settimanaVista || lun, i)), data, true)}
     <div class="griglia"><div class="col">${giornata(data, tz)}</div><div class="col">${obiettivi(data, tz)}${pasti(data, f, off)}${sviluppo(data, tz)}</div></div>
   </div>`;
 }
 
 export function bindOggi(render) {
   bindAllenamentiAgenda(render, entryForm);
+  document.querySelectorAll('[data-oggi-sett]').forEach(b => b.onclick = () => {
+    const v = Number(b.dataset.oggiSett), lun = settimanaVista || weekStart(today(state.timezone));
+    settimanaVista = v ? shiftDate(lun, 7 * v) : '';
+    if (settimanaVista === weekStart(today(state.timezone))) settimanaVista = '';
+    render();
+    document.querySelector('[data-oggi-sett="' + (v || 1) + '"]')?.focus({ preventScroll: true });
+  });
   document.querySelectorAll('[data-oggi-acqua]').forEach(b => b.onclick = () => { try { cambiaAcqua(today(state.timezone), Number(b.dataset.oggiAcqua)); render(); } catch (e) { toast(e.message); } });
   document.querySelectorAll('.oggi [data-pal-inizia]').forEach(b => b.onclick = () => { const [sid, ...gn] = b.dataset.palInizia.split('|'); try { inizia(today(state.timezone), sid, gn.join('|')); } catch (e) { toast(e.message); } });
   document.querySelectorAll('[data-oggi-fatto]').forEach(b => b.onclick = async e => {

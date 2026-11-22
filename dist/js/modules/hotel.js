@@ -4,7 +4,7 @@
 import { state } from '../services/store.js?v=65';
 import { saveEntry, entryPayload } from '../services/agendaService.js?v=65';
 import { saveContratto, saveAssenza, saveBustaPaga, elimina, TIPI_ASSENZA } from '../services/lavoroService.js?v=70';
-import { openWorkWeek } from './agenda.js?v=67';
+import { openWorkWeek } from './agenda.js?v=68';
 import { riepilogoMese, stipendioPrevisto, saldi, contrattoDi, minutiInOre, euro, eFestivo } from '../utils/hotel.js?v=70';
 import { scaricaCsv, numeroCsv } from '../utils/esporta.js?v=70';
 import { wallTime, weekStart } from '../utils/agenda.js?v=65';
